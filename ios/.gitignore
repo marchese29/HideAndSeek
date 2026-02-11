@@ -13,5 +13,8 @@ xcuserdata/
 .swiftpm/
 Package.resolved
 
+# Secrets
+Secrets.xcconfig
+
 # CocoaPods (if ever used)
 Pods/

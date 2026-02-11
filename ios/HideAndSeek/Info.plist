@@ -31,6 +31,8 @@
 	<array>
 		<string>armv7</string>
 	</array>
+	<key>GMSApiKey</key>
+	<string>$(GMS_API_KEY)</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

@@ -8,13 +8,13 @@ let package = Package(
         .iOS(.v17),
     ],
     dependencies: [
-        .package(url: "https://github.com/nicklama/google-maps-ios-sdk-spm", from: "9.0.0"),
+        .package(url: "https://github.com/googlemaps/ios-maps-sdk", from: "9.0.0"),
     ],
     targets: [
         .target(
             name: "HideAndSeek",
             dependencies: [
-                .product(name: "GoogleMaps", package: "google-maps-ios-sdk-spm"),
+                .product(name: "GoogleMaps", package: "ios-maps-sdk"),
             ],
             path: "HideAndSeek"
         ),
