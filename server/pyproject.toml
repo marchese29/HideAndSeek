@@ -1,0 +1,24 @@
+[project]
+name = "hideandseek"
+version = "0.1.0"
+description = "HideAndSeek game server"
+readme = "README.md"
+authors = [
+    { name = "Dan Marchese", email = "dan@marchese.me" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.28.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"

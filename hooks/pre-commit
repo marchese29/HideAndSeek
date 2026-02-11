@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Pre-commit hook: regenerate OpenAPI spec if server/ code changed
+
+if git diff --cached --name-only | grep -q '^server/'; then
+    echo "Server code changed — regenerating OpenAPI spec..."
+    (cd server && uv run python scripts/generate_openapi.py) || {
+        echo "ERROR: OpenAPI generation failed"
+        exit 1
+    }
+    git add openapi/openapi.yaml
+fi
