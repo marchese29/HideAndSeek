@@ -1,8 +1,30 @@
 #!/usr/bin/env bash
-# Pre-commit hook: regenerate OpenAPI spec if server/ code changed
+# Pre-commit hook: lint, test, and regenerate OpenAPI if server/ changed
 
 if git diff --cached --name-only | grep -q '^server/'; then
-    echo "Server code changed — regenerating OpenAPI spec..."
+    echo "Server code changed — running checks..."
+
+    (cd server && uv run ruff check .) || {
+        echo "ERROR: ruff lint failed"
+        exit 1
+    }
+
+    (cd server && uv run ruff format --check .) || {
+        echo "ERROR: ruff format check failed (run 'uv run ruff format .' to fix)"
+        exit 1
+    }
+
+    (cd server && uv run pyright) || {
+        echo "ERROR: pyright type check failed"
+        exit 1
+    }
+
+    (cd server && uv run pytest) || {
+        echo "ERROR: tests failed"
+        exit 1
+    }
+
+    echo "Regenerating OpenAPI spec..."
     (cd server && uv run python scripts/generate_openapi.py) || {
         echo "ERROR: OpenAPI generation failed"
         exit 1

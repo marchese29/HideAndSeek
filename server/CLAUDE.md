@@ -8,6 +8,9 @@ Python FastAPI backend for the HideAndSeek game.
 uv sync                    # Install/update dependencies
 uv run uvicorn hideandseek.main:app --reload  # Run dev server (localhost:8000)
 uv run pytest              # Run tests
+uv run ruff check .        # Lint
+uv run ruff format .       # Format
+uv run pyright             # Type check
 uv run python scripts/generate_openapi.py     # Regenerate OpenAPI spec
 ```
 
@@ -20,7 +23,19 @@ uv run python scripts/generate_openapi.py     # Regenerate OpenAPI spec
 
 ## Conventions
 
-- Add dependencies with `uv add <package>`.
+- Manage dependencies with `uv add <package>` and `uv remove <package>`. Never edit the dependency lists in `pyproject.toml` by hand.
 - All routes go in `routers/` and are included via `app.include_router()`.
 - Tests use `fastapi.testclient.TestClient`.
 - OpenAPI spec is auto-generated — add routes to FastAPI, not the YAML file.
+
+## Style
+
+Enforced by ruff (lint + format) and pyright (type checking). The pre-commit hook runs all checks automatically.
+
+- Single quotes for strings.
+- `from __future__ import annotations` at the top of every module.
+- All imports at the top of the file, never inline.
+- Type annotations required on all function arguments and return types (except `-> None`).
+- Max line length: 100 characters.
+- Lint rules: pyflakes, pycodestyle, isort, pyupgrade, flake8-bugbear, flake8-simplify, flake8-future-annotations, flake8-annotations.
+- pyright in `standard` mode.

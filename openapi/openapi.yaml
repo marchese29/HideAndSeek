@@ -15,7 +15,11 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Root  Get
   /health:
     get:
       summary: Health
@@ -25,4 +29,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
