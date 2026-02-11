@@ -1,33 +1,52 @@
 #!/usr/bin/env bash
 # Pre-commit hook: lint, test, and regenerate OpenAPI if server/ changed
+#
+# Uses cached hashes of staged content so steps are skipped when
+# nothing has changed since the last successful run.
 
-if git diff --cached --name-only | grep -q '^server/'; then
-    echo "Server code changed — running checks..."
+CACHE_DIR=".git/hooks-cache"
 
-    (cd server && uv run ruff check .) || {
-        echo "ERROR: ruff lint failed"
-        exit 1
-    }
+# Run a command only if staged files under a path have changed since
+# the last successful run of that step.
+#
+# Usage: run_if_changed <cache_key> <path> <skip_msg> <run_msg> <command...>
+#
+# Returns the command's exit code, or 0 if skipped.
+run_if_changed() {
+    local cache_key="$1" path="$2" skip_msg="$3" run_msg="$4"
+    shift 4
 
-    (cd server && uv run ruff format --check .) || {
-        echo "ERROR: ruff format check failed (run 'uv run ruff format .' to fix)"
-        exit 1
-    }
+    if ! git diff --cached --name-only | grep -q "^${path}"; then
+        return 0
+    fi
 
-    (cd server && uv run pyright) || {
-        echo "ERROR: pyright type check failed"
-        exit 1
-    }
+    local hash_file="$CACHE_DIR/$cache_key"
+    local current_hash
+    current_hash=$(git diff --cached -- "$path" | shasum -a 256 | cut -d' ' -f1)
 
-    (cd server && uv run pytest) || {
-        echo "ERROR: tests failed"
-        exit 1
-    }
+    if [ -f "$hash_file" ] && [ "$(cat "$hash_file")" = "$current_hash" ]; then
+        echo "$skip_msg"
+        return 0
+    fi
 
-    echo "Regenerating OpenAPI spec..."
-    (cd server && uv run python scripts/generate_openapi.py) || {
-        echo "ERROR: OpenAPI generation failed"
-        exit 1
-    }
-    git add openapi/openapi.yaml
-fi
+    echo "$run_msg"
+    if "$@"; then
+        mkdir -p "$CACHE_DIR"
+        echo "$current_hash" > "$hash_file"
+        return 0
+    else
+        return $?
+    fi
+}
+
+# --- Server checks ---
+run_if_changed "server-checks" "server/" \
+    "Server checks passed on this content — skipping." \
+    "Server code changed — running checks..." \
+    hooks/server-checks.sh || exit 1
+
+# --- OpenAPI spec regen ---
+run_if_changed "openapi-regen" "server/" \
+    "OpenAPI spec already up to date — skipping regen." \
+    "Regenerating OpenAPI spec..." \
+    hooks/openapi-regen.sh || exit 1
