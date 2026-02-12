@@ -16,3 +16,6 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Database
+data/

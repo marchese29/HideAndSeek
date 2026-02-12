@@ -6,4 +6,5 @@ set -e
 cd server
 uv run python scripts/generate_openapi.py
 
+cd ..
 git add openapi/openapi.yaml
