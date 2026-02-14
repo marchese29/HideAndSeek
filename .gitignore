@@ -11,3 +11,6 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Claude Things
+.claude/
