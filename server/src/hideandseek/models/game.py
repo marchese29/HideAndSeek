@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
@@ -14,15 +12,16 @@ class Game(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     map_id: uuid.UUID = Field(foreign_key='game_map.id')
+    host_client_id: uuid.UUID
     status: GameStatus = GameStatus.lobby
-    join_code: str = Field(sa_column_kwargs={'unique': True, 'index': True})
+    join_code: str | None = Field(default=None, sa_column_kwargs={'unique': True, 'index': True})
     timing: dict = Field(default_factory=dict, sa_type=sa.JSON)  # TimingRules
     inventory: dict = Field(default_factory=dict, sa_type=sa.JSON)  # QuestionInventory
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    game_map: GameMap = Relationship(back_populates='games')  # noqa: F821
-    players: list[Player] = Relationship(back_populates='game')
-    questions: list[Question] = Relationship(back_populates='game')  # noqa: F821
+    game_map: 'GameMap' = Relationship(back_populates='games')  # noqa: F821
+    players: list['Player'] = Relationship(back_populates='game')
+    questions: list['Question'] = Relationship(back_populates='game')  # noqa: F821
 
 
 class Player(SQLModel, table=True):
@@ -34,10 +33,10 @@ class Player(SQLModel, table=True):
     game_id: uuid.UUID = Field(foreign_key='game.id')
     name: str
     color: str
-    role: PlayerRole
+    role: PlayerRole | None = None
 
     game: Game = Relationship(back_populates='players')
-    location_updates: list[LocationUpdate] = Relationship(  # noqa: F821
+    location_updates: list['LocationUpdate'] = Relationship(  # noqa: F821
         back_populates='player',
     )
 

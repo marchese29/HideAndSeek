@@ -25,7 +25,9 @@ class MapSize(StrEnum):
 
 class GameStatus(StrEnum):
     lobby = 'lobby'
-    active = 'active'
+    hiding = 'hiding'
+    seeking = 'seeking'
+    endgame = 'endgame'
     finished = 'finished'
 
 

@@ -1,7 +1,7 @@
 # API Surface Design
 
-> Status: **Draft**
-> Last updated: 2026-02-11
+> Status: **Implementation** (all 16 endpoints implemented; geo math stubbed)
+> Last updated: 2026-02-14
 
 REST API surface for the HideAndSeek server, organized by the player interactions that drive each endpoint.
 
@@ -581,9 +581,9 @@ Only available when game status is `finished`. During active gameplay, location 
 
 ## Open Questions
 
-- **Host identity:** The game model doesn't currently track who created the game. We need a way to authorize "host-only" actions (start, end, assign roles). Options: store `host_client_id` on Game, or let any player perform these actions for MVP.
+- **Host identity:** ~~Resolved~~ — `host_client_id` stored on `Game`. Host-only authorization not yet enforced at the endpoint level (any player can currently start/end/assign roles).
 - **Push-to-device mechanism:** Time-sensitive events need to reach backgrounded players. Live Activities (ActivityKit) are a strong fit for a multi-hour game session. APNs for alerts. Design TBD.
 - **Timer/scheduler:** The `hiding → seeking` transition is time-based. The server needs a way to schedule this and push it to players. Design TBD.
 - **Endgame transition:** How and when does `seeking → endgame` trigger? The hider must know their rules changed, but seekers may not realize they're at the right station. Location update intervals may change. Details TBD.
 - **Player removal:** Can the host kick a player from the lobby? Can a player leave mid-game?
-- **Game state model update:** The `GameStatus` enum in `models/types.py` currently has `lobby / active / finished`. It needs to be updated to `lobby / hiding / seeking / endgame / finished` to match this design.
+- **Game state model update:** ~~Resolved~~ — `GameStatus` enum is now `lobby / hiding / seeking / endgame / finished`.

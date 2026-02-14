@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
@@ -16,10 +14,10 @@ class TransitDataset(SQLModel, table=True):
     name: str
     region: str
     source_url: str | None = None
-    imported_at: datetime = Field(default_factory=datetime.utcnow)
+    imported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    stops: list[Stop] = Relationship(back_populates='dataset')
-    routes: list[Route] = Relationship(back_populates='dataset')
+    stops: list['Stop'] = Relationship(back_populates='dataset')
+    routes: list['Route'] = Relationship(back_populates='dataset')
 
 
 class Stop(SQLModel, table=True):
@@ -33,7 +31,7 @@ class Stop(SQLModel, table=True):
     coordinates: dict = Field(sa_type=sa.JSON)  # GeoJSON Point
 
     dataset: TransitDataset = Relationship(back_populates='stops')
-    route_stops: list[RouteStop] = Relationship(back_populates='stop')
+    route_stops: list['RouteStop'] = Relationship(back_populates='stop')
 
 
 class Route(SQLModel, table=True):
@@ -49,7 +47,7 @@ class Route(SQLModel, table=True):
     shape: dict = Field(sa_type=sa.JSON)  # GeoJSON LineString
 
     dataset: TransitDataset = Relationship(back_populates='routes')
-    route_stops: list[RouteStop] = Relationship(back_populates='route')
+    route_stops: list['RouteStop'] = Relationship(back_populates='route')
 
 
 class RouteStop(SQLModel, table=True):

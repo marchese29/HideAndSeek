@@ -6,6 +6,572 @@ info:
   description: Geographic Hide and Seek game server
   version: 0.1.0
 paths:
+  /maps:
+    get:
+      tags:
+      - maps
+      summary: List Maps
+      description: List available maps with name, size, and region.
+      operationId: list_maps_maps_get
+      parameters:
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Number of items to skip.
+          default: 0
+          title: Offset
+        description: Number of items to skip.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          description: Maximum number of items to return.
+          default: 100
+          title: Limit
+        description: Maximum number of items to return.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MapSummary'
+                title: Response List Maps Maps Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /maps/{map_id}:
+    get:
+      tags:
+      - maps
+      summary: Get Map
+      description: Full map detail including geometry. Omits stops/routes.
+      operationId: get_map_maps__map_id__get
+      parameters:
+      - name: map_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Map Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games:
+    post:
+      tags:
+      - games
+      summary: Create Game
+      description: Create a new game on a map.
+      operationId: create_game_games_post
+      parameters:
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGameRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/join:
+    post:
+      tags:
+      - games
+      summary: Join Game
+      description: Join a game by its join code.
+      operationId: join_game_games_join_post
+      parameters:
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinGameRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinGameResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}:
+    get:
+      tags:
+      - games
+      summary: Get Game State
+      description: Fetch current game state.
+      operationId: get_game_state_games__game_id__get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/players/{player_id}:
+    patch:
+      tags:
+      - games
+      summary: Patch Player
+      description: Update a player's role, name, or color.
+      operationId: patch_player_games__game_id__players__player_id__patch
+      parameters:
+      - name: player_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Player Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/start:
+    post:
+      tags:
+      - games
+      summary: Start Game
+      description: Transition the game from lobby to hiding.
+      operationId: start_game_games__game_id__start_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/end:
+    post:
+      tags:
+      - games
+      summary: End Game
+      description: Transition the game to finished.
+      operationId: end_game_games__game_id__end_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/map:
+    get:
+      tags:
+      - games
+      summary: Get Effective Map
+      description: Effective map with transit data and exclusions applied.
+      operationId: get_effective_map_games__game_id__map_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EffectiveMapResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/location:
+    post:
+      tags:
+      - location
+      summary: Report Location
+      description: Report the caller's location and receive visible player positions.
+      operationId: report_location_games__game_id__location_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationReportRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationReportResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/location-history:
+    get:
+      tags:
+      - location
+      summary: Location History
+      description: Full location log for post-game replay. Only available when finished.
+      operationId: location_history_games__game_id__location_history_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocationHistoryEntry'
+                title: Response Location History Games  Game Id  Location History
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions:
+    post:
+      tags:
+      - questions
+      summary: Ask Question
+      description: Ask a radar or thermometer question, spending an inventory slot.
+      operationId: ask_question_games__game_id__questions_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskQuestionRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - questions
+      summary: List Game Questions
+      description: Chronological list of all questions. Hider location hidden from
+        seekers.
+      operationId: list_game_questions_games__game_id__questions_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QuestionResponse'
+                title: Response List Game Questions Games  Game Id  Questions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}/lock-in:
+    post:
+      tags:
+      - questions
+      summary: Lock In Question
+      description: Lock in the seeker's end position for a thermometer question.
+      operationId: lock_in_question_games__game_id__questions__question_id__lock_in_post
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}/preview:
+    get:
+      tags:
+      - questions
+      summary: Preview Question
+      description: Live preview of what the answer would be. Geo math is stubbed.
+      operationId: preview_question_games__game_id__questions__question_id__preview_get
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionPreview'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}/answer:
+    post:
+      tags:
+      - questions
+      summary: Answer Question
+      description: "Hider answers a question \u2014 snapshot location and compute\
+        \ answer."
+      operationId: answer_question_games__game_id__questions__question_id__answer_post
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       summary: Root
@@ -34,3 +600,676 @@ paths:
                   type: string
                 type: object
                 title: Response Health Health Get
+components:
+  schemas:
+    AskQuestionRequest:
+      properties:
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+          description: 'Type of question: radar or thermometer.'
+        slot_index:
+          type: integer
+          title: Slot Index
+          description: 0-based index into the inventory slot list for this question
+            type.
+        custom_distance_m:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Custom Distance M
+          description: Required when the chosen slot has distance_m=null (custom slot).
+      type: object
+      required:
+      - question_type
+      - slot_index
+      title: AskQuestionRequest
+      description: Ask a radar or thermometer question, spending an inventory slot.
+    CreateGameRequest:
+      properties:
+        map_id:
+          type: string
+          format: uuid
+          title: Map Id
+          description: ID of the map to play on.
+      type: object
+      required:
+      - map_id
+      title: CreateGameRequest
+      description: Create a new game on a map.
+    EffectiveMapResponse:
+      properties:
+        name:
+          type: string
+          title: Name
+        size:
+          $ref: '#/components/schemas/MapSize'
+        boundary:
+          additionalProperties: true
+          type: object
+          title: Boundary
+          description: GeoJSON Polygon.
+        districts:
+          items: {}
+          type: array
+          title: Districts
+        district_classes:
+          items: {}
+          type: array
+          title: District Classes
+        stops:
+          items:
+            $ref: '#/components/schemas/StopResponse'
+          type: array
+          title: Stops
+        routes:
+          items:
+            $ref: '#/components/schemas/RouteResponse'
+          type: array
+          title: Routes
+      type: object
+      required:
+      - name
+      - size
+      - boundary
+      - districts
+      - district_classes
+      - stops
+      - routes
+      title: EffectiveMapResponse
+      description: 'The game map with transit data and exclusions applied.
+
+
+        Single source of truth for what the client should render.'
+    GameResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        map_id:
+          type: string
+          format: uuid
+          title: Map Id
+        status:
+          $ref: '#/components/schemas/GameStatus'
+        join_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Join Code
+          description: 4-character code for joining. Null after game ends.
+        timing:
+          additionalProperties: true
+          type: object
+          title: Timing
+          description: 'TimingRules: hiding_time_min, rest_periods, etc.'
+        inventory:
+          additionalProperties: true
+          type: object
+          title: Inventory
+          description: Remaining question inventory (radars + thermometers).
+        players:
+          items:
+            $ref: '#/components/schemas/PlayerResponse'
+          type: array
+          title: Players
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - map_id
+      - status
+      - join_code
+      - timing
+      - inventory
+      - players
+      - created_at
+      title: GameResponse
+      description: Full game state, including players and inventory.
+    GameStatus:
+      type: string
+      enum:
+      - lobby
+      - hiding
+      - seeking
+      - endgame
+      - finished
+      title: GameStatus
+    GeoPoint:
+      properties:
+        type:
+          type: string
+          const: Point
+          title: Type
+          default: Point
+        coordinates:
+          prefixItems:
+          - type: number
+          - type: number
+          type: array
+          maxItems: 2
+          minItems: 2
+          title: Coordinates
+      type: object
+      required:
+      - coordinates
+      title: GeoPoint
+    GeoPolygon:
+      properties:
+        type:
+          type: string
+          const: Polygon
+          title: Type
+          default: Polygon
+        coordinates:
+          items:
+            items:
+              prefixItems:
+              - type: number
+              - type: number
+              type: array
+              maxItems: 2
+              minItems: 2
+            type: array
+          type: array
+          title: Coordinates
+      type: object
+      required:
+      - coordinates
+      title: GeoPolygon
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    JoinGameRequest:
+      properties:
+        join_code:
+          type: string
+          title: Join Code
+          description: 4-character code shared by the host.
+        name:
+          type: string
+          title: Name
+          description: Display name for this player.
+        color:
+          type: string
+          title: Color
+          description: Hex color for this player, e.g. "#FF5733".
+      type: object
+      required:
+      - join_code
+      - name
+      - color
+      title: JoinGameRequest
+      description: Join an existing game by its join code.
+    JoinGameResponse:
+      properties:
+        game:
+          $ref: '#/components/schemas/GameResponse'
+        player_id:
+          type: string
+          format: uuid
+          title: Player Id
+          description: The joining player's ID for subsequent requests.
+      type: object
+      required:
+      - game
+      - player_id
+      title: JoinGameResponse
+      description: "Returned when a player joins a game \u2014 includes the game state\
+        \ and the caller's player ID."
+    LocationHistoryEntry:
+      properties:
+        player_id:
+          type: string
+          format: uuid
+          title: Player Id
+        coordinates:
+          additionalProperties: true
+          type: object
+          title: Coordinates
+          description: GeoJSON Point.
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+      type: object
+      required:
+      - player_id
+      - coordinates
+      - timestamp
+      title: LocationHistoryEntry
+      description: A single location update in the post-game replay log.
+    LocationReportRequest:
+      properties:
+        coordinates:
+          $ref: '#/components/schemas/GeoPoint'
+          description: Current position as a GeoJSON Point.
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+          description: Client-side timestamp of the reading.
+      type: object
+      required:
+      - coordinates
+      - timestamp
+      title: LocationReportRequest
+      description: Report the caller's current position.
+    LocationReportResponse:
+      properties:
+        players:
+          items:
+            $ref: '#/components/schemas/VisiblePlayer'
+          type: array
+          title: Players
+      type: object
+      required:
+      - players
+      title: LocationReportResponse
+      description: "Returned after reporting location \u2014 includes positions of\
+        \ all visible players."
+    MapDetail:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        size:
+          $ref: '#/components/schemas/MapSize'
+        transit_dataset_id:
+          type: string
+          format: uuid
+          title: Transit Dataset Id
+        boundary:
+          additionalProperties: true
+          type: object
+          title: Boundary
+          description: GeoJSON Polygon defining the playable area.
+        districts:
+          items: {}
+          type: array
+          title: Districts
+          description: District boundaries with id, name, class, and geometry.
+        district_classes:
+          items: {}
+          type: array
+          title: District Classes
+          description: District class definitions (tier + label).
+        default_inventory:
+          additionalProperties: true
+          type: object
+          title: Default Inventory
+          description: Default question inventory for games on this map.
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - id
+      - name
+      - size
+      - transit_dataset_id
+      - boundary
+      - districts
+      - district_classes
+      - default_inventory
+      - notes
+      title: MapDetail
+      description: Full map detail including geometry for rendering a preview. Omits
+        stops/routes.
+    MapSize:
+      type: string
+      enum:
+      - small
+      - medium
+      - large
+      - special
+      title: MapSize
+    MapSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        size:
+          $ref: '#/components/schemas/MapSize'
+        region:
+          type: string
+          title: Region
+          description: Geographic region from the transit dataset.
+      type: object
+      required:
+      - id
+      - name
+      - size
+      - region
+      title: MapSummary
+      description: "A map in the browse list \u2014 name, size, and region."
+    PlayerResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        color:
+          type: string
+          title: Color
+          description: Hex color, e.g. "#FF5733".
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/PlayerRole'
+          - type: 'null'
+          description: Null until the host assigns a role.
+      type: object
+      required:
+      - id
+      - name
+      - color
+      - role
+      title: PlayerResponse
+      description: A player in a game.
+    PlayerRole:
+      type: string
+      enum:
+      - hider
+      - seeker
+      title: PlayerRole
+    PlayerUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+          description: New display name.
+        color:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Color
+          description: New hex color.
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/PlayerRole'
+          - type: 'null'
+          description: Assign hider or seeker role.
+      type: object
+      title: PlayerUpdate
+      description: Partial update to a player. All fields are optional; only provided
+        fields are applied.
+    QuestionPreview:
+      properties:
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer
+          description: Computed answer based on current hider position.
+        exclusion:
+          anyOf:
+          - $ref: '#/components/schemas/GeoPolygon'
+          - type: 'null'
+          description: Computed exclusion zone.
+      type: object
+      required:
+      - answer
+      - exclusion
+      title: QuestionPreview
+      description: Live preview of what the answer would be if the hider committed
+        now.
+    QuestionResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        game_id:
+          type: string
+          format: uuid
+          title: Game Id
+        sequence:
+          type: integer
+          title: Sequence
+          description: 1-based chronological order within the game.
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        parameters:
+          additionalProperties: true
+          type: object
+          title: Parameters
+          description: radius_m for radar, min_travel_m for thermometer.
+        asked_by:
+          type: string
+          format: uuid
+          title: Asked By
+          description: Player ID of the seeker who asked.
+        asked_at:
+          type: string
+          format: date-time
+          title: Asked At
+        seeker_location_start:
+          additionalProperties: true
+          type: object
+          title: Seeker Location Start
+          description: "GeoJSON Point \u2014 seeker position when asked."
+        seeker_location_end:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Seeker Location End
+          description: "GeoJSON Point \u2014 seeker position at lock-in (thermometer\
+            \ only)."
+        answered_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answered At
+        hider_location:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Hider Location
+          description: "GeoJSON Point \u2014 hider position at answer time. Hidden\
+            \ from seekers."
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer
+          description: yes/no for radar, closer/farther for thermometer.
+        exclusion:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Exclusion
+          description: "GeoJSON Polygon \u2014 the exclusion zone."
+      type: object
+      required:
+      - id
+      - game_id
+      - sequence
+      - question_type
+      - status
+      - parameters
+      - asked_by
+      - asked_at
+      - seeker_location_start
+      - seeker_location_end
+      - answered_at
+      - hider_location
+      - answer
+      - exclusion
+      title: QuestionResponse
+      description: "A question in the game \u2014 state machine: asked \u2192 in_progress\
+        \ \u2192 answerable \u2192 answered."
+    QuestionStatus:
+      type: string
+      enum:
+      - asked
+      - in_progress
+      - answerable
+      - answered
+      title: QuestionStatus
+    QuestionType:
+      type: string
+      enum:
+      - radar
+      - thermometer
+      title: QuestionType
+    RouteResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        stable_id:
+          type: string
+          title: Stable Id
+          description: Stable identifier from the transit dataset.
+        name:
+          type: string
+          title: Name
+        color:
+          type: string
+          title: Color
+          description: Hex color for rendering.
+        route_type:
+          type: string
+          title: Route Type
+          description: metro, bus, tram, rail, or ferry.
+        shape:
+          additionalProperties: true
+          type: object
+          title: Shape
+          description: GeoJSON LineString.
+        stop_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Stop Ids
+          description: Ordered stop IDs along this route.
+      type: object
+      required:
+      - id
+      - stable_id
+      - name
+      - color
+      - route_type
+      - shape
+      - stop_ids
+      title: RouteResponse
+      description: A transit route on the effective game map, with ordered stop IDs.
+    StopResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        stable_id:
+          type: string
+          title: Stable Id
+          description: Stable identifier from the transit dataset.
+        name:
+          type: string
+          title: Name
+        coordinates:
+          additionalProperties: true
+          type: object
+          title: Coordinates
+          description: GeoJSON Point.
+      type: object
+      required:
+      - id
+      - stable_id
+      - name
+      - coordinates
+      title: StopResponse
+      description: A transit stop on the effective game map.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    VisiblePlayer:
+      properties:
+        player_id:
+          type: string
+          format: uuid
+          title: Player Id
+        name:
+          type: string
+          title: Name
+        color:
+          type: string
+          title: Color
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/PlayerRole'
+          - type: 'null'
+        coordinates:
+          additionalProperties: true
+          type: object
+          title: Coordinates
+          description: "GeoJSON Point \u2014 latest reported position."
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+      type: object
+      required:
+      - player_id
+      - name
+      - color
+      - role
+      - coordinates
+      - timestamp
+      title: VisiblePlayer
+      description: A player visible to the caller, with their latest position.

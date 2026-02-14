@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
@@ -13,10 +11,10 @@ class LocationUpdate(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     player_id: uuid.UUID = Field(foreign_key='player.id')
     game_id: uuid.UUID = Field(foreign_key='game.id')
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     coordinates: dict = Field(sa_type=sa.JSON)  # GeoJSON Point
 
-    player: Player = Relationship(back_populates='location_updates')  # noqa: F821
+    player: 'Player' = Relationship(back_populates='location_updates')  # noqa: F821
 
 
 # Avoid circular imports — resolved at runtime by SQLModel.

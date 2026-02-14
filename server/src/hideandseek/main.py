@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from hideandseek.db import create_db_and_tables
+from hideandseek.routers import games, location, maps, questions
 
 
 @asynccontextmanager
@@ -20,6 +21,12 @@ app = FastAPI(
     version='0.1.0',
     lifespan=lifespan,
 )
+
+
+app.include_router(maps.router)
+app.include_router(games.router)
+app.include_router(location.router)
+app.include_router(questions.router)
 
 
 @app.get('/')

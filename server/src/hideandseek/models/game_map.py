@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import uuid
 
 import sqlalchemy as sa
@@ -23,9 +21,9 @@ class GameMap(SQLModel, table=True):
     default_inventory: dict = Field(default_factory=dict, sa_type=sa.JSON)
     notes: str | None = None
 
-    transit_dataset: TransitDataset = Relationship()  # noqa: F821
+    transit_dataset: 'TransitDataset' = Relationship()  # noqa: F821
 
-    games: list[Game] = Relationship(back_populates='game_map')  # noqa: F821
+    games: list['Game'] = Relationship(back_populates='game_map')  # noqa: F821
 
 
 # Avoid circular imports — these are resolved at runtime by SQLModel.

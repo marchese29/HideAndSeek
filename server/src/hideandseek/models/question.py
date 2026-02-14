@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
@@ -19,7 +17,7 @@ class Question(SQLModel, table=True):
     status: QuestionStatus = QuestionStatus.asked
     parameters: dict = Field(default_factory=dict, sa_type=sa.JSON)
     asked_by: uuid.UUID = Field(foreign_key='player.id')
-    asked_at: datetime = Field(default_factory=datetime.utcnow)
+    asked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     seeker_location_start: dict = Field(sa_type=sa.JSON)  # GeoJSON Point
     seeker_location_end: dict | None = Field(default=None, sa_type=sa.JSON)
     answered_at: datetime | None = None
@@ -27,7 +25,7 @@ class Question(SQLModel, table=True):
     answer: str | None = None
     exclusion: dict | None = Field(default=None, sa_type=sa.JSON)
 
-    game: Game = Relationship(back_populates='questions')  # noqa: F821
+    game: 'Game' = Relationship(back_populates='questions')  # noqa: F821
 
 
 # Avoid circular imports — resolved at runtime by SQLModel.
