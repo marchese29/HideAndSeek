@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from hideandseek.models.question import Question as QuestionModel
     from hideandseek.models.transit import Route as RouteModel
     from hideandseek.models.transit import Stop as StopModel
-    from hideandseek.queries import EffectiveMapData
+    from hideandseek.queries.effective_map import EffectiveMapData
 
 
 # ── Maps ──────────────────────────────────────────────────────────────────────

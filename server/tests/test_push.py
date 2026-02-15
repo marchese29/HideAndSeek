@@ -10,7 +10,7 @@ from sqlmodel import Session
 from hideandseek.models.device_token import DeviceToken
 from hideandseek.models.types import PlayerRole, PushEventType
 from hideandseek.push import PushService
-from hideandseek.queries import (
+from hideandseek.queries.device_tokens import (
     delete_device_token,
     get_device_tokens_for_game,
     upsert_device_token,

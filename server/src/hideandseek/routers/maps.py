@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from hideandseek.db import get_session
-from hideandseek.queries import get_map as query_get_map
-from hideandseek.queries import list_maps as query_list_maps
+from hideandseek.queries.maps import get_map as query_get_map
+from hideandseek.queries.maps import list_maps as query_list_maps
 from hideandseek.schemas.common import pagination_params
 from hideandseek.schemas.response import MapDetail, MapSummary
 

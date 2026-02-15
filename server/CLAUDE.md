@@ -26,7 +26,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 ## Project Structure
 
 - `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (creates DB, initializes PushService)
-- `src/hideandseek/db.py` — SQLite engine, `create_db_and_tables()`, `get_session()` dependency
+- `src/hideandseek/db.py` — SQLite engine, `create_db_and_tables()`, `get_session()` (commit-at-boundary), `@persisted` decorator
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/models/` — SQLModel table models and types
@@ -43,7 +43,13 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - `response.py` — Response schemas with `from_model()` static methods for DB→API transformation
   - `common.py` — Shared utilities (pagination params)
 - `src/hideandseek/dependencies.py` — Shared FastAPI dependencies (`get_client_id`, `get_game`, `get_player_in_game`, `get_push_service`)
-- `src/hideandseek/queries.py` — Database query/mutation functions (return SQLModel objects, handle commit/refresh)
+- `src/hideandseek/queries/` — Database query/mutation functions, split by domain
+  - `device_tokens.py` — `upsert_device_token`, `get_device_tokens_for_game`, `delete_device_token`
+  - `maps.py` — `list_maps`, `get_map`
+  - `games.py` — `generate_join_code`, `create_game`, `find_game_by_join_code`, `add_player`, `get_player`, `update_player`, `update_game_status`
+  - `effective_map.py` — `get_effective_map_data`, `RouteWithStops`, `EffectiveMapData` dataclasses
+  - `location.py` — `create_location_update`, `get_visible_players`, `get_location_history`, `get_latest_location_for_player`, `get_avg_seeker_location`, `VisiblePlayerData` dataclass
+  - `questions.py` — `has_unanswered_question`, `get_question_count`, `create_question`, `get_question`, `list_questions`, `update_question`, `update_game_inventory`
 - `src/hideandseek/routers/` — API route modules
   - `maps.py` — `GET /maps`, `GET /maps/{map_id}`
   - `games.py` — `POST /games`, `POST /games/join`, `GET /games/{game_id}`, `PATCH .../players/{player_id}`, `POST .../start`, `POST .../end`, `GET .../map`
@@ -58,7 +64,9 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 
 - **Schema vs Model separation**: SQLModel table models (`models/`) own the DB schema. Pydantic schemas (`schemas/`) control the API surface. Response schemas have `from_model()` static methods for transformation.
 - **Dependency injection**: `dependencies.py` provides reusable FastAPI `Depends()` — `get_client_id` (from `X-Client-Id` header), `get_game` (404 if missing), `get_player_in_game` (composes `get_game` + `get_client_id`, 403 if not found), `get_push_service` (from `app.state`).
-- **Query layer**: `queries.py` handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLModel objects; routers transform them via `from_model()`.
+- **Transactional boundaries**: `get_session()` commits once after the handler succeeds. If the handler raises, commit is never called and `Session.__exit__` rolls back. All writes in a request succeed or fail together.
+- **`@persisted` decorator**: Applied to all write functions (both those returning objects and void ones like `delete_device_token`). Flushes the session after the function (making writes visible to subsequent queries in the same request) but never commits. Typed with PEP 695 generics (`[T, **P]`) via `Concatenate[Session, P]`.
+- **Query layer**: `queries/` package (one module per domain) handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLModel objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek.queries.games import create_game`), not from the package root.
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). Routers resolve device tokens while the session is alive, then dispatch `push.send_to_tokens()` via `BackgroundTasks` (fire-and-forget). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
 - **Test factories**: `conftest.py` has factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) that create test data with sensible defaults and accept `**overrides`.
 - **Geo math deferred**: Question answer computation and exclusion zone geometry are stubbed (`answer: "pending"`, `exclusion: null`). A future `geo.py` module will implement haversine distance, radar circles, and thermometer half-planes.
@@ -101,7 +109,7 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 Enforced by ruff (lint + format) and pyright (type checking). The pre-commit hook runs all checks automatically.
 
 - Single quotes for strings.
-- `from __future__ import annotations` at the top of every module **except** SQLModel table model files.
+- `from __future__ import annotations` at the top of every module **except** SQLModel table model files and `db.py` (which uses PEP 695 generics).
 - All imports at the top of the file, never inline.
 - Type annotations required on all function arguments and return types (except `-> None`).
 - Max line length: 100 characters.

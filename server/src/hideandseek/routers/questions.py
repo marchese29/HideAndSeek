@@ -19,11 +19,10 @@ from hideandseek.models.types import (
     QuestionType,
 )
 from hideandseek.push import PushService
-from hideandseek.queries import (
+from hideandseek.queries.device_tokens import get_device_tokens_for_game
+from hideandseek.queries.location import get_avg_seeker_location, get_latest_location_for_player
+from hideandseek.queries.questions import (
     create_question,
-    get_avg_seeker_location,
-    get_device_tokens_for_game,
-    get_latest_location_for_player,
     get_question,
     get_question_count,
     has_unanswered_question,

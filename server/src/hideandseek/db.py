@@ -1,7 +1,7 @@
-from __future__ import annotations
-
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from functools import wraps
 from pathlib import Path
+from typing import Concatenate
 
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -31,5 +31,31 @@ def create_db_and_tables() -> None:
 
 
 def get_session() -> Generator[Session, None, None]:
+    """Yield a session that commits on successful completion.
+
+    If the handler raises, the yield never resumes, commit() is never called,
+    and Session.__exit__ rolls back. Every request is atomic by default.
+    """
     with Session(engine) as session:
         yield session
+        session.commit()
+
+
+def persisted[T, **P](
+    fn: Callable[Concatenate[Session, P], T],
+) -> Callable[Concatenate[Session, P], T]:
+    """Flush the session after the function runs.
+
+    Decorated functions should session.add() their objects and return them.
+    The decorator flushes to materialize the writes within the transaction
+    (making them visible to subsequent queries in the same request).
+    The boundary commit in get_session() finalizes everything.
+    """
+
+    @wraps(fn)
+    def wrapper(session: Session, /, *args: P.args, **kwargs: P.kwargs) -> T:
+        result = fn(session, *args, **kwargs)
+        session.flush()
+        return result
+
+    return wrapper

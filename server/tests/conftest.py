@@ -36,6 +36,7 @@ def client(session: Session) -> Generator[TestClient, None, None]:
 
     def _override_get_session() -> Generator[Session, None, None]:
         yield session
+        session.commit()
 
     app.dependency_overrides[get_session] = _override_get_session
     app.state.push_service = PushService(config=None)

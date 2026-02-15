@@ -12,22 +12,21 @@ from hideandseek.dependencies import get_client_id, get_game, get_push_service
 from hideandseek.models.game import Game
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType
 from hideandseek.push import PushService
-from hideandseek.queries import (
+from hideandseek.queries.device_tokens import get_device_tokens_for_game, upsert_device_token
+from hideandseek.queries.effective_map import get_effective_map_data
+from hideandseek.queries.games import (
     add_player,
     find_game_by_join_code,
-    get_device_tokens_for_game,
-    get_effective_map_data,
-    get_map,
     get_player,
     update_game_status,
-    upsert_device_token,
 )
-from hideandseek.queries import (
+from hideandseek.queries.games import (
     create_game as query_create_game,
 )
-from hideandseek.queries import (
+from hideandseek.queries.games import (
     update_player as query_update_player,
 )
+from hideandseek.queries.maps import get_map
 from hideandseek.schemas.request import CreateGameRequest, JoinGameRequest, PlayerUpdate
 from hideandseek.schemas.response import (
     EffectiveMapResponse,
@@ -93,12 +92,11 @@ def join_game(
 
     player = add_player(
         session,
+        game,
         client_id=client_id,
-        game_id=game.id,
         name=body.name,
         color=body.color,
     )
-    session.refresh(game)
     return JoinGameResponse(game=GameResponse.from_model(game), player_id=player.id)
 
 

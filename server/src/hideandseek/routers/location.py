@@ -9,7 +9,11 @@ from hideandseek.db import get_session
 from hideandseek.dependencies import get_game, get_player_in_game
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus
-from hideandseek.queries import create_location_update, get_location_history, get_visible_players
+from hideandseek.queries.location import (
+    create_location_update,
+    get_location_history,
+    get_visible_players,
+)
 from hideandseek.schemas.request import LocationReportRequest
 from hideandseek.schemas.response import (
     LocationHistoryEntry,
