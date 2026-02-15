@@ -6,29 +6,50 @@ Python FastAPI backend for the HideAndSeek game.
 
 ```bash
 uv sync                    # Install/update dependencies
-uv run uvicorn hideandseek.main:app --reload  # Run dev server (localhost:8000)
-uv run pytest              # Run tests
+uv run uvicorn hideandseek.main:app --reload  # Run dev server (localhost:8000, SQLite)
+uv run pytest              # Run tests (in-memory SQLite)
 uv run ruff check .        # Lint
 uv run ruff format .       # Format
 uv run pyright             # Type check
 uv run python scripts/generate_openapi.py     # Regenerate OpenAPI spec
+
+# Docker (from repo root)
+docker compose up --build  # Start PostgreSQL + API server (localhost:8000)
+docker compose down        # Stop services (data preserved in pgdata volume)
+docker compose down -v     # Stop services and wipe database
 ```
+
+## Running the Server
+
+Two modes — both serve on `localhost:8000`:
+
+| | **Local (SQLite)** | **Docker (PostgreSQL)** |
+|---|---|---|
+| Start | `uv run uvicorn hideandseek.main:app --reload` | `docker compose up --build` (from repo root) |
+| Database | SQLite at `server/data/hideandseek.db` | PostgreSQL 17 in container |
+| `ENV` | `local` (default) | `development` (set in compose) |
+| Log level | DEBUG, console renderer | DEBUG, console renderer |
+| Access logs | `server/logs/access.log` + stderr | stderr only |
+| Reset DB | Delete `server/data/` directory | `docker compose down -v` |
+
+In production (`ENV=production`): INFO level, JSON renderer, stderr only.
 
 ## Verification
 
 Always verify server changes with **both** automated checks and manual API calls before committing.
 
 1. **Automated**: `uv run pytest && uv run ruff check . && uv run pyright`
-2. **Manual**: Start the server, seed test data if the DB is empty (or delete `data/` and recreate), and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created).
+2. **Manual**: Start the server (either local or Docker), seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created). To reset: delete `server/data/` (local) or `docker compose down -v` (Docker).
 
 Manual testing catches wiring and serialization issues that unit tests miss.
 
 ## Project Structure
 
 - `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (sets up logging, creates DB, initializes PushService)
-- `src/hideandseek/logging.py` — Centralized structlog configuration (`setup_logging()`). Configures two logger namespaces: `hideandseek.access` (request/response → `logs/access.log` in dev, `/var/log/hideandseek/access.log` in prod) and root (general app → stderr). Env-aware: dev=console renderer, prod/`LOG_FORMAT=json`=JSON renderer.
+- `src/hideandseek/logging.py` — Centralized structlog configuration (`setup_logging()`). Configures two logger namespaces: `hideandseek.access` (request/response) and root (general app → stderr). Three-tier `ENV`: `local` (default, file+stderr, console), `development` (stderr only, console), `production` (stderr only, JSON).
 - `src/hideandseek/middleware.py` — Raw ASGI `AccessLogMiddleware` for structured request/response logging. Logs method, path, headers (sensitive values redacted), request body (truncated at 1KB), status, duration, response size. Generates `request_id` UUID per request (bound to structlog contextvars, returned in `X-Request-ID` response header). Skips `/health`.
-- `src/hideandseek/db.py` — SQLite engine, `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `current_session()`, `@db_read`/`@db_write` decorators
+- `src/hideandseek/db.py` — Database engine (`DATABASE_URL` env var, defaults to SQLite), `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `current_session()`, `@db_read`/`@db_write` decorators
+- `Dockerfile` — Multi-stage build using `uv` image (Python 3.12, bookworm-slim)
 - `src/hideandseek/utils.py` — Shared utilities (`find_server_root()` — walks up to `pyproject.toml`)
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
@@ -74,7 +95,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - **Query layer**: `queries/` package (one module per domain) handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLModel objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek.queries.games import create_game`), not from the package root. Callers invoke query functions without passing session (e.g., `create_game(map_id=..., ...)`).
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). Routers resolve device tokens while the session is alive, then dispatch `push.send_to_tokens()` via `BackgroundTasks` (fire-and-forget). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
 - **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) create test data with sensible defaults and accept `**overrides`.
-- **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, written to `access.log`, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. `ENV=development` (default): DEBUG level, colorful console. `ENV=production` or `LOG_FORMAT=json`: INFO level, JSON output.
+- **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
 - **Geo math deferred**: Question answer computation and exclusion zone geometry are stubbed (`answer: "pending"`, `exclusion: null`). A future `geo.py` module will implement haversine distance, radar circles, and thermometer half-planes.
 
 ## Game States
@@ -94,7 +115,7 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int).
 - Relationships use bottom-of-file imports and quoted forward references to avoid circular dependencies.
 - Enums are `StrEnum` — stored as VARCHAR, human-readable in DB.
-- **Active development — no migration or backwards-compatibility concerns.** There is no production data. Schema changes go directly in the models and `create_all` recreates tables on startup. Delete the local `data/` directory if the schema changes. Alembic will be added when the schema stabilizes and real data exists.
+- **Active development — no migration or backwards-compatibility concerns.** There is no production data. Schema changes go directly in the models and `create_all` recreates tables on startup. To reset: delete `server/data/` (local SQLite) or `docker compose down -v` (Docker PostgreSQL). Alembic will be added when the schema stabilizes and real data exists.
 - Tests use in-memory SQLite with `StaticPool` via the `session` and `client` fixtures in `conftest.py`.
 
 ## Conventions
@@ -109,7 +130,8 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 - Pagination uses offset/limit query params (`schemas/common.py`).
 - `device_token` is required on `POST /games/join`, optional on `POST /games`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
 - Push notification env vars: `APNS_KEY_PATH`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_USE_SANDBOX`. All optional — when missing, PushService runs in no-op mode.
-- Logging env vars: `ENV` (`development`/`production`, default `development`), `LOG_FORMAT` (`json` to force JSON output). Use `structlog.get_logger(__name__)` for all new loggers — never use stdlib `logging.getLogger()` directly.
+- Database env vars: `DATABASE_URL` (default: SQLite at `server/data/hideandseek.db`). Docker Compose sets `postgresql+psycopg://...`.
+- Logging env vars: `ENV` (`local`/`development`/`production`, default `local`), `LOG_FORMAT` (`json` to force JSON output). Use `structlog.get_logger(__name__)` for all new loggers — never use stdlib `logging.getLogger()` directly.
 
 ## Style
 

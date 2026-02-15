@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncGenerator, Callable
 from contextvars import ContextVar
 from functools import wraps
@@ -10,10 +11,14 @@ from hideandseek.utils import find_server_root
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-DB_DIR = find_server_root() / 'data'
-DB_URL = f'sqlite:///{DB_DIR / "hideandseek.db"}'
+_default_db_url = f'sqlite:///{find_server_root() / "data" / "hideandseek.db"}'
+DATABASE_URL = os.environ.get('DATABASE_URL', _default_db_url)
 
-engine = create_engine(DB_URL, connect_args={'check_same_thread': False})
+_connect_args: dict[str, bool] = {}
+if DATABASE_URL.startswith('sqlite'):
+    _connect_args['check_same_thread'] = False
+
+engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 
 _session_var: ContextVar[Session] = ContextVar('_session_var')
 
@@ -26,7 +31,9 @@ def current_session() -> Session:
 def create_db_and_tables() -> None:
     import hideandseek.models  # noqa: F401 — registers all tables on metadata
 
-    DB_DIR.mkdir(parents=True, exist_ok=True)
+    if DATABASE_URL.startswith('sqlite'):
+        _db_dir = find_server_root() / 'data'
+        _db_dir.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(engine)
 
 

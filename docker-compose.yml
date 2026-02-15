@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: hideandseek
+      POSTGRES_USER: hideandseek
+      POSTGRES_PASSWORD: hideandseek
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hideandseek"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./server
+    command: uv run uvicorn hideandseek.main:app --host 0.0.0.0 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
+      ENV: development
+    volumes:
+      - ./server/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

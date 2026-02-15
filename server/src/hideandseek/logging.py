@@ -5,13 +5,10 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from pathlib import Path
 
 import structlog
 
 from hideandseek.utils import find_server_root
-
-_LOG_DIR_PROD = Path('/var/log/hideandseek')
 
 
 def setup_logging() -> None:
@@ -19,26 +16,24 @@ def setup_logging() -> None:
 
     Two logger namespaces:
     - ``hideandseek.access`` — request/response access logs (middleware).
-      Writes to a file and console in development.
+      In ``local`` mode, writes to ``server/logs/access.log`` **and** stderr.
+      In ``development`` and ``production``, writes to stderr only.
     - ``hideandseek.*`` — general application logs.
       Writes to stderr.
 
-    Log file locations:
-    - Development: ``server/logs/access.log`` (gitignored).
-    - Production: ``/var/log/hideandseek/access.log``.
-
     Environment variables:
-    - ``ENV``: ``development`` (default) or ``production``.
-      Controls log level (DEBUG vs INFO), renderer (console vs JSON), and
-      log file location.
+    - ``ENV``: ``local`` (default), ``development``, or ``production``.
+      - ``local``: DEBUG, console renderer, access log file + stderr.
+      - ``development``: DEBUG, console renderer, access log stderr only.
+      - ``production``: INFO, JSON renderer, access log stderr only.
     - ``LOG_FORMAT``: Override renderer — ``json`` forces JSON regardless of ENV.
     """
-    env = os.environ.get('ENV', 'development')
-    is_dev = env == 'development'
+    env = os.environ.get('ENV', 'local')
+    is_prod = env == 'production'
+    is_local = env == 'local'
     force_json = os.environ.get('LOG_FORMAT', '').lower() == 'json'
-    use_json = force_json or not is_dev
-    root_level = logging.DEBUG if is_dev else logging.INFO
-    log_dir = find_server_root() / 'logs' if is_dev else _LOG_DIR_PROD
+    use_json = force_json or is_prod
+    root_level = logging.INFO if is_prod else logging.DEBUG
 
     # Shared structlog processors
     shared_processors: list[structlog.types.Processor] = [
@@ -84,20 +79,21 @@ def setup_logging() -> None:
     stderr_handler.setFormatter(formatter)
     root_logger.addHandler(stderr_handler)
 
-    # --- Access logger (request/response → file + console in dev) ---
+    # --- Access logger (request/response → file + stderr in local, stderr only otherwise) ---
     access_logger = logging.getLogger('hideandseek.access')
     access_logger.setLevel(logging.DEBUG)
     access_logger.propagate = False  # Don't duplicate into the root stream
 
-    log_dir.mkdir(parents=True, exist_ok=True)
-    access_file_handler = logging.FileHandler(log_dir / 'access.log')
-    access_file_handler.setFormatter(formatter)
-    access_logger.addHandler(access_file_handler)
+    if is_local:
+        log_dir = find_server_root() / 'logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        access_file_handler = logging.FileHandler(log_dir / 'access.log')
+        access_file_handler.setFormatter(formatter)
+        access_logger.addHandler(access_file_handler)
 
-    if is_dev:
-        access_console_handler = logging.StreamHandler(sys.stderr)
-        access_console_handler.setFormatter(formatter)
-        access_logger.addHandler(access_console_handler)
+    access_console_handler = logging.StreamHandler(sys.stderr)
+    access_console_handler.setFormatter(formatter)
+    access_logger.addHandler(access_console_handler)
 
     # Quiet noisy third-party loggers
     logging.getLogger('uvicorn').setLevel(logging.WARNING)

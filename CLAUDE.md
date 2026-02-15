@@ -9,6 +9,7 @@ Geographic "Hide and Seek" game — hiders use public transit to hide in a game 
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.
 - `design/` — AI-generated design artifacts. See `design/CLAUDE.md`.
 - `hooks/` — Git hooks (auto-configured via `core.hooksPath`).
+- `docker-compose.yml` — Docker Compose (PostgreSQL + API server).
 - `.beads/` — Beads issue tracker.
 
 ## CLAUDE.md Is the Source of Truth
@@ -48,7 +49,7 @@ bd sync               # Sync with git
 When server code changes, verify with **both** automated and manual checks before committing:
 
 1. **Automated**: `uv run pytest`, `uv run ruff check .`, `uv run pyright`
-2. **Manual**: Start the server (`uv run uvicorn hideandseek.main:app --reload`), seed test data if needed, and exercise new/changed endpoints with `curl`. Verify request/response shapes, error cases, and side effects.
+2. **Manual**: Start the server (local: `uv run uvicorn hideandseek.main:app --reload`, or Docker: `docker compose up --build`), seed test data if needed, and exercise new/changed endpoints with `curl`. Verify request/response shapes, error cases, and side effects.
 
 Manual testing catches issues that unit tests miss: serialization quirks, middleware interactions, dependency wiring, and real request flow.
 
@@ -71,8 +72,13 @@ When ending a work session, complete ALL steps below. Work is NOT complete until
 ## Quick Start
 
 ```bash
-# Server
+# Server (local, SQLite)
 cd server && uv sync && uv run uvicorn hideandseek.main:app --reload
+
+# Server (Docker, PostgreSQL)
+docker compose up --build          # Start PostgreSQL + API (localhost:8000)
+docker compose down                # Stop (data preserved in pgdata volume)
+docker compose down -v             # Stop and wipe database
 
 # Run server tests
 cd server && uv run pytest
