@@ -9,13 +9,13 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from hideandseek.db import persisted
+from hideandseek.db import db_read, db_write
 from hideandseek.models.game import Game, Player
 from hideandseek.models.location import LocationUpdate
 from hideandseek.models.types import PlayerRole
 
 
-@persisted
+@db_write
 def create_location_update(
     session: Session,
     *,
@@ -44,6 +44,7 @@ class VisiblePlayerData:
     timestamp: datetime
 
 
+@db_read
 def get_visible_players(session: Session, game: Game, caller: Player) -> list[VisiblePlayerData]:
     """Return the latest location of each player visible to the caller.
 
@@ -83,6 +84,7 @@ def get_visible_players(session: Session, game: Game, caller: Player) -> list[Vi
     return results
 
 
+@db_read
 def get_location_history(session: Session, game_id: uuid.UUID) -> list[LocationUpdate]:
     """Return all location updates for a game, chronologically."""
     return list(
@@ -94,6 +96,7 @@ def get_location_history(session: Session, game_id: uuid.UUID) -> list[LocationU
     )
 
 
+@db_read
 def get_latest_location_for_player(
     session: Session, player_id: uuid.UUID, game_id: uuid.UUID
 ) -> LocationUpdate | None:
@@ -109,6 +112,7 @@ def get_latest_location_for_player(
     ).first()
 
 
+@db_read
 def get_avg_seeker_location(session: Session, game: Game) -> dict | None:
     """Compute the average position of all seekers based on their latest reports.
 
@@ -121,7 +125,7 @@ def get_avg_seeker_location(session: Session, game: Game) -> dict | None:
     lngs: list[float] = []
     lats: list[float] = []
     for seeker in seekers:
-        lu = get_latest_location_for_player(session, seeker.id, game.id)
+        lu = get_latest_location_for_player(seeker.id, game.id)
         if lu:
             coords = lu.coordinates.get('coordinates', [])
             if len(coords) >= 2:

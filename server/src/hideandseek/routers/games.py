@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlmodel import Session
 
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_client_id, get_game, get_push_service
@@ -35,7 +34,7 @@ from hideandseek.schemas.response import (
     PlayerResponse,
 )
 
-router = APIRouter(prefix='/games', tags=['games'])
+router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(get_session)])
 
 # States from which a game can be ended.
 _ACTIVE_STATES = {GameStatus.hiding, GameStatus.seeking, GameStatus.endgame}
@@ -45,23 +44,20 @@ _ACTIVE_STATES = {GameStatus.hiding, GameStatus.seeking, GameStatus.endgame}
 def create_game(
     body: CreateGameRequest,
     client_id: uuid.UUID = Depends(get_client_id),
-    session: Session = Depends(get_session),
 ) -> GameResponse:
     """Create a new game on a map."""
-    game_map = get_map(session, body.map_id)
+    game_map = get_map(body.map_id)
     if not game_map:
         raise HTTPException(status_code=404, detail='Map not found.')
 
     if body.device_token:
         upsert_device_token(
-            session,
             client_id=client_id,
             token=body.device_token,
             environment=body.device_token_environment,
         )
 
     game = query_create_game(
-        session,
         map_id=game_map.id,
         host_client_id=client_id,
         timing={},  # TODO: copy from map default_timing when the field exists
@@ -74,24 +70,21 @@ def create_game(
 def join_game(
     body: JoinGameRequest,
     client_id: uuid.UUID = Depends(get_client_id),
-    session: Session = Depends(get_session),
 ) -> JoinGameResponse:
     """Join a game by its join code."""
-    game = find_game_by_join_code(session, body.join_code)
+    game = find_game_by_join_code(body.join_code)
     if not game:
         raise HTTPException(status_code=404, detail='Invalid join code.')
     if game.status != GameStatus.lobby:
         raise HTTPException(status_code=409, detail='Game is not in lobby.')
 
     upsert_device_token(
-        session,
         client_id=client_id,
         token=body.device_token,
         environment=body.device_token_environment,
     )
 
     player = add_player(
-        session,
         game,
         client_id=client_id,
         name=body.name,
@@ -116,14 +109,13 @@ def patch_player(
     player_id: uuid.UUID,
     body: PlayerUpdate,
     game: Game = Depends(get_game),
-    session: Session = Depends(get_session),
 ) -> PlayerResponse:
     """Update a player's role, name, or color."""
-    player = get_player(session, player_id)
+    player = get_player(player_id)
     if not player or player.game_id != game.id:
         raise HTTPException(status_code=404, detail='Player not found in this game.')
 
-    player = query_update_player(session, player, body.model_dump(exclude_unset=True))
+    player = query_update_player(player, body.model_dump(exclude_unset=True))
     return PlayerResponse.from_model(player)
 
 
@@ -131,7 +123,6 @@ def patch_player(
 def start_game(
     background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
-    session: Session = Depends(get_session),
     push: PushService = Depends(get_push_service),
 ) -> GameResponse:
     """Transition the game from lobby to hiding."""
@@ -148,8 +139,8 @@ def start_game(
     if PlayerRole.seeker not in roles:
         raise HTTPException(status_code=409, detail='At least one seeker is required.')
 
-    tokens = get_device_tokens_for_game(session, game.id)
-    game = update_game_status(session, game, GameStatus.hiding)
+    tokens = get_device_tokens_for_game(game.id)
+    game = update_game_status(game, GameStatus.hiding)
 
     background_tasks.add_task(
         push.send_to_tokens,
@@ -165,7 +156,6 @@ def start_game(
 @router.post('/{game_id}/end', response_model=GameResponse)
 def end_game(
     game: Game = Depends(get_game),
-    session: Session = Depends(get_session),
 ) -> GameResponse:
     """Transition the game to finished."""
     if game.status not in _ACTIVE_STATES:
@@ -174,15 +164,14 @@ def end_game(
             detail=f'Cannot end game in {game.status} state.',
         )
 
-    game = update_game_status(session, game, GameStatus.finished, clear_join_code=True)
+    game = update_game_status(game, GameStatus.finished, clear_join_code=True)
     return GameResponse.from_model(game)
 
 
 @router.get('/{game_id}/map', response_model=EffectiveMapResponse)
 def get_effective_map(
     game: Game = Depends(get_game),
-    session: Session = Depends(get_session),
 ) -> EffectiveMapResponse:
     """Effective map with transit data and exclusions applied."""
-    data = get_effective_map_data(session, game)
+    data = get_effective_map_data(game)
     return EffectiveMapResponse.from_effective_map_data(data)

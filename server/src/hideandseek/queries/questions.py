@@ -6,12 +6,13 @@ import uuid
 
 from sqlmodel import Session, select
 
-from hideandseek.db import persisted
+from hideandseek.db import db_read, db_write
 from hideandseek.models.game import Game
 from hideandseek.models.question import Question
 from hideandseek.models.types import QuestionStatus, QuestionType
 
 
+@db_read
 def has_unanswered_question(session: Session, game_id: uuid.UUID) -> bool:
     """Return True if the game has any question not yet in 'answered' status."""
     return (
@@ -25,12 +26,13 @@ def has_unanswered_question(session: Session, game_id: uuid.UUID) -> bool:
     )
 
 
+@db_read
 def get_question_count(session: Session, game_id: uuid.UUID) -> int:
     """Return the number of questions asked in a game (for sequencing)."""
     return len(session.exec(select(Question.id).where(Question.game_id == game_id)).all())
 
 
-@persisted
+@db_write
 def create_question(
     session: Session,
     *,
@@ -56,11 +58,13 @@ def create_question(
     return q
 
 
+@db_read
 def get_question(session: Session, question_id: uuid.UUID) -> Question | None:
     """Return a single question by ID."""
     return session.get(Question, question_id)
 
 
+@db_read
 def list_questions(session: Session, game_id: uuid.UUID) -> list[Question]:
     """Return all questions for a game, chronologically."""
     return list(
@@ -70,7 +74,7 @@ def list_questions(session: Session, game_id: uuid.UUID) -> list[Question]:
     )
 
 
-@persisted
+@db_write
 def update_question(session: Session, question: Question, updates: dict) -> Question:
     """Apply updates to a question."""
     for key, value in updates.items():
@@ -79,7 +83,7 @@ def update_question(session: Session, question: Question, updates: dict) -> Ques
     return question
 
 
-@persisted
+@db_write
 def update_game_inventory(session: Session, game: Game, inventory: dict) -> Game:
     """Update a game's inventory."""
     game.inventory = inventory

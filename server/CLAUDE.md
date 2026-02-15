@@ -26,7 +26,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 ## Project Structure
 
 - `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (creates DB, initializes PushService)
-- `src/hideandseek/db.py` — SQLite engine, `create_db_and_tables()`, `get_session()` (commit-at-boundary), `@persisted` decorator
+- `src/hideandseek/db.py` — SQLite engine, `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `current_session()`, `@db_read`/`@db_write` decorators
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/models/` — SQLModel table models and types
@@ -63,12 +63,14 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 ## Architecture Patterns
 
 - **Schema vs Model separation**: SQLModel table models (`models/`) own the DB schema. Pydantic schemas (`schemas/`) control the API surface. Response schemas have `from_model()` static methods for transformation.
-- **Dependency injection**: `dependencies.py` provides reusable FastAPI `Depends()` — `get_client_id` (from `X-Client-Id` header), `get_game` (404 if missing), `get_player_in_game` (composes `get_game` + `get_client_id`, 403 if not found), `get_push_service` (from `app.state`).
-- **Transactional boundaries**: `get_session()` commits once after the handler succeeds. If the handler raises, commit is never called and `Session.__exit__` rolls back. All writes in a request succeed or fail together.
-- **`@persisted` decorator**: Applied to all write functions (both those returning objects and void ones like `delete_device_token`). Flushes the session after the function (making writes visible to subsequent queries in the same request) but never commits. Typed with PEP 695 generics (`[T, **P]`) via `Concatenate[Session, P]`.
-- **Query layer**: `queries/` package (one module per domain) handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLModel objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek.queries.games import create_game`), not from the package root.
+- **Dependency injection**: `dependencies.py` provides reusable FastAPI `Depends()` — `get_client_id` (from `X-Client-Id` header), `get_game` (uses `current_session()`, 404 if missing), `get_player_in_game` (composes `get_game` + `get_client_id`, 403 if not found), `get_push_service` (from `app.state`). Dependencies use `current_session()` instead of `Depends(get_session)` — the router-level dependency ensures the ContextVar is already set.
+- **Transactional boundaries**: `get_session()` is an async generator that commits once after the handler succeeds and sets a `ContextVar` so query-layer decorators can access the session. Must be async so the ContextVar is set in the event-loop context (sync handler threads copy that context). If the handler raises, commit is never called and `Session.__exit__` rolls back. All writes in a request succeed or fail together.
+- **ContextVar session injection**: A `ContextVar[Session]` (`_session_var`) is set by `get_session()` and read by `current_session()`. Query functions declare `session: Session` as their first parameter for explicitness and testability, but callers never pass it — decorators inject it automatically.
+- **`@db_read` / `@db_write` decorators**: Applied to all query functions. Both inject session from the ContextVar and strip `Session` from the external signature. `@db_write` additionally flushes the session after the function (making writes visible to subsequent queries in the same request). Typed with PEP 695 generics (`[T, **P]`) via `Concatenate[Session, P]`.
+- **Router-level session dependency**: Each router uses `dependencies=[Depends(get_session)]` to ensure the ContextVar is always set for every route. Handlers never declare `session` in their signatures.
+- **Query layer**: `queries/` package (one module per domain) handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLModel objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek.queries.games import create_game`), not from the package root. Callers invoke query functions without passing session (e.g., `create_game(map_id=..., ...)`).
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). Routers resolve device tokens while the session is alive, then dispatch `push.send_to_tokens()` via `BackgroundTasks` (fire-and-forget). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
-- **Test factories**: `conftest.py` has factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) that create test data with sensible defaults and accept `**overrides`.
+- **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) create test data with sensible defaults and accept `**overrides`.
 - **Geo math deferred**: Question answer computation and exclusion zone geometry are stubbed (`answer: "pending"`, `exclusion: null`). A future `geo.py` module will implement haversine distance, radar circles, and thermometer half-planes.
 
 ## Game States
@@ -82,7 +84,7 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 ## Data Model Conventions
 
 - SQLModel for all table models (wraps SQLAlchemy + Pydantic).
-- **Do NOT use `from __future__ import annotations` in model files** — it breaks SQLModel relationship resolution. Use quoted string forward references instead (e.g., `game_map: 'GameMap' = Relationship(...)`).
+- **Do NOT use `from __future__ import annotations` in model files or `db.py`** — it breaks SQLModel relationship resolution and PEP 695 generics. Use quoted string forward references instead (e.g., `game_map: 'GameMap' = Relationship(...)`).
 - GeoJSON geometry stored as JSON columns (`sa_type=sa.JSON`). Use `GeoPoint`, `GeoLineString`, `GeoPolygon` Pydantic types for API validation.
 - Value objects (TimingRules, QuestionInventory, etc.) stored as JSON columns on their parent table.
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int).
@@ -109,7 +111,7 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 Enforced by ruff (lint + format) and pyright (type checking). The pre-commit hook runs all checks automatically.
 
 - Single quotes for strings.
-- `from __future__ import annotations` at the top of every module **except** SQLModel table model files and `db.py` (which uses PEP 695 generics).
+- `from __future__ import annotations` at the top of every module **except** SQLModel table model files and `db.py` (which use PEP 695 generics).
 - All imports at the top of the file, never inline.
 - Type annotations required on all function arguments and return types (except `-> None`).
 - Max line length: 100 characters.

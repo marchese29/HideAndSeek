@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import pytest
@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 import hideandseek.models  # noqa: F401 — registers all tables on metadata
-from hideandseek.db import get_session
+from hideandseek.db import _session_var, get_session
 from hideandseek.main import app
 from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
@@ -27,16 +27,24 @@ def session() -> Generator[Session, None, None]:
     )
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
-        yield session
+        token = _session_var.set(session)
+        try:
+            yield session
+        finally:
+            _session_var.reset(token)
 
 
 @pytest.fixture
 def client(session: Session) -> Generator[TestClient, None, None]:
     from hideandseek.push import PushService
 
-    def _override_get_session() -> Generator[Session, None, None]:
-        yield session
-        session.commit()
+    async def _override_get_session() -> AsyncGenerator[Session, None]:
+        token = _session_var.set(session)
+        try:
+            yield session
+            session.commit()
+        finally:
+            _session_var.reset(token)
 
     app.dependency_overrides[get_session] = _override_get_session
     app.state.push_service = PushService(config=None)

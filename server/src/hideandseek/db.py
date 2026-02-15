@@ -1,4 +1,5 @@
-from collections.abc import Callable, Generator
+from collections.abc import AsyncGenerator, Callable
+from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
 from typing import Concatenate
@@ -22,6 +23,13 @@ DB_URL = f'sqlite:///{DB_DIR / "hideandseek.db"}'
 
 engine = create_engine(DB_URL, connect_args={'check_same_thread': False})
 
+_session_var: ContextVar[Session] = ContextVar('_session_var')
+
+
+def current_session() -> Session:
+    """Return the active request-scoped session."""
+    return _session_var.get()
+
 
 def create_db_and_tables() -> None:
     import hideandseek.models  # noqa: F401 — registers all tables on metadata
@@ -30,21 +38,40 @@ def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
 
 
-def get_session() -> Generator[Session, None, None]:
+async def get_session() -> AsyncGenerator[Session, None]:
     """Yield a session that commits on successful completion.
+
+    Must be async so the ContextVar is set in the event-loop context — sync
+    handler threads copy that context and see the session automatically.
 
     If the handler raises, the yield never resumes, commit() is never called,
     and Session.__exit__ rolls back. Every request is atomic by default.
     """
     with Session(engine) as session:
-        yield session
-        session.commit()
+        token = _session_var.set(session)
+        try:
+            yield session
+            session.commit()
+        finally:
+            _session_var.reset(token)
 
 
-def persisted[T, **P](
+def db_read[T, **P](
     fn: Callable[Concatenate[Session, P], T],
-) -> Callable[Concatenate[Session, P], T]:
-    """Flush the session after the function runs.
+) -> Callable[P, T]:
+    """Inject the current session as the first argument."""
+
+    @wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        return fn(current_session(), *args, **kwargs)
+
+    return wrapper
+
+
+def db_write[T, **P](
+    fn: Callable[Concatenate[Session, P], T],
+) -> Callable[P, T]:
+    """Inject session and flush after the function runs.
 
     Decorated functions should session.add() their objects and return them.
     The decorator flushes to materialize the writes within the transaction
@@ -53,7 +80,8 @@ def persisted[T, **P](
     """
 
     @wraps(fn)
-    def wrapper(session: Session, /, *args: P.args, **kwargs: P.kwargs) -> T:
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        session = current_session()
         result = fn(session, *args, **kwargs)
         session.flush()
         return result

@@ -22,7 +22,7 @@ from tests.conftest import create_game, create_player
 
 def test_upsert_creates_token(session: Session):
     client_id = uuid.uuid4()
-    dt = upsert_device_token(session, client_id=client_id, token='aabbccdd', environment='sandbox')
+    dt = upsert_device_token(client_id=client_id, token='aabbccdd', environment='sandbox')
     assert dt.client_id == client_id
     assert dt.token == 'aabbccdd'
     assert dt.environment == 'sandbox'
@@ -31,10 +31,10 @@ def test_upsert_creates_token(session: Session):
 
 def test_upsert_updates_existing_token(session: Session):
     client_id = uuid.uuid4()
-    dt1 = upsert_device_token(session, client_id=client_id, token='old_token')
+    dt1 = upsert_device_token(client_id=client_id, token='old_token')
     original_time = dt1.updated_at
 
-    dt2 = upsert_device_token(session, client_id=client_id, token='new_token')
+    dt2 = upsert_device_token(client_id=client_id, token='new_token')
     assert dt2.client_id == client_id
     assert dt2.token == 'new_token'
     assert dt2.updated_at >= original_time
@@ -53,10 +53,10 @@ def test_get_device_tokens_for_game(session: Session):
     hider = create_player(session, game.id, role=PlayerRole.hider)
     seeker = create_player(session, game.id, role=PlayerRole.seeker)
 
-    upsert_device_token(session, client_id=hider.client_id, token='hider_token')
-    upsert_device_token(session, client_id=seeker.client_id, token='seeker_token')
+    upsert_device_token(client_id=hider.client_id, token='hider_token')
+    upsert_device_token(client_id=seeker.client_id, token='seeker_token')
 
-    all_tokens = get_device_tokens_for_game(session, game.id)
+    all_tokens = get_device_tokens_for_game(game.id)
     assert len(all_tokens) == 2
     token_values = {dt.token for dt in all_tokens}
     assert token_values == {'hider_token', 'seeker_token'}
@@ -67,14 +67,14 @@ def test_get_device_tokens_with_role_filter(session: Session):
     hider = create_player(session, game.id, role=PlayerRole.hider)
     seeker = create_player(session, game.id, role=PlayerRole.seeker)
 
-    upsert_device_token(session, client_id=hider.client_id, token='hider_token')
-    upsert_device_token(session, client_id=seeker.client_id, token='seeker_token')
+    upsert_device_token(client_id=hider.client_id, token='hider_token')
+    upsert_device_token(client_id=seeker.client_id, token='seeker_token')
 
-    hider_tokens = get_device_tokens_for_game(session, game.id, role_filter=PlayerRole.hider)
+    hider_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.hider)
     assert len(hider_tokens) == 1
     assert hider_tokens[0].token == 'hider_token'
 
-    seeker_tokens = get_device_tokens_for_game(session, game.id, role_filter=PlayerRole.seeker)
+    seeker_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.seeker)
     assert len(seeker_tokens) == 1
     assert seeker_tokens[0].token == 'seeker_token'
 
@@ -85,9 +85,9 @@ def test_get_device_tokens_excludes_missing(session: Session):
     hider = create_player(session, game.id, role=PlayerRole.hider)
     create_player(session, game.id, role=PlayerRole.seeker)  # no token
 
-    upsert_device_token(session, client_id=hider.client_id, token='hider_token')
+    upsert_device_token(client_id=hider.client_id, token='hider_token')
 
-    tokens = get_device_tokens_for_game(session, game.id)
+    tokens = get_device_tokens_for_game(game.id)
     assert len(tokens) == 1
     assert tokens[0].token == 'hider_token'
 
@@ -97,14 +97,14 @@ def test_get_device_tokens_excludes_missing(session: Session):
 
 def test_delete_device_token(session: Session):
     client_id = uuid.uuid4()
-    upsert_device_token(session, client_id=client_id, token='to_delete')
-    delete_device_token(session, client_id)
+    upsert_device_token(client_id=client_id, token='to_delete')
+    delete_device_token(client_id)
     assert session.get(DeviceToken, client_id) is None
 
 
 def test_delete_nonexistent_token(session: Session):
     """Deleting a token that doesn't exist is a no-op."""
-    delete_device_token(session, uuid.uuid4())  # should not raise
+    delete_device_token(uuid.uuid4())  # should not raise
 
 
 # ── PushService ──────────────────────────────────────────────────────────────

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session
 
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_game, get_player_in_game
@@ -21,7 +20,9 @@ from hideandseek.schemas.response import (
     VisiblePlayer,
 )
 
-router = APIRouter(prefix='/games/{game_id}', tags=['location'])
+router = APIRouter(
+    prefix='/games/{game_id}', tags=['location'], dependencies=[Depends(get_session)]
+)
 
 
 @router.post('/location', response_model=LocationReportResponse)
@@ -29,18 +30,16 @@ def report_location(
     body: LocationReportRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-    session: Session = Depends(get_session),
 ) -> LocationReportResponse:
     """Report the caller's location and receive visible player positions."""
     create_location_update(
-        session,
         player_id=player.id,
         game_id=game.id,
         coordinates=body.coordinates.model_dump(),
         timestamp=body.timestamp,
     )
 
-    visible = get_visible_players(session, game, player)
+    visible = get_visible_players(game, player)
     return LocationReportResponse(
         players=[
             VisiblePlayer(
@@ -59,7 +58,6 @@ def report_location(
 @router.get('/location-history', response_model=list[LocationHistoryEntry])
 def location_history(
     game: Game = Depends(get_game),
-    session: Session = Depends(get_session),
 ) -> list[LocationHistoryEntry]:
     """Full location log for post-game replay. Only available when finished."""
     if game.status != GameStatus.finished:
@@ -67,5 +65,5 @@ def location_history(
             status_code=409,
             detail='Location history is only available after the game ends.',
         )
-    updates = get_location_history(session, game.id)
+    updates = get_location_history(game.id)
     return [LocationHistoryEntry.from_model(lu) for lu in updates]

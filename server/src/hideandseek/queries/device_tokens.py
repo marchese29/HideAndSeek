@@ -7,13 +7,13 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
-from hideandseek.db import persisted
+from hideandseek.db import db_read, db_write
 from hideandseek.models.device_token import DeviceToken
 from hideandseek.models.game import Player
 from hideandseek.models.types import PlayerRole
 
 
-@persisted
+@db_write
 def upsert_device_token(
     session: Session,
     *,
@@ -39,6 +39,7 @@ def upsert_device_token(
     return dt
 
 
+@db_read
 def get_device_tokens_for_game(
     session: Session,
     game_id: uuid.UUID,
@@ -56,7 +57,7 @@ def get_device_tokens_for_game(
     return list(session.exec(stmt).all())
 
 
-@persisted
+@db_write
 def delete_device_token(session: Session, client_id: uuid.UUID) -> None:
     """Delete a device token by client_id (for stale token cleanup)."""
     dt = session.get(DeviceToken, client_id)

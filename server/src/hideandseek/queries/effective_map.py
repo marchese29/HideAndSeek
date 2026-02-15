@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, col, select
 
+from hideandseek.db import db_read
 from hideandseek.models.game import Game
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.transit import Route, RouteStop, Stop
@@ -29,6 +30,7 @@ class EffectiveMapData:
     routes: list[RouteWithStops]
 
 
+@db_read
 def get_effective_map_data(session: Session, game: Game) -> EffectiveMapData:
     """Load map + transit data, filtering by exclusions."""
     game_map = session.get(GameMap, game.map_id)

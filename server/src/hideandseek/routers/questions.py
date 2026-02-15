@@ -6,7 +6,6 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlmodel import Session
 
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_game, get_player_in_game, get_push_service
@@ -33,7 +32,9 @@ from hideandseek.queries.questions import (
 from hideandseek.schemas.request import AskQuestionRequest
 from hideandseek.schemas.response import QuestionPreview, QuestionResponse
 
-router = APIRouter(prefix='/games/{game_id}', tags=['questions'])
+router = APIRouter(
+    prefix='/games/{game_id}', tags=['questions'], dependencies=[Depends(get_session)]
+)
 
 
 @router.post('/questions', response_model=QuestionResponse, status_code=201)
@@ -42,7 +43,6 @@ def ask_question(
     background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-    session: Session = Depends(get_session),
     push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Ask a radar or thermometer question, spending an inventory slot."""
@@ -50,7 +50,7 @@ def ask_question(
         raise HTTPException(status_code=409, detail='Questions can only be asked during seeking.')
     if player.role != PlayerRole.seeker:
         raise HTTPException(status_code=403, detail='Only seekers can ask questions.')
-    if has_unanswered_question(session, game.id):
+    if has_unanswered_question(game.id):
         raise HTTPException(status_code=409, detail='There is already an unanswered question.')
 
     # Validate and consume inventory slot
@@ -81,18 +81,17 @@ def ask_question(
         status = QuestionStatus.in_progress
 
     # Compute seeker location (average of all seekers)
-    seeker_location = get_avg_seeker_location(session, game)
+    seeker_location = get_avg_seeker_location(game)
     if not seeker_location:
         raise HTTPException(status_code=409, detail='No seeker locations available.')
 
     # Remove the spent slot from inventory
     slots.pop(body.slot_index)
     inventory[slot_key] = slots
-    update_game_inventory(session, game, inventory)
+    update_game_inventory(game, inventory)
 
-    sequence = get_question_count(session, game.id) + 1
+    sequence = get_question_count(game.id) + 1
     question = create_question(
-        session,
         game_id=game.id,
         sequence=sequence,
         question_type=body.question_type,
@@ -103,7 +102,7 @@ def ask_question(
     )
 
     # Push to hider(s)
-    hider_tokens = get_device_tokens_for_game(session, game.id, role_filter=PlayerRole.hider)
+    hider_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.hider)
     distance_label = f'{distance_m / 1000:g} km' if distance_m >= 1000 else f'{distance_m} m'
     if body.question_type == QuestionType.radar:
         alert = f'A {distance_label} radar question has been asked. Your answer timer is running.'
@@ -133,11 +132,10 @@ def lock_in_question(
     background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-    session: Session = Depends(get_session),
     push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Lock in the seeker's end position for a thermometer question."""
-    question = get_question(session, question_id)
+    question = get_question(question_id)
     if not question or question.game_id != game.id:
         raise HTTPException(status_code=404, detail='Question not found.')
     if question.status != QuestionStatus.in_progress:
@@ -146,13 +144,12 @@ def lock_in_question(
         raise HTTPException(status_code=403, detail='Only the asking seeker can lock in.')
 
     # Get seeker's current location as the end point
-    latest = get_latest_location_for_player(session, player.id, game.id)
+    latest = get_latest_location_for_player(player.id, game.id)
     if not latest:
         raise HTTPException(status_code=409, detail='No location reported yet.')
 
     # Distance validation deferred (geo math TBD)
     question = update_question(
-        session,
         question,
         {
             'seeker_location_end': latest.coordinates,
@@ -161,7 +158,7 @@ def lock_in_question(
     )
 
     # Push to hider(s)
-    hider_tokens = get_device_tokens_for_game(session, game.id, role_filter=PlayerRole.hider)
+    hider_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.hider)
     background_tasks.add_task(
         push.send_to_tokens,
         hider_tokens,
@@ -181,10 +178,9 @@ def lock_in_question(
 def preview_question(
     question_id: uuid.UUID,
     game: Game = Depends(get_game),
-    session: Session = Depends(get_session),
 ) -> QuestionPreview:
     """Live preview of what the answer would be. Geo math is stubbed."""
-    question = get_question(session, question_id)
+    question = get_question(question_id)
     if not question or question.game_id != game.id:
         raise HTTPException(status_code=404, detail='Question not found.')
     if question.status != QuestionStatus.answerable:
@@ -203,26 +199,24 @@ def answer_question(
     background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-    session: Session = Depends(get_session),
     push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Hider answers a question — snapshot location and compute answer."""
     if player.role != PlayerRole.hider:
         raise HTTPException(status_code=403, detail='Only the hider can answer questions.')
 
-    question = get_question(session, question_id)
+    question = get_question(question_id)
     if not question or question.game_id != game.id:
         raise HTTPException(status_code=404, detail='Question not found.')
     if question.status != QuestionStatus.answerable:
         raise HTTPException(status_code=409, detail='Question is not answerable.')
 
     # Snapshot hider's current location
-    latest = get_latest_location_for_player(session, player.id, game.id)
+    latest = get_latest_location_for_player(player.id, game.id)
     hider_location = latest.coordinates if latest else None
 
     # Geo math deferred — store placeholder answer + null exclusion
     question = update_question(
-        session,
         question,
         {
             'hider_location': hider_location,
@@ -234,7 +228,7 @@ def answer_question(
     )
 
     # Push to all seekers
-    seeker_tokens = get_device_tokens_for_game(session, game.id, role_filter=PlayerRole.seeker)
+    seeker_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.seeker)
     alert = f'Question answered: {question.answer}! A new exclusion zone is on the map.'
     background_tasks.add_task(
         push.send_to_tokens,
@@ -254,9 +248,8 @@ def answer_question(
 def list_game_questions(
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-    session: Session = Depends(get_session),
 ) -> list[QuestionResponse]:
     """Chronological list of all questions. Hider location hidden from seekers."""
-    questions = list_questions(session, game.id)
+    questions = list_questions(game.id)
     hide_hider = player.role == PlayerRole.seeker
     return [QuestionResponse.from_model(q, hide_hider_location=hide_hider) for q in questions]

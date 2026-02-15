@@ -8,11 +8,12 @@ import uuid
 
 from sqlmodel import Session, select
 
-from hideandseek.db import persisted
+from hideandseek.db import db_read, db_write
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus
 
 
+@db_read
 def generate_join_code(session: Session, *, length: int = 4, max_attempts: int = 10) -> str:
     """Generate a unique random alphanumeric join code."""
     for _ in range(max_attempts):
@@ -24,7 +25,7 @@ def generate_join_code(session: Session, *, length: int = 4, max_attempts: int =
     raise RuntimeError(msg)
 
 
-@persisted
+@db_write
 def create_game(
     session: Session,
     *,
@@ -37,7 +38,7 @@ def create_game(
     game = Game(
         map_id=map_id,
         host_client_id=host_client_id,
-        join_code=generate_join_code(session),
+        join_code=generate_join_code(),
         timing=timing,
         inventory=inventory,
     )
@@ -45,12 +46,13 @@ def create_game(
     return game
 
 
+@db_read
 def find_game_by_join_code(session: Session, join_code: str) -> Game | None:
     """Find a game by its join code."""
     return session.exec(select(Game).where(Game.join_code == join_code.upper())).first()
 
 
-@persisted
+@db_write
 def add_player(
     session: Session,
     game: Game,
@@ -65,12 +67,13 @@ def add_player(
     return player
 
 
+@db_read
 def get_player(session: Session, player_id: uuid.UUID) -> Player | None:
     """Return a single player by ID."""
     return session.get(Player, player_id)
 
 
-@persisted
+@db_write
 def update_player(session: Session, player: Player, updates: dict) -> Player:
     """Apply partial updates to a player."""
     for key, value in updates.items():
@@ -79,7 +82,7 @@ def update_player(session: Session, player: Player, updates: dict) -> Player:
     return player
 
 
-@persisted
+@db_write
 def update_game_status(
     session: Session, game: Game, status: GameStatus, *, clear_join_code: bool = False
 ) -> Game:
