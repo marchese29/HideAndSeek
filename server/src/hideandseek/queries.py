@@ -6,17 +6,75 @@ import random
 import string
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import func
 from sqlmodel import Session, col, select
 
+from hideandseek.models.device_token import DeviceToken
 from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.location import LocationUpdate
 from hideandseek.models.question import Question
 from hideandseek.models.transit import Route, RouteStop, Stop, TransitDataset
 from hideandseek.models.types import GameStatus, PlayerRole, QuestionStatus, QuestionType
+
+# ── Device tokens ─────────────────────────────────────────────────────────────
+
+
+def upsert_device_token(
+    session: Session,
+    *,
+    client_id: uuid.UUID,
+    token: str,
+    environment: str = 'production',
+) -> DeviceToken:
+    """Insert or update a device token for a client_id."""
+    existing = session.get(DeviceToken, client_id)
+    if existing:
+        existing.token = token
+        existing.environment = environment
+        existing.updated_at = datetime.now(UTC)
+        session.add(existing)
+        session.commit()
+        session.refresh(existing)
+        return existing
+
+    dt = DeviceToken(
+        client_id=client_id,
+        token=token,
+        environment=environment,
+    )
+    session.add(dt)
+    session.commit()
+    session.refresh(dt)
+    return dt
+
+
+def get_device_tokens_for_game(
+    session: Session,
+    game_id: uuid.UUID,
+    *,
+    role_filter: PlayerRole | None = None,
+) -> list[DeviceToken]:
+    """Look up device tokens for players in a game, optionally filtered by role."""
+    stmt = (
+        select(DeviceToken)
+        .join(Player, DeviceToken.client_id == Player.client_id)  # type: ignore[arg-type]
+        .where(Player.game_id == game_id)
+    )
+    if role_filter is not None:
+        stmt = stmt.where(Player.role == role_filter)
+    return list(session.exec(stmt).all())
+
+
+def delete_device_token(session: Session, client_id: uuid.UUID) -> None:
+    """Delete a device token by client_id (for stale token cleanup)."""
+    dt = session.get(DeviceToken, client_id)
+    if dt:
+        session.delete(dt)
+        session.commit()
+
 
 # ── Maps ──────────────────────────────────────────────────────────────────────
 

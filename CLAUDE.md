@@ -43,12 +43,21 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Verification
+
+When server code changes, verify with **both** automated and manual checks before committing:
+
+1. **Automated**: `uv run pytest`, `uv run ruff check .`, `uv run pyright`
+2. **Manual**: Start the server (`uv run uvicorn hideandseek.main:app --reload`), seed test data if needed, and exercise new/changed endpoints with `curl`. Verify request/response shapes, error cases, and side effects.
+
+Manual testing catches issues that unit tests miss: serialization quirks, middleware interactions, dependency wiring, and real request flow.
+
 ## Landing the Plane (Session Completion)
 
 When ending a work session, complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
 1. **File issues for remaining work** — create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) — tests, linters, builds
+2. **Run quality gates** (if code changed) — automated tests + manual endpoint verification (see Verification above)
 3. **Update issue status** — close finished work, update in-progress items
 4. **Push to remote**:
    ```bash

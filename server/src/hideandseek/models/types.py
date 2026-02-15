@@ -48,6 +48,14 @@ class QuestionStatus(StrEnum):
     answered = 'answered'
 
 
+class PushEventType(StrEnum):
+    game_started = 'game_started'
+    phase_changed = 'phase_changed'
+    question_asked = 'question_asked'
+    question_answerable = 'question_answerable'
+    question_answered = 'question_answered'
+
+
 # ── GeoJSON value types ───────────────────────────────────────────────────────
 
 

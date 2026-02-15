@@ -1,0 +1,139 @@
+"""Push notification service wrapping aioapns."""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from typing import TYPE_CHECKING, Any
+
+from aioapns import APNs, NotificationRequest
+
+from hideandseek.config import PushConfig
+from hideandseek.models.types import PushEventType
+
+if TYPE_CHECKING:
+    from hideandseek.models.device_token import DeviceToken
+
+logger = logging.getLogger(__name__)
+
+
+class PushService:
+    """Sends APNS push notifications. No-ops when config is None (dev/test)."""
+
+    def __init__(self, config: PushConfig | None) -> None:
+        self._config = config
+        self._client: APNs | None = None
+        if config:
+            self._client = APNs(
+                key=config.key_path,
+                key_id=config.key_id,
+                team_id=config.team_id,
+                topic=config.topic,
+                use_sandbox=config.use_sandbox,
+            )
+            logger.info('PushService initialized with APNS credentials.')
+        else:
+            logger.info('PushService running in no-op mode (no APNS credentials).')
+
+    async def send_to_tokens(
+        self,
+        tokens: list[DeviceToken],
+        game_id: uuid.UUID,
+        event_type: PushEventType,
+        *,
+        alert: str | None = None,
+        silent: bool = False,
+        question_id: uuid.UUID | None = None,
+        question_type: str | None = None,
+        question_status: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        answer: str | None = None,
+    ) -> None:
+        """Send push notifications to resolved device tokens.
+
+        Args:
+            tokens: Pre-resolved DeviceToken objects.
+            game_id: The game this notification is about.
+            event_type: Event identifier (e.g. "game_started", "question_asked").
+            alert: Human-readable alert body. Omitted for silent pushes.
+            silent: If True, sends content-available only (no alert/sound).
+            question_id: Optional question UUID for question events.
+            question_type: Optional question type (radar/thermometer).
+            question_status: Optional question status.
+            parameters: Optional question parameters dict.
+            answer: Optional question answer value.
+        """
+        if not tokens:
+            return
+
+        # Build the data payload
+        data: dict[str, Any] = {
+            'event_type': event_type,
+            'game_id': str(game_id),
+        }
+        if question_id is not None:
+            data['question_id'] = str(question_id)
+        if question_type is not None:
+            data['question_type'] = question_type
+        if question_status is not None:
+            data['question_status'] = question_status
+        if parameters is not None:
+            data['parameters'] = parameters
+        if answer is not None:
+            data['answer'] = answer
+
+        # Build the APS payload
+        if silent:
+            message: dict[str, Any] = {
+                'aps': {'content-available': 1},
+                'data': data,
+            }
+        else:
+            aps: dict[str, Any] = {
+                'content-available': 1,
+                'interruption-level': 'time-sensitive',
+            }
+            if alert:
+                aps['alert'] = {'title': 'Hide & Seek', 'body': alert}
+                aps['sound'] = 'default'
+            message = {'aps': aps, 'data': data}
+
+        for dt in tokens:
+            if not self._client:
+                logger.info(
+                    'Push no-op: event=%s game=%s token=%s...%s',
+                    event_type,
+                    game_id,
+                    dt.token[:8],
+                    dt.token[-4:],
+                )
+                continue
+
+            request = NotificationRequest(
+                device_token=dt.token,
+                message=message,
+            )
+            try:
+                response = await self._client.send_notification(request)
+                if not response.is_successful:
+                    logger.warning(
+                        'APNS error for token %s...%s: %s %s',
+                        dt.token[:8],
+                        dt.token[-4:],
+                        response.status,
+                        response.description,
+                    )
+                    # Stale token cleanup is handled by the caller if needed —
+                    # we log here so issues are visible but don't delete tokens
+                    # in a fire-and-forget context without a session.
+            except Exception:
+                logger.exception(
+                    'Failed to send push to token %s...%s',
+                    dt.token[:8],
+                    dt.token[-4:],
+                )
+
+    async def close(self) -> None:
+        """Clean up the APNS connection."""
+        # aioapns doesn't expose an explicit close, but if it did we'd call it here.
+        self._client = None

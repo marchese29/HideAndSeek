@@ -5,16 +5,24 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlmodel import Session
 
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_game, get_player_in_game
+from hideandseek.dependencies import get_game, get_player_in_game, get_push_service
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import GameStatus, PlayerRole, QuestionStatus, QuestionType
+from hideandseek.models.types import (
+    GameStatus,
+    PlayerRole,
+    PushEventType,
+    QuestionStatus,
+    QuestionType,
+)
+from hideandseek.push import PushService
 from hideandseek.queries import (
     create_question,
     get_avg_seeker_location,
+    get_device_tokens_for_game,
     get_latest_location_for_player,
     get_question,
     get_question_count,
@@ -32,9 +40,11 @@ router = APIRouter(prefix='/games/{game_id}', tags=['questions'])
 @router.post('/questions', response_model=QuestionResponse, status_code=201)
 def ask_question(
     body: AskQuestionRequest,
+    background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
     session: Session = Depends(get_session),
+    push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Ask a radar or thermometer question, spending an inventory slot."""
     if game.status != GameStatus.seeking:
@@ -92,6 +102,26 @@ def ask_question(
         asked_by=player.id,
         seeker_location_start=seeker_location,
     )
+
+    # Push to hider(s)
+    hider_tokens = get_device_tokens_for_game(session, game.id, role_filter=PlayerRole.hider)
+    distance_label = f'{distance_m / 1000:g} km' if distance_m >= 1000 else f'{distance_m} m'
+    if body.question_type == QuestionType.radar:
+        alert = f'A {distance_label} radar question has been asked. Your answer timer is running.'
+    else:
+        alert = f'A {distance_label} thermometer question has started. The seeker is traveling.'
+    background_tasks.add_task(
+        push.send_to_tokens,
+        hider_tokens,
+        game.id,
+        PushEventType.question_asked,
+        alert=alert,
+        question_id=question.id,
+        question_type=body.question_type,
+        question_status=status,
+        parameters=parameters,
+    )
+
     return QuestionResponse.from_model(question)
 
 
@@ -101,9 +131,11 @@ def ask_question(
 )
 def lock_in_question(
     question_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
     session: Session = Depends(get_session),
+    push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Lock in the seeker's end position for a thermometer question."""
     question = get_question(session, question_id)
@@ -128,6 +160,18 @@ def lock_in_question(
             'status': QuestionStatus.answerable,
         },
     )
+
+    # Push to hider(s)
+    hider_tokens = get_device_tokens_for_game(session, game.id, role_filter=PlayerRole.hider)
+    background_tasks.add_task(
+        push.send_to_tokens,
+        hider_tokens,
+        game.id,
+        PushEventType.question_answerable,
+        alert='A thermometer question is ready for your answer.',
+        question_id=question.id,
+    )
+
     return QuestionResponse.from_model(question)
 
 
@@ -157,9 +201,11 @@ def preview_question(
 )
 def answer_question(
     question_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
     session: Session = Depends(get_session),
+    push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Hider answers a question — snapshot location and compute answer."""
     if player.role != PlayerRole.hider:
@@ -187,6 +233,21 @@ def answer_question(
             'status': QuestionStatus.answered,
         },
     )
+
+    # Push to all seekers
+    seeker_tokens = get_device_tokens_for_game(session, game.id, role_filter=PlayerRole.seeker)
+    alert = f'Question answered: {question.answer}! A new exclusion zone is on the map.'
+    background_tasks.add_task(
+        push.send_to_tokens,
+        seeker_tokens,
+        game.id,
+        PushEventType.question_answered,
+        alert=alert,
+        question_id=question.id,
+        question_type=question.question_type,
+        answer=question.answer,
+    )
+
     return QuestionResponse.from_model(question)
 
 

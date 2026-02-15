@@ -5,14 +5,20 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from hideandseek.config import load_push_config
 from hideandseek.db import create_db_and_tables
+from hideandseek.push import PushService
 from hideandseek.routers import games, location, maps, questions
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     create_db_and_tables()
+    push_config = load_push_config()
+    push_service = PushService(push_config)
+    app.state.push_service = push_service
     yield
+    await push_service.close()
 
 
 app = FastAPI(

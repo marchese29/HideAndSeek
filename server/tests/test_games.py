@@ -48,7 +48,12 @@ def test_join_game(client: TestClient, session: Session):
     client_id = uuid.uuid4()
     resp = client.post(
         '/games/join',
-        json={'join_code': 'ABCD', 'name': 'Alice', 'color': '#FF0000'},
+        json={
+            'join_code': 'ABCD',
+            'name': 'Alice',
+            'color': '#FF0000',
+            'device_token': 'abc123def456',
+        },
         headers=_headers(client_id),
     )
     assert resp.status_code == 201
@@ -62,7 +67,12 @@ def test_join_game(client: TestClient, session: Session):
 def test_join_game_invalid_code(client: TestClient):
     resp = client.post(
         '/games/join',
-        json={'join_code': 'ZZZZ', 'name': 'Bob', 'color': '#0000FF'},
+        json={
+            'join_code': 'ZZZZ',
+            'name': 'Bob',
+            'color': '#0000FF',
+            'device_token': 'abc123def456',
+        },
         headers=_headers(),
     )
     assert resp.status_code == 404
@@ -72,7 +82,12 @@ def test_join_game_not_in_lobby(client: TestClient, session: Session):
     create_game(session, join_code='WXYZ', status=GameStatus.hiding)
     resp = client.post(
         '/games/join',
-        json={'join_code': 'WXYZ', 'name': 'Charlie', 'color': '#00FF00'},
+        json={
+            'join_code': 'WXYZ',
+            'name': 'Charlie',
+            'color': '#00FF00',
+            'device_token': 'abc123def456',
+        },
         headers=_headers(),
     )
     assert resp.status_code == 409

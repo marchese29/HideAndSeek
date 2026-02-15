@@ -32,10 +32,13 @@ def session() -> Generator[Session, None, None]:
 
 @pytest.fixture
 def client(session: Session) -> Generator[TestClient, None, None]:
+    from hideandseek.push import PushService
+
     def _override_get_session() -> Generator[Session, None, None]:
         yield session
 
     app.dependency_overrides[get_session] = _override_get_session
+    app.state.push_service = PushService(config=None)
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

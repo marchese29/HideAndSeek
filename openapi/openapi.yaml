@@ -631,6 +631,17 @@ components:
           format: uuid
           title: Map Id
           description: ID of the map to play on.
+        device_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Token
+          description: Hex-encoded APNS device token. Optional for game creation.
+        device_token_environment:
+          type: string
+          title: Device Token Environment
+          description: 'APNS environment: "production" or "sandbox".'
+          default: production
       type: object
       required:
       - map_id
@@ -803,11 +814,22 @@ components:
           type: string
           title: Color
           description: Hex color for this player, e.g. "#FF5733".
+        device_token:
+          type: string
+          title: Device Token
+          description: "Hex-encoded APNS device token. Required \u2014 push is central\
+            \ to gameplay."
+        device_token_environment:
+          type: string
+          title: Device Token Environment
+          description: 'APNS environment: "production" or "sandbox".'
+          default: production
       type: object
       required:
       - join_code
       - name
       - color
+      - device_token
       title: JoinGameRequest
       description: Join an existing game by its join code.
     JoinGameResponse:

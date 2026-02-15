@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import Depends, Header, HTTPException, Path
+from fastapi import Depends, Header, HTTPException, Path, Request
 from sqlmodel import Session, select
 
 from hideandseek.db import get_session
 from hideandseek.models.game import Game, Player
+from hideandseek.push import PushService
 
 
 def get_client_id(x_client_id: uuid.UUID = Header()) -> uuid.UUID:
@@ -25,6 +26,11 @@ def get_game(
     if not game:
         raise HTTPException(status_code=404, detail='Game not found.')
     return game
+
+
+def get_push_service(request: Request) -> PushService:
+    """Retrieve the PushService from app state."""
+    return request.app.state.push_service
 
 
 def get_player_in_game(

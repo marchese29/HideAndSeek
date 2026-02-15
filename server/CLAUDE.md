@@ -14,23 +14,35 @@ uv run pyright             # Type check
 uv run python scripts/generate_openapi.py     # Regenerate OpenAPI spec
 ```
 
+## Verification
+
+Always verify server changes with **both** automated checks and manual API calls before committing.
+
+1. **Automated**: `uv run pytest && uv run ruff check . && uv run pyright`
+2. **Manual**: Start the server, seed test data if the DB is empty (or delete `data/` and recreate), and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created).
+
+Manual testing catches wiring and serialization issues that unit tests miss.
+
 ## Project Structure
 
-- `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (creates DB on startup)
+- `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (creates DB, initializes PushService)
 - `src/hideandseek/db.py` — SQLite engine, `create_db_and_tables()`, `get_session()` dependency
+- `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
+- `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/models/` — SQLModel table models and types
-  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, etc.), GeoJSON Pydantic types, value objects
+  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, `PushEventType`, etc.), GeoJSON Pydantic types, value objects
   - `transit.py` — `TransitDataset`, `Stop`, `Route`, `RouteStop`
   - `game_map.py` — `GameMap`
   - `game.py` — `Game`, `Player`
   - `location.py` — `LocationUpdate`
   - `question.py` — `Question`
+  - `device_token.py` — `DeviceToken` (maps `client_id` → APNS token)
   - `__init__.py` — Re-exports all models (import this to register tables on metadata)
 - `src/hideandseek/schemas/` — Request/response Pydantic schemas (separate from DB models)
   - `request.py` — Request body schemas (`CreateGameRequest`, `JoinGameRequest`, etc.)
   - `response.py` — Response schemas with `from_model()` static methods for DB→API transformation
   - `common.py` — Shared utilities (pagination params)
-- `src/hideandseek/dependencies.py` — Shared FastAPI dependencies (`get_client_id`, `get_game`, `get_player_in_game`)
+- `src/hideandseek/dependencies.py` — Shared FastAPI dependencies (`get_client_id`, `get_game`, `get_player_in_game`, `get_push_service`)
 - `src/hideandseek/queries.py` — Database query/mutation functions (return SQLModel objects, handle commit/refresh)
 - `src/hideandseek/routers/` — API route modules
   - `maps.py` — `GET /maps`, `GET /maps/{map_id}`
@@ -38,15 +50,16 @@ uv run python scripts/generate_openapi.py     # Regenerate OpenAPI spec
   - `location.py` — `POST .../location`, `GET .../location-history`
   - `questions.py` — `POST .../questions`, `POST .../questions/{id}/lock-in`, `GET .../questions/{id}/preview`, `POST .../questions/{id}/answer`, `GET .../questions`
 - `tests/conftest.py` — In-memory SQLite fixtures (`session`, `client`) and factory functions
-- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`)
+- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`)
 - `scripts/generate_openapi.py` — dumps `app.openapi()` to `openapi/openapi.yaml`
 - `data/` — SQLite database file (gitignored)
 
 ## Architecture Patterns
 
 - **Schema vs Model separation**: SQLModel table models (`models/`) own the DB schema. Pydantic schemas (`schemas/`) control the API surface. Response schemas have `from_model()` static methods for transformation.
-- **Dependency injection**: `dependencies.py` provides reusable FastAPI `Depends()` — `get_client_id` (from `X-Client-Id` header), `get_game` (404 if missing), `get_player_in_game` (composes `get_game` + `get_client_id`, 403 if not found).
+- **Dependency injection**: `dependencies.py` provides reusable FastAPI `Depends()` — `get_client_id` (from `X-Client-Id` header), `get_game` (404 if missing), `get_player_in_game` (composes `get_game` + `get_client_id`, 403 if not found), `get_push_service` (from `app.state`).
 - **Query layer**: `queries.py` handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLModel objects; routers transform them via `from_model()`.
+- **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). Routers resolve device tokens while the session is alive, then dispatch `push.send_to_tokens()` via `BackgroundTasks` (fire-and-forget). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
 - **Test factories**: `conftest.py` has factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) that create test data with sensible defaults and accept `**overrides`.
 - **Geo math deferred**: Question answer computation and exclusion zone geometry are stubbed (`answer: "pending"`, `exclusion: null`). A future `geo.py` module will implement haversine distance, radar circles, and thermometer half-planes.
 
@@ -80,6 +93,8 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 - Only one unanswered question allowed at a time per game.
 - `join_code` is nullable — nulled out when the game ends to prevent namespace exhaustion.
 - Pagination uses offset/limit query params (`schemas/common.py`).
+- `device_token` is required on `POST /games/join`, optional on `POST /games`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
+- Push notification env vars: `APNS_KEY_PATH`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_USE_SANDBOX`. All optional — when missing, PushService runs in no-op mode.
 
 ## Style
 

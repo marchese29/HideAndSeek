@@ -16,6 +16,14 @@ class CreateGameRequest(BaseModel):
     """Create a new game on a map."""
 
     map_id: uuid.UUID = Field(description='ID of the map to play on.')
+    device_token: str | None = Field(
+        default=None,
+        description='Hex-encoded APNS device token. Optional for game creation.',
+    )
+    device_token_environment: str = Field(
+        default='production',
+        description='APNS environment: "production" or "sandbox".',
+    )
 
 
 class JoinGameRequest(BaseModel):
@@ -24,6 +32,13 @@ class JoinGameRequest(BaseModel):
     join_code: str = Field(description='4-character code shared by the host.')
     name: str = Field(description='Display name for this player.')
     color: str = Field(description='Hex color for this player, e.g. "#FF5733".')
+    device_token: str = Field(
+        description='Hex-encoded APNS device token. Required — push is central to gameplay.',
+    )
+    device_token_environment: str = Field(
+        default='production',
+        description='APNS environment: "production" or "sandbox".',
+    )
 
 
 # ── Players ───────────────────────────────────────────────────────────────────

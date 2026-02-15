@@ -11,6 +11,7 @@ dependencies = [
     "uvicorn[standard]>=0.34.0",
     "pyyaml>=6.0",
     "sqlmodel>=0.0.33",
+    "aioapns>=4.0",
 ]
 
 [dependency-groups]

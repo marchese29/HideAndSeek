@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hideandseek.models.device_token import DeviceToken
 from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.location import LocationUpdate
@@ -14,6 +15,7 @@ from hideandseek.models.types import (
     GeoPolygon,
     MapSize,
     PlayerRole,
+    PushEventType,
     QuestionInventory,
     QuestionStatus,
     QuestionType,
@@ -24,6 +26,7 @@ from hideandseek.models.types import (
 
 __all__ = [
     # Table models
+    'DeviceToken',
     'Game',
     'GameMap',
     'LocationUpdate',
@@ -35,6 +38,7 @@ __all__ = [
     'TransitDataset',
     # Enums
     'GameStatus',
+    'PushEventType',
     'MapSize',
     'PlayerRole',
     'QuestionStatus',
