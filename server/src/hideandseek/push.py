@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from aioapns import APNs, NotificationRequest
 
 from hideandseek.config import PushConfig
@@ -14,7 +14,7 @@ from hideandseek.models.types import PushEventType
 if TYPE_CHECKING:
     from hideandseek.models.device_token import DeviceToken
 
-logger = logging.getLogger(__name__)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 class PushService:
@@ -31,9 +31,9 @@ class PushService:
                 topic=config.topic,
                 use_sandbox=config.use_sandbox,
             )
-            logger.info('PushService initialized with APNS credentials.')
+            logger.info('push_service_initialized', mode='apns')
         else:
-            logger.info('PushService running in no-op mode (no APNS credentials).')
+            logger.info('push_service_initialized', mode='noop')
 
     async def send_to_tokens(
         self,
@@ -101,11 +101,10 @@ class PushService:
         for dt in tokens:
             if not self._client:
                 logger.info(
-                    'Push no-op: event=%s game=%s token=%s...%s',
-                    event_type,
-                    game_id,
-                    dt.token[:8],
-                    dt.token[-4:],
+                    'push_noop',
+                    event_type=event_type,
+                    game_id=str(game_id),
+                    token=f'{dt.token[:8]}...{dt.token[-4:]}',
                 )
                 continue
 
@@ -117,20 +116,18 @@ class PushService:
                 response = await self._client.send_notification(request)
                 if not response.is_successful:
                     logger.warning(
-                        'APNS error for token %s...%s: %s %s',
-                        dt.token[:8],
-                        dt.token[-4:],
-                        response.status,
-                        response.description,
+                        'apns_error',
+                        token=f'{dt.token[:8]}...{dt.token[-4:]}',
+                        status=response.status,
+                        description=response.description,
                     )
                     # Stale token cleanup is handled by the caller if needed —
                     # we log here so issues are visible but don't delete tokens
                     # in a fire-and-forget context without a session.
             except Exception:
                 logger.exception(
-                    'Failed to send push to token %s...%s',
-                    dt.token[:8],
-                    dt.token[-4:],
+                    'push_send_failed',
+                    token=f'{dt.token[:8]}...{dt.token[-4:]}',
                 )
 
     async def close(self) -> None:

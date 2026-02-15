@@ -1,24 +1,16 @@
 from collections.abc import AsyncGenerator, Callable
 from contextvars import ContextVar
 from functools import wraps
-from pathlib import Path
 from typing import Concatenate
 
+import structlog
 from sqlmodel import Session, SQLModel, create_engine
 
+from hideandseek.utils import find_server_root
 
-def _find_server_root() -> Path:
-    """Walk up from this file to find the directory containing pyproject.toml."""
-    current = Path(__file__).resolve().parent
-    while current != current.parent:
-        if (current / 'pyproject.toml').exists():
-            return current
-        current = current.parent
-    msg = 'Could not find server root (no pyproject.toml in parent directories)'
-    raise RuntimeError(msg)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-
-DB_DIR = _find_server_root() / 'data'
+DB_DIR = find_server_root() / 'data'
 DB_URL = f'sqlite:///{DB_DIR / "hideandseek.db"}'
 
 engine = create_engine(DB_URL, connect_args={'check_same_thread': False})
@@ -49,9 +41,11 @@ async def get_session() -> AsyncGenerator[Session, None]:
     """
     with Session(engine) as session:
         token = _session_var.set(session)
+        logger.debug('session_opened')
         try:
             yield session
             session.commit()
+            logger.debug('session_committed')
         finally:
             _session_var.reset(token)
 

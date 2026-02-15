@@ -7,12 +7,15 @@ from fastapi import FastAPI
 
 from hideandseek.config import load_push_config
 from hideandseek.db import create_db_and_tables
+from hideandseek.logging import setup_logging
+from hideandseek.middleware import AccessLogMiddleware
 from hideandseek.push import PushService
 from hideandseek.routers import games, location, maps, questions
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    setup_logging()
     create_db_and_tables()
     push_config = load_push_config()
     push_service = PushService(push_config)
@@ -28,6 +31,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(AccessLogMiddleware)
 
 app.include_router(maps.router)
 app.include_router(games.router)

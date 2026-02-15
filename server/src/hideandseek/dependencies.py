@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import uuid
 
+import structlog
 from fastapi import Depends, Header, HTTPException, Path, Request
 from sqlmodel import select
 
 from hideandseek.db import current_session
 from hideandseek.models.game import Game, Player
 from hideandseek.push import PushService
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 def get_client_id(x_client_id: uuid.UUID = Header()) -> uuid.UUID:
@@ -28,6 +31,7 @@ def get_game(
     session = current_session()
     game = session.get(Game, game_id)
     if not game:
+        logger.warning('game_not_found', game_id=str(game_id))
         raise HTTPException(status_code=404, detail='Game not found.')
     return game
 
@@ -51,5 +55,6 @@ def get_player_in_game(
         select(Player).where(Player.client_id == client_id, Player.game_id == game.id)
     ).first()
     if not player:
+        logger.warning('player_not_in_game', client_id=str(client_id), game_id=str(game.id))
         raise HTTPException(status_code=403, detail='You are not a player in this game.')
     return player

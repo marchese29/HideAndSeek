@@ -19,3 +19,6 @@ htmlcov/
 
 # Database
 data/
+
+# Logs
+logs/

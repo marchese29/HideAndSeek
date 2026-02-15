@@ -25,8 +25,11 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 
 ## Project Structure
 
-- `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (creates DB, initializes PushService)
+- `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (sets up logging, creates DB, initializes PushService)
+- `src/hideandseek/logging.py` — Centralized structlog configuration (`setup_logging()`). Configures two logger namespaces: `hideandseek.access` (request/response → `logs/access.log` in dev, `/var/log/hideandseek/access.log` in prod) and root (general app → stderr). Env-aware: dev=console renderer, prod/`LOG_FORMAT=json`=JSON renderer.
+- `src/hideandseek/middleware.py` — Raw ASGI `AccessLogMiddleware` for structured request/response logging. Logs method, path, headers (sensitive values redacted), request body (truncated at 1KB), status, duration, response size. Generates `request_id` UUID per request (bound to structlog contextvars, returned in `X-Request-ID` response header). Skips `/health`.
 - `src/hideandseek/db.py` — SQLite engine, `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `current_session()`, `@db_read`/`@db_write` decorators
+- `src/hideandseek/utils.py` — Shared utilities (`find_server_root()` — walks up to `pyproject.toml`)
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/models/` — SQLModel table models and types
@@ -71,6 +74,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - **Query layer**: `queries/` package (one module per domain) handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLModel objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek.queries.games import create_game`), not from the package root. Callers invoke query functions without passing session (e.g., `create_game(map_id=..., ...)`).
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). Routers resolve device tokens while the session is alive, then dispatch `push.send_to_tokens()` via `BackgroundTasks` (fire-and-forget). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
 - **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) create test data with sensible defaults and accept `**overrides`.
+- **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, written to `access.log`, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. `ENV=development` (default): DEBUG level, colorful console. `ENV=production` or `LOG_FORMAT=json`: INFO level, JSON output.
 - **Geo math deferred**: Question answer computation and exclusion zone geometry are stubbed (`answer: "pending"`, `exclusion: null`). A future `geo.py` module will implement haversine distance, radar circles, and thermometer half-planes.
 
 ## Game States
@@ -105,6 +109,7 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 - Pagination uses offset/limit query params (`schemas/common.py`).
 - `device_token` is required on `POST /games/join`, optional on `POST /games`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
 - Push notification env vars: `APNS_KEY_PATH`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_USE_SANDBOX`. All optional — when missing, PushService runs in no-op mode.
+- Logging env vars: `ENV` (`development`/`production`, default `development`), `LOG_FORMAT` (`json` to force JSON output). Use `structlog.get_logger(__name__)` for all new loggers — never use stdlib `logging.getLogger()` directly.
 
 ## Style
 
