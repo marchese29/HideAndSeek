@@ -31,6 +31,7 @@ CLAUDE.md files exist at:
 - Issue tracking: use `bd` (beads) CLI. Run `bd onboard` to get started.
 - Git hooks are in `hooks/` and configured via `git config core.hooksPath hooks`.
 - The pre-commit hook runs server checks (lint, format, typecheck, test) and regenerates `openapi/openapi.yaml` when `server/` files change.
+- The OpenAPI regen step auto-stages the updated spec (`git add openapi/openapi.yaml`), so it's included in the commit automatically — no manual step needed.
 - Hook steps use `run_if_changed` with hash caching (`.git/hooks-cache/`) to skip work when staged content hasn't changed since the last successful run.
 - To add a new cached hook step: write a script in `hooks/`, then add a `run_if_changed` call in `hooks/pre-commit`.
 - OpenAPI spec is the contract between server and iOS app — never edit it directly.
