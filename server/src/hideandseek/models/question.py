@@ -20,6 +20,7 @@ class Question(SQLModel, table=True):
     asked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     seeker_location_start: dict = Field(sa_type=sa.JSON)  # GeoJSON Point
     seeker_location_end: dict | None = Field(default=None, sa_type=sa.JSON)
+    answerable_at: datetime | None = None
     answered_at: datetime | None = None
     hider_location: dict | None = Field(default=None, sa_type=sa.JSON)
     answer: str | None = None

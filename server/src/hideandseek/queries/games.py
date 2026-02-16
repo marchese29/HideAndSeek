@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 import string
 import uuid
+from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
@@ -88,6 +89,10 @@ def update_game_status(
 ) -> Game:
     """Update a game's status (and optionally clear join_code)."""
     game.status = status
+    if status == GameStatus.hiding:
+        game.hiding_started_at = datetime.now(UTC)
+    elif status == GameStatus.seeking:
+        game.seeking_started_at = datetime.now(UTC)
     if clear_join_code:
         game.join_code = None
     session.add(game)

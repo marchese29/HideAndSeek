@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from hideandseek.celery_app import app as celery_app
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_client_id, get_game, get_push_service
+from hideandseek.dependencies import get_client_id, get_game
 from hideandseek.models.game import Game
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType
-from hideandseek.push import PushService
-from hideandseek.queries.device_tokens import get_device_tokens_for_game, upsert_device_token
+from hideandseek.queries.device_tokens import upsert_device_token
 from hideandseek.queries.effective_map import get_effective_map_data
 from hideandseek.queries.games import (
     add_player,
@@ -33,6 +33,8 @@ from hideandseek.schemas.response import (
     JoinGameResponse,
     PlayerResponse,
 )
+from hideandseek.tasks.game_timers import transition_hiding_to_seeking
+from hideandseek.tasks.push import send_push
 
 router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(get_session)])
 
@@ -121,9 +123,7 @@ def patch_player(
 
 @router.post('/{game_id}/start', response_model=GameResponse)
 def start_game(
-    background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
-    push: PushService = Depends(get_push_service),
 ) -> GameResponse:
     """Transition the game from lobby to hiding."""
     if game.status != GameStatus.lobby:
@@ -139,13 +139,19 @@ def start_game(
     if PlayerRole.seeker not in roles:
         raise HTTPException(status_code=409, detail='At least one seeker is required.')
 
-    tokens = get_device_tokens_for_game(game.id)
     game = update_game_status(game, GameStatus.hiding)
 
-    background_tasks.add_task(
-        push.send_to_tokens,
-        tokens,
-        game.id,
+    # Schedule hiding→seeking transition
+    hiding_minutes = game.timing.get('hiding_time_min', 30)
+    transition_hiding_to_seeking.apply_async(  # type: ignore[attr-defined]
+        args=[str(game.id)],
+        countdown=hiding_minutes * 60,
+        task_id=f'hiding_timer:{game.id}',
+    )
+
+    # Push: game started
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
         PushEventType.game_started,
         alert='Game on! The hiding phase has begun.',
     )
@@ -163,6 +169,10 @@ def end_game(
             status_code=409,
             detail=f'Cannot end game in {game.status} state.',
         )
+
+    # Revoke pending hiding timer if it exists
+    if not celery_app.conf.task_always_eager:
+        celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
 
     game = update_game_status(game, GameStatus.finished, clear_join_code=True)
     return GameResponse.from_model(game)

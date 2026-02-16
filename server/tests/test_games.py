@@ -157,7 +157,10 @@ def test_start_game(client: TestClient, session: Session):
     create_player(session, game.id, role=PlayerRole.seeker)
     resp = client.post(f'/games/{game.id}/start')
     assert resp.status_code == 200
-    assert resp.json()['status'] == 'hiding'
+    data = resp.json()
+    assert data['status'] == 'hiding'
+    assert data['hiding_started_at'] is not None
+    assert data['seeking_started_at'] is None
 
 
 def test_start_game_no_players(client: TestClient, session: Session):

@@ -36,8 +36,6 @@ def session() -> Generator[Session, None, None]:
 
 @pytest.fixture
 def client(session: Session) -> Generator[TestClient, None, None]:
-    from hideandseek.push import PushService
-
     async def _override_get_session() -> AsyncGenerator[Session, None]:
         token = _session_var.set(session)
         try:
@@ -47,7 +45,6 @@ def client(session: Session) -> Generator[TestClient, None, None]:
             _session_var.reset(token)
 
     app.dependency_overrides[get_session] = _override_get_session
-    app.state.push_service = PushService(config=None)
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

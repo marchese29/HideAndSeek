@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from hideandseek.celery_app import app as celery_app
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_game, get_player_in_game, get_push_service
+from hideandseek.dependencies import get_game, get_player_in_game
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import (
     GameStatus,
@@ -17,8 +18,6 @@ from hideandseek.models.types import (
     QuestionStatus,
     QuestionType,
 )
-from hideandseek.push import PushService
-from hideandseek.queries.device_tokens import get_device_tokens_for_game
 from hideandseek.queries.location import get_avg_seeker_location, get_latest_location_for_player
 from hideandseek.queries.questions import (
     create_question,
@@ -31,6 +30,8 @@ from hideandseek.queries.questions import (
 )
 from hideandseek.schemas.request import AskQuestionRequest
 from hideandseek.schemas.response import QuestionPreview, QuestionResponse
+from hideandseek.tasks.game_timers import auto_answer_question
+from hideandseek.tasks.push import send_push
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['questions'], dependencies=[Depends(get_session)]
@@ -40,10 +41,8 @@ router = APIRouter(
 @router.post('/questions', response_model=QuestionResponse, status_code=201)
 def ask_question(
     body: AskQuestionRequest,
-    background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-    push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Ask a radar or thermometer question, spending an inventory slot."""
     if game.status != GameStatus.seeking:
@@ -101,20 +100,27 @@ def ask_question(
         seeker_location_start=seeker_location,
     )
 
+    # Schedule answer deadline for radar questions (immediately answerable)
+    if status == QuestionStatus.answerable:
+        delay_minutes = game.timing.get('location_question_delay_min', 5)
+        auto_answer_question.apply_async(  # type: ignore[attr-defined]
+            args=[str(question.id)],
+            countdown=delay_minutes * 60,
+            task_id=f'answer_deadline:{question.id}',
+        )
+
     # Push to hider(s)
-    hider_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.hider)
     distance_label = f'{distance_m / 1000:g} km' if distance_m >= 1000 else f'{distance_m} m'
     if body.question_type == QuestionType.radar:
         alert = f'A {distance_label} radar question has been asked. Your answer timer is running.'
     else:
         alert = f'A {distance_label} thermometer question has started. The seeker is traveling.'
-    background_tasks.add_task(
-        push.send_to_tokens,
-        hider_tokens,
-        game.id,
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
         PushEventType.question_asked,
+        role_filter='hider',
         alert=alert,
-        question_id=question.id,
+        question_id=str(question.id),
         question_type=body.question_type,
         question_status=status,
         parameters=parameters,
@@ -129,10 +135,8 @@ def ask_question(
 )
 def lock_in_question(
     question_id: uuid.UUID,
-    background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-    push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Lock in the seeker's end position for a thermometer question."""
     question = get_question(question_id)
@@ -157,15 +161,21 @@ def lock_in_question(
         },
     )
 
+    # Schedule answer deadline
+    delay_minutes = game.timing.get('location_question_delay_min', 5)
+    auto_answer_question.apply_async(  # type: ignore[attr-defined]
+        args=[str(question.id)],
+        countdown=delay_minutes * 60,
+        task_id=f'answer_deadline:{question.id}',
+    )
+
     # Push to hider(s)
-    hider_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.hider)
-    background_tasks.add_task(
-        push.send_to_tokens,
-        hider_tokens,
-        game.id,
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
         PushEventType.question_answerable,
+        role_filter='hider',
         alert='A thermometer question is ready for your answer.',
-        question_id=question.id,
+        question_id=str(question.id),
     )
 
     return QuestionResponse.from_model(question)
@@ -196,10 +206,8 @@ def preview_question(
 )
 def answer_question(
     question_id: uuid.UUID,
-    background_tasks: BackgroundTasks,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-    push: PushService = Depends(get_push_service),
 ) -> QuestionResponse:
     """Hider answers a question — snapshot location and compute answer."""
     if player.role != PlayerRole.hider:
@@ -210,6 +218,10 @@ def answer_question(
         raise HTTPException(status_code=404, detail='Question not found.')
     if question.status != QuestionStatus.answerable:
         raise HTTPException(status_code=409, detail='Question is not answerable.')
+
+    # Revoke the auto-answer deadline
+    if not celery_app.conf.task_always_eager:
+        celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
 
     # Snapshot hider's current location
     latest = get_latest_location_for_player(player.id, game.id)
@@ -228,15 +240,13 @@ def answer_question(
     )
 
     # Push to all seekers
-    seeker_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.seeker)
     alert = f'Question answered: {question.answer}! A new exclusion zone is on the map.'
-    background_tasks.add_task(
-        push.send_to_tokens,
-        seeker_tokens,
-        game.id,
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
         PushEventType.question_answered,
+        role_filter='seeker',
         alert=alert,
-        question_id=question.id,
+        question_id=str(question.id),
         question_type=question.question_type,
         answer=question.answer,
     )

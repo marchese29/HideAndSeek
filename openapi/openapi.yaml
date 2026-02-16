@@ -728,6 +728,20 @@ components:
           type: string
           format: date-time
           title: Created At
+        hiding_started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Hiding Started At
+          description: When the hiding phase began. Clients compute countdown.
+        seeking_started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Seeking Started At
+          description: When the seeking phase began.
       type: object
       required:
       - id
@@ -1104,6 +1118,13 @@ components:
           title: Seeker Location End
           description: "GeoJSON Point \u2014 seeker position at lock-in (thermometer\
             \ only)."
+        answerable_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answerable At
+          description: When the question became answerable. Clients compute deadline.
         answered_at:
           anyOf:
           - type: string

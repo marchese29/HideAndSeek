@@ -5,12 +5,11 @@ from __future__ import annotations
 import uuid
 
 import structlog
-from fastapi import Depends, Header, HTTPException, Path, Request
+from fastapi import Depends, Header, HTTPException, Path
 from sqlmodel import select
 
 from hideandseek.db import current_session
 from hideandseek.models.game import Game, Player
-from hideandseek.push import PushService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -34,11 +33,6 @@ def get_game(
         logger.warning('game_not_found', game_id=str(game_id))
         raise HTTPException(status_code=404, detail='Game not found.')
     return game
-
-
-def get_push_service(request: Request) -> PushService:
-    """Retrieve the PushService from app state."""
-    return request.app.state.push_service
 
 
 def get_player_in_game(

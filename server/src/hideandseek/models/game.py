@@ -18,6 +18,8 @@ class Game(SQLModel, table=True):
     timing: dict = Field(default_factory=dict, sa_type=sa.JSON)  # TimingRules
     inventory: dict = Field(default_factory=dict, sa_type=sa.JSON)  # QuestionInventory
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    hiding_started_at: datetime | None = None
+    seeking_started_at: datetime | None = None
 
     game_map: 'GameMap' = Relationship(back_populates='games')  # noqa: F821
     players: list['Player'] = Relationship(back_populates='game')

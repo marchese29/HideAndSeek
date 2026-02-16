@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
   api:
     build: ./server
     command: uv run uvicorn hideandseek.main:app --host 0.0.0.0 --reload
@@ -22,11 +32,29 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
+      CELERY_BROKER_URL: redis://redis:6379/0
       ENV: development
     volumes:
       - ./server/src:/app/src
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./server
+    command: uv run celery -A hideandseek.celery_app worker --loglevel=info --beat
+    environment:
+      DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
+      CELERY_BROKER_URL: redis://redis:6379/0
+      ENV: development
+    volumes:
+      - ./server/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

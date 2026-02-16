@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
@@ -54,6 +55,8 @@ def create_question(
         asked_by=asked_by,
         seeker_location_start=seeker_location_start,
     )
+    if status == QuestionStatus.answerable:
+        q.answerable_at = datetime.now(UTC)
     session.add(q)
     return q
 
@@ -79,6 +82,8 @@ def update_question(session: Session, question: Question, updates: dict) -> Ques
     """Apply updates to a question."""
     for key, value in updates.items():
         setattr(question, key, value)
+    if 'status' in updates and updates['status'] == QuestionStatus.answerable:
+        question.answerable_at = datetime.now(UTC)
     session.add(question)
     return question
 

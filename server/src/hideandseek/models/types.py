@@ -54,6 +54,7 @@ class PushEventType(StrEnum):
     question_asked = 'question_asked'
     question_answerable = 'question_answerable'
     question_answered = 'question_answered'
+    question_auto_answered = 'question_auto_answered'
 
 
 # ── GeoJSON value types ───────────────────────────────────────────────────────

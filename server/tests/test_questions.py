@@ -59,6 +59,7 @@ def test_ask_radar_question(client: TestClient, session: Session):
     assert data['status'] == 'answerable'
     assert data['parameters'] == {'radius_m': 3000}
     assert data['sequence'] == 1
+    assert data['answerable_at'] is not None
 
 
 def test_ask_thermometer_question(client: TestClient, session: Session):
@@ -195,6 +196,7 @@ def test_lock_in_thermometer(client: TestClient, session: Session):
     data = resp.json()
     assert data['status'] == 'answerable'
     assert data['seeker_location_end'] is not None
+    assert data['answerable_at'] is not None
 
 
 def test_lock_in_wrong_status(client: TestClient, session: Session):

@@ -102,6 +102,12 @@ class GameResponse(BaseModel):
     inventory: dict = Field(description='Remaining question inventory (radars + thermometers).')
     players: list[PlayerResponse]
     created_at: datetime
+    hiding_started_at: datetime | None = Field(
+        default=None, description='When the hiding phase began. Clients compute countdown.'
+    )
+    seeking_started_at: datetime | None = Field(
+        default=None, description='When the seeking phase began.'
+    )
 
     @staticmethod
     def from_model(game: GameModel) -> GameResponse:
@@ -114,6 +120,8 @@ class GameResponse(BaseModel):
             inventory=game.inventory,
             players=[PlayerResponse.from_model(p) for p in game.players],
             created_at=game.created_at,
+            hiding_started_at=game.hiding_started_at,
+            seeking_started_at=game.seeking_started_at,
         )
 
 
@@ -251,6 +259,9 @@ class QuestionResponse(BaseModel):
     seeker_location_end: dict | None = Field(
         description='GeoJSON Point — seeker position at lock-in (thermometer only).'
     )
+    answerable_at: datetime | None = Field(
+        default=None, description='When the question became answerable. Clients compute deadline.'
+    )
     answered_at: datetime | None
     hider_location: dict | None = Field(
         description='GeoJSON Point — hider position at answer time. Hidden from seekers.'
@@ -273,6 +284,7 @@ class QuestionResponse(BaseModel):
             asked_at=question.asked_at,
             seeker_location_start=question.seeker_location_start,
             seeker_location_end=question.seeker_location_end,
+            answerable_at=question.answerable_at,
             answered_at=question.answered_at,
             hider_location=None if hide_hider_location else question.hider_location,
             answer=question.answer,

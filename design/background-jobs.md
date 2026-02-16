@@ -1,6 +1,6 @@
 # Background Jobs & Timers Design
 
-> Status: **Draft**
+> Status: **Implementation**
 > Last updated: 2026-02-15
 
 How the server schedules timed game-state transitions, enforces answer deadlines, and processes resilient background work. Designed around gameplay scenarios — every job exists because a player would notice if it didn't run.
@@ -194,8 +194,14 @@ app.autodiscover_tasks(['hideandseek.tasks'])
 ```python
 import os
 
-broker_url = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-result_backend = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+_broker = os.environ.get('CELERY_BROKER_URL', '')
+
+broker_url = _broker or 'memory://'
+result_backend = os.environ.get('CELERY_RESULT_BACKEND', _broker or 'cache+memory://')
+
+# Eager mode: when no broker is configured, tasks run synchronously in-process.
+# Follows the same pattern as PushService (no-ops when unconfigured).
+task_always_eager = not _broker
 
 task_serializer = 'json'
 result_serializer = 'json'
@@ -288,69 +294,93 @@ Add new event type:
 
 ### Docker Compose
 
-A `docker-compose.yml` in the repo root launches the full stack:
+The repo root `docker-compose.yml` already has `postgres` and `api` services (added during dockerization). Adding Celery means adding `redis` and `worker` services:
 
 ```yaml
 services:
   postgres:
-    image: postgres:17-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: hideandseek
-      POSTGRES_USER: hideandseek
-      POSTGRES_PASSWORD: hideandseek
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+    # ... existing (postgres:17-alpine, healthcheck, pgdata volume)
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
 
   api:
-    build: ./server
-    command: uvicorn hideandseek.main:app --host 0.0.0.0 --reload
-    ports:
-      - "8000:8000"
+    # ... existing, add CELERY_BROKER_URL:
     environment:
-      - DATABASE_URL=postgresql://hideandseek:hideandseek@postgres:5432/hideandseek
-      - CELERY_BROKER_URL=redis://redis:6379/0
-    volumes:
-      - ./server/src:/app/src
+      DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
+      CELERY_BROKER_URL: redis://redis:6379/0
+      ENV: development
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   worker:
     build: ./server
-    command: celery -A hideandseek.celery_app worker --loglevel=info --beat
+    command: uv run celery -A hideandseek.celery_app worker --loglevel=info --beat
     environment:
-      - DATABASE_URL=postgresql://hideandseek:hideandseek@postgres:5432/hideandseek
-      - CELERY_BROKER_URL=redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
+      CELERY_BROKER_URL: redis://redis:6379/0
+      ENV: development
     volumes:
       - ./server/src:/app/src
     depends_on:
-      - postgres
-      - redis
-
-volumes:
-  pgdata:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 ```
 
 `--beat` flag embeds the beat scheduler in the worker process (fine for single-worker dev).
 
-### Without Docker
+### Without Docker (eager mode)
+
+When `CELERY_BROKER_URL` is not set, `celery_config.py` enables `task_always_eager = True`. Tasks execute synchronously in the API process — no Redis, no worker process needed. This follows the same graceful-degradation pattern as `PushService` (no-ops when APNS env vars are absent).
 
 ```bash
-# Requires local PostgreSQL and Redis running
+# Just works — tasks run in-process, timers fire immediately (no countdown delay)
+uv run uvicorn hideandseek.main:app --reload
+```
 
-# Terminal 1: API server
-DATABASE_URL=postgresql://... uv run uvicorn hideandseek.main:app --reload
+**Trade-off:** `countdown=` is ignored in eager mode — timer tasks fire immediately instead of after a delay. This is fine for testing basic flows (create game → start → verify transition happens) but doesn't test real timing behavior.
 
-# Terminal 2: Celery worker + beat
-DATABASE_URL=postgresql://... CELERY_BROKER_URL=redis://localhost:6379/0 \
-  uv run celery -A hideandseek.celery_app worker --loglevel=info --beat
+### Without Docker (full fidelity)
+
+For testing real timer delays and the full enqueue → worker → execute flow locally, use the startup script with a local Redis:
+
+```bash
+# One-time setup
+brew install redis
+brew services start redis
+
+# Run API server + Celery worker together
+scripts/dev.sh
+```
+
+`scripts/dev.sh` launches both uvicorn and the Celery worker as child processes, tailing their output together. It sets `CELERY_BROKER_URL=redis://localhost:6379/0` so eager mode is disabled. Uses SQLite (no `DATABASE_URL` needed). Ctrl+C stops both.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+export CELERY_BROKER_URL="${CELERY_BROKER_URL:-redis://localhost:6379/0}"
+
+cd "$(dirname "$0")/.."
+
+trap 'kill 0' EXIT
+
+uv run uvicorn hideandseek.main:app --reload &
+uv run celery -A hideandseek.celery_app worker --loglevel=info --beat &
+
+wait
 ```
 
 ---
@@ -398,7 +428,8 @@ For verifying the full enqueue -> execute -> result flow, use `CELERY_ALWAYS_EAG
 - Implement `transition_hiding_to_seeking` task
 - Add `hiding_started_at`, `seeking_started_at` to Game model
 - Wire `start_game` to enqueue the task, `end_game` to revoke it
-- Docker Compose with PostgreSQL, Redis, API, and worker
+- Add `redis` and `worker` services to existing `docker-compose.yml`
+- Create `scripts/dev.sh` startup script for local full-fidelity dev
 - Update CLAUDE.md
 
 ### Phase 2: Question Deadlines
