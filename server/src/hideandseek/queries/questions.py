@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from shapely.geometry import Point
 from sqlmodel import Session, select
 
 from hideandseek.db import db_read, db_write
@@ -43,7 +44,7 @@ def create_question(
     status: QuestionStatus,
     parameters: dict,
     asked_by: uuid.UUID,
-    seeker_location_start: dict,
+    seeker_location_start: Point,
 ) -> Question:
     """Create a question."""
     q = Question(

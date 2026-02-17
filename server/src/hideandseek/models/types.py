@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
 
 from pydantic import BaseModel
 
@@ -55,24 +54,6 @@ class PushEventType(StrEnum):
     question_answerable = 'question_answerable'
     question_answered = 'question_answered'
     question_auto_answered = 'question_auto_answered'
-
-
-# ── GeoJSON value types ───────────────────────────────────────────────────────
-
-
-class GeoPoint(BaseModel):
-    type: Literal['Point'] = 'Point'
-    coordinates: tuple[float, float]  # [lng, lat]
-
-
-class GeoLineString(BaseModel):
-    type: Literal['LineString'] = 'LineString'
-    coordinates: list[tuple[float, float]]
-
-
-class GeoPolygon(BaseModel):
-    type: Literal['Polygon'] = 'Polygon'
-    coordinates: list[list[tuple[float, float]]]
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

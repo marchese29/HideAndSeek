@@ -6,11 +6,12 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
+from shapely.geometry import Point
 from sqlmodel import Session, select
 
 from hideandseek.celery_app import app
 from hideandseek.db import engine
-from hideandseek.geo import geojson_distance
+from hideandseek.geo import distance
 from hideandseek.models.game import Game
 from hideandseek.models.location import LocationUpdate
 from hideandseek.models.question import Question
@@ -78,7 +79,7 @@ def auto_answer_question(question_id: str) -> None:
 
         # Find the hider and snapshot their latest location
         hiders = [p for p in game.players if p.role == PlayerRole.hider]
-        hider_location: dict | None = None
+        hider_location: Point | None = None
         if hiders:
             latest = session.exec(
                 select(LocationUpdate)
@@ -95,12 +96,11 @@ def auto_answer_question(question_id: str) -> None:
         # Compute answer from distance, or fall back to 'pending' if no hider location
         if hider_location:
             if question.question_type == QuestionType.radar:
-                dist = geojson_distance(question.seeker_location_start, hider_location)
+                dist = distance(question.seeker_location_start, hider_location)
                 question.answer = 'yes' if dist <= question.parameters['radius_m'] else 'no'
             else:
-                dist_start = geojson_distance(question.seeker_location_start, hider_location)
-                # seeker_location_end is guaranteed set after lock-in
-                dist_end = geojson_distance(question.seeker_location_end, hider_location)  # type: ignore[arg-type]
+                dist_start = distance(question.seeker_location_start, hider_location)
+                dist_end = distance(question.seeker_location_end, hider_location)  # type: ignore[arg-type]
                 question.answer = 'closer' if dist_end < dist_start else 'farther'
         else:
             question.answer = 'pending'

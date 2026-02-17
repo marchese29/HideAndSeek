@@ -5,7 +5,10 @@ from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 from fastapi.testclient import TestClient
+from geoalchemy2 import load_spatialite
+from shapely.geometry import Polygon
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -25,6 +28,7 @@ def session() -> Generator[Session, None, None]:
         connect_args={'check_same_thread': False},
         poolclass=StaticPool,
     )
+    sa.event.listen(engine, 'connect', load_spatialite)  # type: ignore[attr-defined]
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         token = _session_var.set(session)
@@ -73,7 +77,7 @@ def create_game_map(session: Session, **overrides: Any) -> GameMap:
     defaults: dict[str, Any] = {
         'name': 'Test Map',
         'size': MapSize.medium,
-        'boundary': {'type': 'Polygon', 'coordinates': [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]},
+        'boundary': Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
         'districts': [],
         'district_classes': [],
         'default_inventory': {

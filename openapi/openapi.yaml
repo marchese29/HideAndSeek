@@ -620,9 +620,7 @@ components:
         size:
           $ref: '#/components/schemas/MapSize'
         boundary:
-          additionalProperties: true
-          type: object
-          title: Boundary
+          $ref: '#/components/schemas/Polygon'
           description: GeoJSON Polygon.
         districts:
           items: {}
@@ -728,25 +726,6 @@ components:
       - endgame
       - finished
       title: GameStatus
-    GeoPoint:
-      properties:
-        type:
-          type: string
-          const: Point
-          title: Type
-          default: Point
-        coordinates:
-          prefixItems:
-          - type: number
-          - type: number
-          type: array
-          maxItems: 2
-          minItems: 2
-          title: Coordinates
-      type: object
-      required:
-      - coordinates
-      title: GeoPoint
     HTTPValidationError:
       properties:
         detail:
@@ -804,6 +783,48 @@ components:
       title: JoinGameResponse
       description: "Returned when a player joins a game \u2014 includes the game state\
         \ and the caller's player ID."
+    LineString:
+      properties:
+        bbox:
+          anyOf:
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 4
+            minItems: 4
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 6
+            minItems: 6
+          - type: 'null'
+          title: Bbox
+        type:
+          type: string
+          const: LineString
+          title: Type
+        coordinates:
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/Position2D'
+            - $ref: '#/components/schemas/Position3D'
+          type: array
+          minItems: 2
+          title: Coordinates
+      type: object
+      required:
+      - type
+      - coordinates
+      title: LineString
+      description: LineString Model
     LocationHistoryEntry:
       properties:
         player_id:
@@ -811,9 +832,7 @@ components:
           format: uuid
           title: Player Id
         coordinates:
-          additionalProperties: true
-          type: object
-          title: Coordinates
+          $ref: '#/components/schemas/Point'
           description: GeoJSON Point.
         timestamp:
           type: string
@@ -829,7 +848,7 @@ components:
     LocationReportRequest:
       properties:
         coordinates:
-          $ref: '#/components/schemas/GeoPoint'
+          $ref: '#/components/schemas/Point'
           description: Current position as a GeoJSON Point.
         timestamp:
           type: string
@@ -871,9 +890,7 @@ components:
           format: uuid
           title: Transit Dataset Id
         boundary:
-          additionalProperties: true
-          type: object
-          title: Boundary
+          $ref: '#/components/schemas/Polygon'
           description: GeoJSON Polygon defining the playable area.
         districts:
           items: {}
@@ -995,6 +1012,109 @@ components:
       title: PlayerUpdate
       description: Partial update to a player. All fields are optional; only provided
         fields are applied.
+    Point:
+      properties:
+        bbox:
+          anyOf:
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 4
+            minItems: 4
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 6
+            minItems: 6
+          - type: 'null'
+          title: Bbox
+        type:
+          type: string
+          const: Point
+          title: Type
+        coordinates:
+          anyOf:
+          - $ref: '#/components/schemas/Position2D'
+          - $ref: '#/components/schemas/Position3D'
+          title: Coordinates
+      type: object
+      required:
+      - type
+      - coordinates
+      title: Point
+      description: Point Model
+    Polygon:
+      properties:
+        bbox:
+          anyOf:
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 4
+            minItems: 4
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 6
+            minItems: 6
+          - type: 'null'
+          title: Bbox
+        type:
+          type: string
+          const: Polygon
+          title: Type
+        coordinates:
+          items:
+            items:
+              anyOf:
+              - $ref: '#/components/schemas/Position2D'
+              - $ref: '#/components/schemas/Position3D'
+            type: array
+            minItems: 4
+          type: array
+          title: Coordinates
+      type: object
+      required:
+      - type
+      - coordinates
+      title: Polygon
+      description: Polygon Model
+    Position2D:
+      prefixItems:
+      - type: number
+        title: Longitude
+      - type: number
+        title: Latitude
+      type: array
+      maxItems: 2
+      minItems: 2
+    Position3D:
+      prefixItems:
+      - type: number
+        title: Longitude
+      - type: number
+        title: Latitude
+      - type: number
+        title: Altitude
+      type: array
+      maxItems: 3
+      minItems: 3
     QuestionResponse:
       properties:
         id:
@@ -1028,16 +1148,12 @@ components:
           format: date-time
           title: Asked At
         seeker_location_start:
-          additionalProperties: true
-          type: object
-          title: Seeker Location Start
+          $ref: '#/components/schemas/Point'
           description: "GeoJSON Point \u2014 seeker position when asked."
         seeker_location_end:
           anyOf:
-          - additionalProperties: true
-            type: object
+          - $ref: '#/components/schemas/Point'
           - type: 'null'
-          title: Seeker Location End
           description: "GeoJSON Point \u2014 seeker position at lock-in (thermometer\
             \ only)."
         answerable_at:
@@ -1055,10 +1171,8 @@ components:
           title: Answered At
         hider_location:
           anyOf:
-          - additionalProperties: true
-            type: object
+          - $ref: '#/components/schemas/Point'
           - type: 'null'
-          title: Hider Location
           description: "GeoJSON Point \u2014 hider position at answer time. Hidden\
             \ from seekers."
         answer:
@@ -1073,7 +1187,7 @@ components:
             type: object
           - type: 'null'
           title: Exclusion
-          description: "GeoJSON Polygon \u2014 the exclusion zone."
+          description: "GeoJSON geometry \u2014 the exclusion zone."
       type: object
       required:
       - id
@@ -1091,8 +1205,8 @@ components:
       - answer
       - exclusion
       title: QuestionResponse
-      description: "A question in the game \u2014 state machine: asked \u2192 in_progress\
-        \ \u2192 answerable \u2192 answered."
+      description: "A question in the game \u2014 state machine: asked -> in_progress\
+        \ -> answerable -> answered."
     QuestionStatus:
       type: string
       enum:
@@ -1129,9 +1243,7 @@ components:
           title: Route Type
           description: metro, bus, tram, rail, or ferry.
         shape:
-          additionalProperties: true
-          type: object
-          title: Shape
+          $ref: '#/components/schemas/LineString'
           description: GeoJSON LineString.
         stop_ids:
           items:
@@ -1165,9 +1277,7 @@ components:
           type: string
           title: Name
         coordinates:
-          additionalProperties: true
-          type: object
-          title: Coordinates
+          $ref: '#/components/schemas/Point'
           description: GeoJSON Point.
       type: object
       required:
@@ -1220,9 +1330,7 @@ components:
           - $ref: '#/components/schemas/PlayerRole'
           - type: 'null'
         coordinates:
-          additionalProperties: true
-          type: object
-          title: Coordinates
+          $ref: '#/components/schemas/Point'
           description: "GeoJSON Point \u2014 latest reported position."
         timestamp:
           type: string

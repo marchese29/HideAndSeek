@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi.testclient import TestClient
+from shapely.geometry import LineString, Point
 from sqlmodel import Session
 
 from hideandseek.models.types import GameStatus, PlayerRole, RouteType
@@ -252,7 +253,7 @@ def test_get_effective_map(client: TestClient, session: Session):
         stable_id='OXCIRC',
         dataset_id=ds_id,
         name='Oxford Circus',
-        coordinates={'type': 'Point', 'coordinates': [-0.141, 51.515]},
+        coordinates=Point(-0.141, 51.515),
     )
     route = Route(
         stable_id='central',
@@ -260,7 +261,7 @@ def test_get_effective_map(client: TestClient, session: Session):
         name='Central Line',
         color='#DC241F',
         route_type=RouteType.metro,
-        shape={'type': 'LineString', 'coordinates': [[-0.141, 51.515], [-0.138, 51.514]]},
+        shape=LineString([(-0.141, 51.515), (-0.138, 51.514)]),
     )
     session.add(stop)
     session.add(route)

@@ -2,8 +2,10 @@ import uuid
 from datetime import UTC, datetime
 
 import sqlalchemy as sa
+from shapely.geometry import LineString, Point
 from sqlmodel import Field, Relationship, SQLModel
 
+from hideandseek.models.geo_types import ShapelyGeometry
 from hideandseek.models.types import RouteType
 
 
@@ -21,6 +23,7 @@ class TransitDataset(SQLModel, table=True):
 
 
 class Stop(SQLModel, table=True):
+    model_config = {'arbitrary_types_allowed': True}  # type: ignore[assignment]
     __tablename__ = 'stop'  # type: ignore[assignment]
     __table_args__ = (sa.UniqueConstraint('stable_id', 'dataset_id'),)
 
@@ -28,13 +31,14 @@ class Stop(SQLModel, table=True):
     stable_id: str
     dataset_id: uuid.UUID = Field(foreign_key='transit_dataset.id')
     name: str
-    coordinates: dict = Field(sa_type=sa.JSON)  # GeoJSON Point
+    coordinates: Point = Field(sa_column=sa.Column(ShapelyGeometry('POINT', srid=4326)))
 
     dataset: TransitDataset = Relationship(back_populates='stops')
     route_stops: list['RouteStop'] = Relationship(back_populates='stop')
 
 
 class Route(SQLModel, table=True):
+    model_config = {'arbitrary_types_allowed': True}  # type: ignore[assignment]
     __tablename__ = 'route'  # type: ignore[assignment]
     __table_args__ = (sa.UniqueConstraint('stable_id', 'dataset_id'),)
 
@@ -44,7 +48,7 @@ class Route(SQLModel, table=True):
     name: str
     color: str
     route_type: RouteType
-    shape: dict = Field(sa_type=sa.JSON)  # GeoJSON LineString
+    shape: LineString = Field(sa_column=sa.Column(ShapelyGeometry('LINESTRING', srid=4326)))
 
     dataset: TransitDataset = Relationship(back_populates='routes')
     route_stops: list['RouteStop'] = Relationship(back_populates='route')

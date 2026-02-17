@@ -5,9 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from geojson_pydantic import Point
 from pydantic import BaseModel, Field
 
-from hideandseek.models.types import GeoPoint, PlayerRole, QuestionType
+from hideandseek.models.types import PlayerRole, QuestionType
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ class PlayerUpdate(BaseModel):
 class LocationReportRequest(BaseModel):
     """Report the caller's current position."""
 
-    coordinates: GeoPoint = Field(description='Current position as a GeoJSON Point.')
+    coordinates: Point = Field(description='Current position as a GeoJSON Point.')
     timestamp: datetime = Field(description='Client-side timestamp of the reading.')
 
 

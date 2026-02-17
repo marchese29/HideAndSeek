@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from hideandseek.celery_app import app as celery_app
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_game, get_player_in_game
-from hideandseek.geo import geojson_distance
+from hideandseek.geo import distance
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import (
     GameStatus,
@@ -153,7 +153,6 @@ def lock_in_question(
     if not latest:
         raise HTTPException(status_code=409, detail='No location reported yet.')
 
-    # Distance validation deferred (geo math TBD)
     question = update_question(
         question,
         {
@@ -212,12 +211,11 @@ def answer_question(
     # Compute answer from distance, or fall back to 'pending' if no hider location
     if hider_location:
         if question.question_type == QuestionType.radar:
-            dist = geojson_distance(question.seeker_location_start, hider_location)
+            dist = distance(question.seeker_location_start, hider_location)
             answer = 'yes' if dist <= question.parameters['radius_m'] else 'no'
         else:
-            dist_start = geojson_distance(question.seeker_location_start, hider_location)
-            # seeker_location_end is guaranteed set after lock-in
-            dist_end = geojson_distance(question.seeker_location_end, hider_location)  # type: ignore[arg-type]
+            dist_start = distance(question.seeker_location_start, hider_location)
+            dist_end = distance(question.seeker_location_end, hider_location)  # type: ignore[arg-type]
             answer = 'closer' if dist_end < dist_start else 'farther'
     else:
         answer = 'pending'

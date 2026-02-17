@@ -6,7 +6,11 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from geojson_pydantic import LineString as GeoJSONLineString
+from geojson_pydantic import Point as GeoJSONPoint
+from geojson_pydantic import Polygon as GeoJSONPolygon
 from pydantic import BaseModel, Field
+from shapely.geometry import mapping
 
 from hideandseek.models.types import (
     GameStatus,
@@ -50,7 +54,7 @@ class MapDetail(BaseModel):
     name: str
     size: MapSize
     transit_dataset_id: uuid.UUID
-    boundary: dict = Field(description='GeoJSON Polygon defining the playable area.')
+    boundary: GeoJSONPolygon = Field(description='GeoJSON Polygon defining the playable area.')
     districts: list = Field(description='District boundaries with id, name, class, and geometry.')
     district_classes: list = Field(description='District class definitions (tier + label).')
     default_inventory: dict = Field(description='Default question inventory for games on this map.')
@@ -63,7 +67,7 @@ class MapDetail(BaseModel):
             name=gm.name,
             size=gm.size,
             transit_dataset_id=gm.transit_dataset_id,
-            boundary=gm.boundary,
+            boundary=GeoJSONPolygon(**mapping(gm.boundary)),
             districts=gm.districts,
             district_classes=gm.district_classes,
             default_inventory=gm.default_inventory,
@@ -140,7 +144,7 @@ class StopResponse(BaseModel):
     id: uuid.UUID
     stable_id: str = Field(description='Stable identifier from the transit dataset.')
     name: str
-    coordinates: dict = Field(description='GeoJSON Point.')
+    coordinates: GeoJSONPoint = Field(description='GeoJSON Point.')
 
     @staticmethod
     def from_model(stop: StopModel) -> StopResponse:
@@ -148,7 +152,7 @@ class StopResponse(BaseModel):
             id=stop.id,
             stable_id=stop.stable_id,
             name=stop.name,
-            coordinates=stop.coordinates,
+            coordinates=GeoJSONPoint(**mapping(stop.coordinates)),
         )
 
 
@@ -160,7 +164,7 @@ class RouteResponse(BaseModel):
     name: str
     color: str = Field(description='Hex color for rendering.')
     route_type: str = Field(description='metro, bus, tram, rail, or ferry.')
-    shape: dict = Field(description='GeoJSON LineString.')
+    shape: GeoJSONLineString = Field(description='GeoJSON LineString.')
     stop_ids: list[uuid.UUID] = Field(description='Ordered stop IDs along this route.')
 
     @staticmethod
@@ -171,7 +175,7 @@ class RouteResponse(BaseModel):
             name=route.name,
             color=route.color,
             route_type=route.route_type,
-            shape=route.shape,
+            shape=GeoJSONLineString(**mapping(route.shape)),
             stop_ids=stop_ids,
         )
 
@@ -184,7 +188,7 @@ class EffectiveMapResponse(BaseModel):
 
     name: str
     size: MapSize
-    boundary: dict = Field(description='GeoJSON Polygon.')
+    boundary: GeoJSONPolygon = Field(description='GeoJSON Polygon.')
     districts: list
     district_classes: list
     stops: list[StopResponse]
@@ -196,7 +200,7 @@ class EffectiveMapResponse(BaseModel):
         return EffectiveMapResponse(
             name=gm.name,
             size=gm.size,
-            boundary=gm.boundary,
+            boundary=GeoJSONPolygon(**mapping(gm.boundary)),
             districts=gm.districts,
             district_classes=gm.district_classes,
             stops=[StopResponse.from_model(s) for s in data.stops],
@@ -214,7 +218,7 @@ class VisiblePlayer(BaseModel):
     name: str
     color: str
     role: PlayerRole | None
-    coordinates: dict = Field(description='GeoJSON Point — latest reported position.')
+    coordinates: GeoJSONPoint = Field(description='GeoJSON Point — latest reported position.')
     timestamp: datetime
 
 
@@ -228,14 +232,14 @@ class LocationHistoryEntry(BaseModel):
     """A single location update in the post-game replay log."""
 
     player_id: uuid.UUID
-    coordinates: dict = Field(description='GeoJSON Point.')
+    coordinates: GeoJSONPoint = Field(description='GeoJSON Point.')
     timestamp: datetime
 
     @staticmethod
     def from_model(lu: LocationUpdateModel) -> LocationHistoryEntry:
         return LocationHistoryEntry(
             player_id=lu.player_id,
-            coordinates=lu.coordinates,
+            coordinates=GeoJSONPoint(**mapping(lu.coordinates)),
             timestamp=lu.timestamp,
         )
 
@@ -244,7 +248,7 @@ class LocationHistoryEntry(BaseModel):
 
 
 class QuestionResponse(BaseModel):
-    """A question in the game — state machine: asked → in_progress → answerable → answered."""
+    """A question in the game — state machine: asked -> in_progress -> answerable -> answered."""
 
     id: uuid.UUID
     game_id: uuid.UUID
@@ -254,24 +258,31 @@ class QuestionResponse(BaseModel):
     parameters: dict = Field(description='radius_m for radar, min_travel_m for thermometer.')
     asked_by: uuid.UUID = Field(description='Player ID of the seeker who asked.')
     asked_at: datetime
-    seeker_location_start: dict = Field(description='GeoJSON Point — seeker position when asked.')
-    seeker_location_end: dict | None = Field(
+    seeker_location_start: GeoJSONPoint = Field(
+        description='GeoJSON Point — seeker position when asked.'
+    )
+    seeker_location_end: GeoJSONPoint | None = Field(
         description='GeoJSON Point — seeker position at lock-in (thermometer only).'
     )
     answerable_at: datetime | None = Field(
         default=None, description='When the question became answerable. Clients compute deadline.'
     )
     answered_at: datetime | None
-    hider_location: dict | None = Field(
+    hider_location: GeoJSONPoint | None = Field(
         description='GeoJSON Point — hider position at answer time. Hidden from seekers.'
     )
     answer: str | None = Field(description='yes/no for radar, closer/farther for thermometer.')
-    exclusion: dict | None = Field(description='GeoJSON Polygon — the exclusion zone.')
+    exclusion: dict | None = Field(description='GeoJSON geometry — the exclusion zone.')
 
     @staticmethod
     def from_model(
         question: QuestionModel, *, hide_hider_location: bool = False
     ) -> QuestionResponse:
+        def _point_or_none(val: object) -> GeoJSONPoint | None:
+            if val is None:
+                return None
+            return GeoJSONPoint(**mapping(val))  # type: ignore[arg-type]
+
         return QuestionResponse(
             id=question.id,
             game_id=question.game_id,
@@ -281,11 +292,11 @@ class QuestionResponse(BaseModel):
             parameters=question.parameters,
             asked_by=question.asked_by,
             asked_at=question.asked_at,
-            seeker_location_start=question.seeker_location_start,
-            seeker_location_end=question.seeker_location_end,
+            seeker_location_start=GeoJSONPoint(**mapping(question.seeker_location_start)),
+            seeker_location_end=_point_or_none(question.seeker_location_end),
             answerable_at=question.answerable_at,
             answered_at=question.answered_at,
-            hider_location=None if hide_hider_location else question.hider_location,
+            hider_location=None if hide_hider_location else _point_or_none(question.hider_location),
             answer=question.answer,
-            exclusion=question.exclusion,
+            exclusion=dict(mapping(question.exclusion)) if question.exclusion else None,
         )

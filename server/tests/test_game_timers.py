@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
+from shapely.geometry import Point
 from sqlmodel import Session
 
 from hideandseek.models.game import Game
@@ -68,7 +69,7 @@ def _create_answerable_question(session: Session) -> tuple[Game, Question]:
     lu = LocationUpdate(
         player_id=hider.id,
         game_id=game.id,
-        coordinates={'type': 'Point', 'coordinates': [0.0, 51.0]},
+        coordinates=Point(0.0, 51.0),
         timestamp=datetime.now(UTC),
     )
     session.add(lu)
@@ -81,7 +82,7 @@ def _create_answerable_question(session: Session) -> tuple[Game, Question]:
         status=QuestionStatus.answerable,
         parameters={'radius_m': 3000},
         asked_by=seeker.id,
-        seeker_location_start={'type': 'Point', 'coordinates': [-0.1, 51.5]},
+        seeker_location_start=Point(-0.1, 51.5),
         answerable_at=datetime.now(UTC),
     )
     session.add(question)

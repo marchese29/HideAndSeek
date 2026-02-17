@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from geojson_pydantic import Point as GeoJSONPoint
+from shapely.geometry import Point, mapping
 
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_game, get_player_in_game
@@ -32,10 +34,13 @@ def report_location(
     player: Player = Depends(get_player_in_game),
 ) -> LocationReportResponse:
     """Report the caller's location and receive visible player positions."""
+    coords = body.coordinates.coordinates
+    point = Point(float(coords[0]), float(coords[1]))
+
     create_location_update(
         player_id=player.id,
         game_id=game.id,
-        coordinates=body.coordinates.model_dump(),
+        coordinates=point,
         timestamp=body.timestamp,
     )
 
@@ -47,7 +52,7 @@ def report_location(
                 name=vp.player.name,
                 color=vp.player.color,
                 role=vp.player.role,
-                coordinates=vp.coordinates,
+                coordinates=GeoJSONPoint(**mapping(vp.coordinates)),
                 timestamp=vp.timestamp,
             )
             for vp in visible

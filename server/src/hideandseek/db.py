@@ -4,6 +4,7 @@ from contextvars import ContextVar
 from functools import wraps
 from typing import Concatenate
 
+import sqlalchemy as sa
 import structlog
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -20,6 +21,24 @@ if DATABASE_URL.startswith('sqlite'):
 
 engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 
+if DATABASE_URL.startswith('sqlite'):
+    from pathlib import Path
+
+    from geoalchemy2 import load_spatialite
+
+    if 'SPATIALITE_LIBRARY_PATH' not in os.environ:
+        _candidates = [
+            Path('/opt/homebrew/lib/mod_spatialite.dylib'),  # macOS ARM
+            Path('/usr/local/lib/mod_spatialite.dylib'),  # macOS Intel
+            Path('/usr/lib/x86_64-linux-gnu/mod_spatialite.so'),  # Debian/Ubuntu
+        ]
+        for p in _candidates:
+            if p.exists():
+                os.environ['SPATIALITE_LIBRARY_PATH'] = str(p)
+                break
+
+    sa.event.listen(engine, 'connect', load_spatialite)  # type: ignore[attr-defined]
+
 _session_var: ContextVar[Session] = ContextVar('_session_var')
 
 
@@ -34,6 +53,10 @@ def create_db_and_tables() -> None:
     if DATABASE_URL.startswith('sqlite'):
         _db_dir = find_server_root() / 'data'
         _db_dir.mkdir(parents=True, exist_ok=True)
+    elif DATABASE_URL.startswith('postgresql'):
+        with engine.connect() as conn:
+            conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
+            conn.commit()
     SQLModel.metadata.create_all(engine)
 
 

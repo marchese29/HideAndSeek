@@ -1,19 +1,22 @@
 import uuid
 
 import sqlalchemy as sa
+from shapely.geometry import Polygon
 from sqlmodel import Field, Relationship, SQLModel
 
+from hideandseek.models.geo_types import ShapelyGeometry
 from hideandseek.models.types import MapSize
 
 
 class GameMap(SQLModel, table=True):
+    model_config = {'arbitrary_types_allowed': True}  # type: ignore[assignment]
     __tablename__ = 'game_map'  # type: ignore[assignment]
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str
     size: MapSize
     transit_dataset_id: uuid.UUID = Field(foreign_key='transit_dataset.id')
-    boundary: dict = Field(sa_type=sa.JSON)  # GeoJSON Polygon
+    boundary: Polygon = Field(sa_column=sa.Column(ShapelyGeometry('POLYGON', srid=4326)))
     excluded_stop_ids: list = Field(default_factory=list, sa_type=sa.JSON)
     excluded_route_ids: list = Field(default_factory=list, sa_type=sa.JSON)
     districts: list = Field(default_factory=list, sa_type=sa.JSON)

@@ -10,9 +10,6 @@ from hideandseek.models.types import (
     DistanceSlot,
     DistrictClass,
     GameStatus,
-    GeoLineString,
-    GeoPoint,
-    GeoPolygon,
     MapSize,
     PlayerRole,
     PushEventType,
@@ -44,10 +41,6 @@ __all__ = [
     'QuestionStatus',
     'QuestionType',
     'RouteType',
-    # GeoJSON
-    'GeoLineString',
-    'GeoPoint',
-    'GeoPolygon',
     # Value objects
     'DistanceSlot',
     'DistrictClass',

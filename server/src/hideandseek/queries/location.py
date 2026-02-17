@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+from shapely.geometry import Point
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -21,7 +22,7 @@ def create_location_update(
     *,
     player_id: uuid.UUID,
     game_id: uuid.UUID,
-    coordinates: dict,
+    coordinates: Point,
     timestamp: datetime,
 ) -> LocationUpdate:
     """Store a location update."""
@@ -40,7 +41,7 @@ class VisiblePlayerData:
     """A player's latest location, ready for response transformation."""
 
     player: Player
-    coordinates: dict
+    coordinates: Point
     timestamp: datetime
 
 
@@ -113,10 +114,10 @@ def get_latest_location_for_player(
 
 
 @db_read
-def get_avg_seeker_location(session: Session, game: Game) -> dict | None:
+def get_avg_seeker_location(session: Session, game: Game) -> Point | None:
     """Compute the average position of all seekers based on their latest reports.
 
-    Returns a GeoJSON Point dict or None if no seeker locations exist.
+    Returns a shapely Point or None if no seeker locations exist.
     """
     seekers = [p for p in game.players if p.role == PlayerRole.seeker]
     if not seekers:
@@ -127,15 +128,10 @@ def get_avg_seeker_location(session: Session, game: Game) -> dict | None:
     for seeker in seekers:
         lu = get_latest_location_for_player(seeker.id, game.id)
         if lu:
-            coords = lu.coordinates.get('coordinates', [])
-            if len(coords) >= 2:
-                lngs.append(coords[0])
-                lats.append(coords[1])
+            lngs.append(lu.coordinates.x)
+            lats.append(lu.coordinates.y)
 
     if not lngs:
         return None
 
-    return {
-        'type': 'Point',
-        'coordinates': [sum(lngs) / len(lngs), sum(lats) / len(lats)],
-    }
+    return Point(sum(lngs) / len(lngs), sum(lats) / len(lats))

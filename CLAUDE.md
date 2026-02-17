@@ -9,8 +9,9 @@ Geographic "Hide and Seek" game — hiders use public transit to hide in a game 
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.
 - `design/` — AI-generated design artifacts. See `design/CLAUDE.md`.
 - `hooks/` — Git hooks (auto-configured via `core.hooksPath`).
-- `docker-compose.yml` — Docker Compose (PostgreSQL + Redis + API server + Celery worker).
+- `docker-compose.yml` — Docker Compose (PostGIS + Redis + API server + Celery worker).
 - `scripts/dev.sh` — Local dev launcher (uvicorn + Celery worker with Redis).
+- `scripts/manual-test.sh` — End-to-end game flow against a running Docker server (seeds data, exercises all endpoints).
 - `.beads/` — Beads issue tracker.
 
 ## CLAUDE.md Is the Source of Truth
@@ -74,7 +75,10 @@ When ending a work session, complete ALL steps below. Work is NOT complete until
 ## Quick Start
 
 ```bash
-# Server (Docker — preferred for manual testing, closest to prod)
+# System dependency for SpatiaLite (local dev/tests)
+brew install libspatialite
+
+# Server (Docker — preferred for manual testing, closest to prod — uses PostGIS)
 docker compose up --build          # Start all 4 services (localhost:8000)
 docker compose down                # Stop (data preserved in pgdata volume)
 docker compose down -v             # Stop and wipe database

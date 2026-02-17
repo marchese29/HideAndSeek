@@ -29,7 +29,7 @@ Three modes — all serve on `localhost:8000`:
 | | **Docker (preferred)** | **Local + worker** | **Local bare** |
 |---|---|---|---|
 | Start | `docker compose up --build` | `scripts/dev.sh` | `uv run uvicorn hideandseek.main:app --reload` |
-| Database | PostgreSQL 17 | SQLite | SQLite |
+| Database | PostGIS (PostgreSQL 16) | SQLite + SpatiaLite | SQLite + SpatiaLite |
 | Celery | Redis + worker container | Redis + worker process | Auto-detects Redis; eager fallback |
 | Timers | Real (countdown delays) | Real (countdown delays) | Real if Redis running; immediate if eager |
 | Reset DB | `docker compose down -v` | Delete `server/data/` | Delete `server/data/` |
@@ -44,7 +44,7 @@ In production (`ENV=production`): INFO level, JSON renderer, stderr only.
 Always verify server changes with **both** automated checks and manual API calls before committing.
 
 1. **Automated**: `uv run pytest && uv run ruff check . && uv run pyright`
-2. **Manual**: Prefer Docker (`docker compose up --build`) — it runs PostgreSQL, Redis, and the Celery worker, matching the eventual production stack. Local mode works for quick iteration but uses SQLite and may not exercise timer/worker behavior the same way. Seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created, timer tasks in worker logs). To reset: `docker compose down -v` (Docker) or delete `server/data/` (local).
+2. **Manual**: Prefer Docker (`docker compose up --build`) — it runs PostGIS, Redis, and the Celery worker, matching the eventual production stack. Run `scripts/manual-test.sh` for a full end-to-end game flow (seeds data, exercises all endpoints). For ad-hoc testing, seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created, timer tasks in worker logs). To reset: `docker compose down -v` (Docker) or delete `server/data/` (local).
 
 Manual testing catches wiring and serialization issues that unit tests miss.
 
@@ -56,7 +56,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - `src/hideandseek/db.py` — Database engine (`DATABASE_URL` env var, defaults to SQLite), `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `current_session()`, `@db_read`/`@db_write` decorators
 - `Dockerfile` — Multi-stage build using `uv` image (Python 3.12, bookworm-slim)
 - `src/hideandseek/utils.py` — Shared utilities (`find_server_root()` — walks up to `pyproject.toml`)
-- `src/hideandseek/geo.py` — Pure geographic math: `haversine(lat1, lon1, lat2, lon2)` (great-circle distance in meters), `geojson_distance(point_a, point_b)` (convenience wrapper for GeoJSON Point dicts)
+- `src/hideandseek/geo.py` — Pure geographic math: `haversine(a, b)` (great-circle distance in meters between `(lat, lon)` tuples), `distance(point_a, point_b)` (convenience wrapper for shapely Points)
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/celery_app.py` — Celery app instance, config from `celery_config`, autodiscovers `hideandseek.tasks`
@@ -65,7 +65,8 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - `game_timers.py` — `transition_hiding_to_seeking`, `auto_answer_question` (game timer tasks)
   - `push.py` — `send_push` (push delivery task with retry)
 - `src/hideandseek/models/` — SQLModel table models and types
-  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, `PushEventType`, etc.), GeoJSON Pydantic types, value objects
+  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, `PushEventType`, etc.), value objects
+  - `geo_types.py` — `ShapelyGeometry(Geometry)` column type for transparent shapely↔WKB conversion
   - `transit.py` — `TransitDataset`, `Stop`, `Route`, `RouteStop`
   - `game_map.py` — `GameMap`
   - `game.py` — `Game`, `Player`
@@ -109,7 +110,13 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). All push delivery goes through the `send_push` Celery task (with retry). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
 - **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) create test data with sensible defaults and accept `**overrides`.
 - **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
-- **Geo math**: `geo.py` provides pure distance functions (`haversine`, `geojson_distance`). Answer computation (radar yes/no, thermometer closer/farther) lives inline in the router and game_timers task. Exclusion zone geometry (circle polygons, half-plane polygons) is still deferred (`exclusion: null`).
+- **Geometry — three layers**: Geometry flows through three representations:
+  - **API boundary** — GeoJSON via `geojson-pydantic` types (`Point`, `Polygon`, `LineString`). Requests accept GeoJSON; responses return GeoJSON.
+  - **Python** — shapely objects (`Point`, `Polygon`, `LineString`). All model attributes, query params, and business logic use shapely. Convert with `shapely.geometry.mapping()` (shapely→GeoJSON) and `shapely.geometry.shape()` (GeoJSON→shapely).
+  - **Database** — native spatial columns (PostGIS for Docker/production, SpatiaLite for local/tests). The `ShapelyGeometry(Geometry)` column type in `models/geo_types.py` transparently converts between shapely and WKB — model code never touches WKB directly.
+
+  Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column type bridges Python↔DB automatically.
+- **Geo math**: `geo.py` provides pure distance functions: `haversine(a, b)` for `(lat, lon)` tuples and `distance(point_a, point_b)` for shapely Points. Answer computation (radar yes/no, thermometer closer/farther) lives inline in the router and game_timers task. Exclusion zone geometry (circle polygons, half-plane polygons) is still deferred (`exclusion: null`).
 
 ## Game States
 
@@ -123,13 +130,13 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 
 - SQLModel for all table models (wraps SQLAlchemy + Pydantic).
 - **Do NOT use `from __future__ import annotations` in model files or `db.py`** — it breaks SQLModel relationship resolution and PEP 695 generics. Use quoted string forward references instead (e.g., `game_map: 'GameMap' = Relationship(...)`).
-- GeoJSON geometry stored as JSON columns (`sa_type=sa.JSON`). Use `GeoPoint`, `GeoLineString`, `GeoPolygon` Pydantic types for API validation.
+- Geometry uses the three-layer pattern (see Architecture Patterns): GeoJSON at API, shapely in Python, native spatial in DB. System dep: `brew install libspatialite` (auto-detected; `SPATIALITE_LIBRARY_PATH` override if non-standard).
 - Value objects (TimingRules, QuestionInventory, etc.) stored as JSON columns on their parent table.
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int).
 - Relationships use bottom-of-file imports and quoted forward references to avoid circular dependencies.
 - Enums are `StrEnum` — stored as VARCHAR, human-readable in DB.
 - **Active development — no migration or backwards-compatibility concerns.** There is no production data. Schema changes go directly in the models and `create_all` recreates tables on startup. To reset: delete `server/data/` (local SQLite) or `docker compose down -v` (Docker PostgreSQL). Alembic will be added when the schema stabilizes and real data exists.
-- Tests use in-memory SQLite with `StaticPool` via the `session` and `client` fixtures in `conftest.py`.
+- Tests use in-memory SQLite + SpatiaLite with `StaticPool` via the `session` and `client` fixtures in `conftest.py`. Requires `SPATIALITE_LIBRARY_PATH` env var.
 
 ## Conventions
 
