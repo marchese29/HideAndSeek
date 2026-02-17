@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from hideandseek.celery_app import app as celery_app
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_game, get_player_in_game
+from hideandseek.geo import geojson_distance
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import (
     GameStatus,
@@ -29,7 +30,7 @@ from hideandseek.queries.questions import (
     update_question,
 )
 from hideandseek.schemas.request import AskQuestionRequest
-from hideandseek.schemas.response import QuestionPreview, QuestionResponse
+from hideandseek.schemas.response import QuestionResponse
 from hideandseek.tasks.game_timers import auto_answer_question
 from hideandseek.tasks.push import send_push
 
@@ -181,25 +182,6 @@ def lock_in_question(
     return QuestionResponse.from_model(question)
 
 
-@router.get(
-    '/questions/{question_id}/preview',
-    response_model=QuestionPreview,
-)
-def preview_question(
-    question_id: uuid.UUID,
-    game: Game = Depends(get_game),
-) -> QuestionPreview:
-    """Live preview of what the answer would be. Geo math is stubbed."""
-    question = get_question(question_id)
-    if not question or question.game_id != game.id:
-        raise HTTPException(status_code=404, detail='Question not found.')
-    if question.status != QuestionStatus.answerable:
-        raise HTTPException(status_code=409, detail='Question is not answerable.')
-
-    # Geo math deferred — return placeholder
-    return QuestionPreview(answer='pending', exclusion=None)
-
-
 @router.post(
     '/questions/{question_id}/answer',
     response_model=QuestionResponse,
@@ -227,12 +209,24 @@ def answer_question(
     latest = get_latest_location_for_player(player.id, game.id)
     hider_location = latest.coordinates if latest else None
 
-    # Geo math deferred — store placeholder answer + null exclusion
+    # Compute answer from distance, or fall back to 'pending' if no hider location
+    if hider_location:
+        if question.question_type == QuestionType.radar:
+            dist = geojson_distance(question.seeker_location_start, hider_location)
+            answer = 'yes' if dist <= question.parameters['radius_m'] else 'no'
+        else:
+            dist_start = geojson_distance(question.seeker_location_start, hider_location)
+            # seeker_location_end is guaranteed set after lock-in
+            dist_end = geojson_distance(question.seeker_location_end, hider_location)  # type: ignore[arg-type]
+            answer = 'closer' if dist_end < dist_start else 'farther'
+    else:
+        answer = 'pending'
+
     question = update_question(
         question,
         {
             'hider_location': hider_location,
-            'answer': 'pending',
+            'answer': answer,
             'exclusion': None,
             'answered_at': datetime.now(UTC),
             'status': QuestionStatus.answered,

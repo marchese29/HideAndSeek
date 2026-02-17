@@ -56,6 +56,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - `src/hideandseek/db.py` — Database engine (`DATABASE_URL` env var, defaults to SQLite), `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `current_session()`, `@db_read`/`@db_write` decorators
 - `Dockerfile` — Multi-stage build using `uv` image (Python 3.12, bookworm-slim)
 - `src/hideandseek/utils.py` — Shared utilities (`find_server_root()` — walks up to `pyproject.toml`)
+- `src/hideandseek/geo.py` — Pure geographic math: `haversine(lat1, lon1, lat2, lon2)` (great-circle distance in meters), `geojson_distance(point_a, point_b)` (convenience wrapper for GeoJSON Point dicts)
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/celery_app.py` — Celery app instance, config from `celery_config`, autodiscovers `hideandseek.tasks`
@@ -88,7 +89,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - `maps.py` — `GET /maps`, `GET /maps/{map_id}`
   - `games.py` — `POST /games`, `POST /games/join`, `GET /games/{game_id}`, `PATCH .../players/{player_id}`, `POST .../start`, `POST .../end`, `GET .../map`
   - `location.py` — `POST .../location`, `GET .../location-history`
-  - `questions.py` — `POST .../questions`, `POST .../questions/{id}/lock-in`, `GET .../questions/{id}/preview`, `POST .../questions/{id}/answer`, `GET .../questions`
+  - `questions.py` — `POST .../questions`, `POST .../questions/{id}/lock-in`, `POST .../questions/{id}/answer`, `GET .../questions`
 - `tests/conftest.py` — In-memory SQLite fixtures (`session`, `client`) and factory functions
 - `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`)
 - `scripts/generate_openapi.py` — dumps `app.openapi()` to `openapi/openapi.yaml`
@@ -108,7 +109,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). All push delivery goes through the `send_push` Celery task (with retry). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
 - **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) create test data with sensible defaults and accept `**overrides`.
 - **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
-- **Geo math deferred**: Question answer computation and exclusion zone geometry are stubbed (`answer: "pending"`, `exclusion: null`). A future `geo.py` module will implement haversine distance, radar circles, and thermometer half-planes.
+- **Geo math**: `geo.py` provides pure distance functions (`haversine`, `geojson_distance`). Answer computation (radar yes/no, thermometer closer/farther) lives inline in the router and game_timers task. Exclusion zone geometry (circle polygons, half-plane polygons) is still deferred (`exclusion: null`).
 
 ## Game States
 

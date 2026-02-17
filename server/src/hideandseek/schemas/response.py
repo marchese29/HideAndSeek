@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from hideandseek.models.types import (
     GameStatus,
-    GeoPolygon,
     MapSize,
     PlayerRole,
     QuestionStatus,
@@ -290,10 +289,3 @@ class QuestionResponse(BaseModel):
             answer=question.answer,
             exclusion=question.exclusion,
         )
-
-
-class QuestionPreview(BaseModel):
-    """Live preview of what the answer would be if the hider committed now."""
-
-    answer: str | None = Field(description='Computed answer based on current hider position.')
-    exclusion: GeoPolygon | None = Field(description='Computed exclusion zone.')

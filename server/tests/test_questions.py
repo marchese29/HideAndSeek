@@ -216,45 +216,6 @@ def test_lock_in_wrong_status(client: TestClient, session: Session):
     assert resp.status_code == 409
 
 
-# ── GET /games/{game_id}/questions/{id}/preview ─────────────────────────────
-
-
-def test_preview_question(client: TestClient, session: Session):
-    game, hider, seeker = _setup_seeking_game(client, session)
-    resp = client.post(
-        f'/games/{game.id}/questions',
-        json={'question_type': 'radar', 'slot_index': 0},
-        headers=_headers(seeker.client_id),
-    )
-    question_id = resp.json()['id']
-
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}/preview',
-        headers=_headers(hider.client_id),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['answer'] == 'pending'  # geo math stubbed
-    assert data['exclusion'] is None
-
-
-def test_preview_not_answerable(client: TestClient, session: Session):
-    game, hider, seeker = _setup_seeking_game(client, session)
-    resp = client.post(
-        f'/games/{game.id}/questions',
-        json={'question_type': 'thermometer', 'slot_index': 0},
-        headers=_headers(seeker.client_id),
-    )
-    question_id = resp.json()['id']
-
-    # in_progress, not answerable yet
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}/preview',
-        headers=_headers(hider.client_id),
-    )
-    assert resp.status_code == 409
-
-
 # ── POST /games/{game_id}/questions/{id}/answer ─────────────────────────────
 
 
@@ -275,7 +236,7 @@ def test_answer_question(client: TestClient, session: Session):
     data = resp.json()
     assert data['status'] == 'answered'
     assert data['hider_location'] is not None
-    assert data['answer'] == 'pending'  # geo math stubbed
+    assert data['answer'] == 'no'  # hider ~56 km from seeker, outside 3 km radar
     assert data['answered_at'] is not None
 
 

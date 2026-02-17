@@ -97,7 +97,7 @@ def test_auto_answer_question(session: Session):
     session.refresh(question)
     assert question.status == QuestionStatus.answered
     assert question.answered_at is not None
-    assert question.answer == 'pending'
+    assert question.answer == 'no'  # hider ~56 km from seeker, outside 3 km radar
     assert question.hider_location is not None
 
 

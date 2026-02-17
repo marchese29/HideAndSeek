@@ -494,41 +494,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /games/{game_id}/questions/{question_id}/preview:
-    get:
-      tags:
-      - questions
-      summary: Preview Question
-      description: Live preview of what the answer would be. Geo math is stubbed.
-      operationId: preview_question_games__game_id__questions__question_id__preview_get
-      parameters:
-      - name: question_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Question Id
-      - name: game_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Game Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/QuestionPreview'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/questions/{question_id}/answer:
     post:
       tags:
@@ -782,29 +747,6 @@ components:
       required:
       - coordinates
       title: GeoPoint
-    GeoPolygon:
-      properties:
-        type:
-          type: string
-          const: Polygon
-          title: Type
-          default: Polygon
-        coordinates:
-          items:
-            items:
-              prefixItems:
-              - type: number
-              - type: number
-              type: array
-              maxItems: 2
-              minItems: 2
-            type: array
-          type: array
-          title: Coordinates
-      type: object
-      required:
-      - coordinates
-      title: GeoPolygon
     HTTPValidationError:
       properties:
         detail:
@@ -1053,26 +995,6 @@ components:
       title: PlayerUpdate
       description: Partial update to a player. All fields are optional; only provided
         fields are applied.
-    QuestionPreview:
-      properties:
-        answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Answer
-          description: Computed answer based on current hider position.
-        exclusion:
-          anyOf:
-          - $ref: '#/components/schemas/GeoPolygon'
-          - type: 'null'
-          description: Computed exclusion zone.
-      type: object
-      required:
-      - answer
-      - exclusion
-      title: QuestionPreview
-      description: Live preview of what the answer would be if the hider committed
-        now.
     QuestionResponse:
       properties:
         id:
