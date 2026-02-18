@@ -1,8 +1,8 @@
 # Matching & Measuring Questions
 
 > Status: **Draft**
-> Last updated: 2026-02-16
-> Prerequisite: PostGIS migration (separate task — convert existing JSON geometry columns to PostGIS `geometry`/`geography` types, add GeoAlchemy2)
+> Last updated: 2026-02-17
+> Prerequisite: ~~PostGIS migration~~ Done (commit `8988690` — geoalchemy2 + shapely with `ShapelyGeometry` column type)
 
 Two new question types that expand the game beyond point-to-point distance checks. Both rely on resolving "nearest qualifying X" from a player's position — matching compares identity, measuring compares distance.
 
@@ -23,38 +23,71 @@ Two new question types that expand the game beyond point-to-point distance check
 
 ## Feature Categories
 
-Each category is either **map data** (baked into the GameMap, stored as PostGIS geometry, static for the life of the map) or **Google Maps** (resolved dynamically via the Places API at question time).
+Every category resolves to "find nearest from a set of known features." The data source for each category is determined per-map:
 
-### Guiding Principle
+- **Map-defined** (preferred) — features are stored as `MapFeature` rows with geometry. The map creator imports datasets (public data, manual curation) when building the map. Enables exclusion zone computation because we have the complete dataset.
+- **Google Maps fallback** — if the map doesn't define features for a category and doesn't explicitly exclude it, the server resolves via the Places API at question time. No exclusion zones outside of endgame (incomplete data).
+- **Excluded** — the map explicitly marks a category as unavailable. The category doesn't appear in the game.
 
-If it's geographic infrastructure that shapes how the game plays, it's map data. If it's the kind of thing a player would search for on Google Maps during a real game, use the API.
+### Per-Map Category States
 
-Map data is appropriate for features that are:
-- Structural/geographic (boundaries, coastlines, transit networks)
-- Finite and well-defined within a game area
-- Unlikely to change during the lifespan of a map
+For any given category on a given map, exactly one of:
 
-Google Maps is appropriate for features that are:
-- Numerous and discoverable (POIs)
-- Subject to opening/closing over time
-- What a real player would literally search for on Google Maps
+1. **Map defines features** → use them. Exclusion zones supported.
+2. **Map has no features, category not excluded** → Google Maps fallback. No exclusion zones (except endgame).
+3. **Map explicitly excludes category** → category unavailable for this game.
+
+This gives map creators full control. Want better park data than Google? Import a parks dataset. Playing on a flat map with no mountains? Exclude the category. No features defined and no exclusion? Google fills in.
 
 ### Category Taxonomy
 
-| Category | Data Source | Geometry Type | Resolution Method |
-|---|---|---|---|
-| Administrative area | Map data | Polygon | `ST_Contains` for matching, `ST_Distance` to boundary for measuring |
-| Transit line | Map data | LineString | `ST_Distance` to line, matching by route ID of nearest line |
-| Body of water | Map data | Polygon / LineString | `ST_Distance` to geometry, matching by feature ID |
-| Airport | Google Maps | Point | Nearby Search, `type: "airport"` |
-| Hospital | Google Maps | Point | Nearby Search, `type: "hospital"` |
-| Library | Google Maps | Point | Nearby Search, `type: "library"` |
-| Park | Google Maps | Point | Nearby Search, `type: "park"` |
-| Museum | Google Maps | Point | Nearby Search, `type: "museum"` |
-| Zoo | Google Maps | Point | Nearby Search, `type: "zoo"` |
-| Theme park | Google Maps | Point | Nearby Search, `type: "amusement_park"` |
-| Golf course | Google Maps | Point | Nearby Search, `type: "golf_course"` |
-| Foreign consulate | Google Maps | Point | Nearby Search, `type: "embassy"` |
+Matching and measuring have different category lists — not every category supports both question types. Each question may only be asked once per game (so admin division with 3 defined classes = 3 available questions). Running out of inventory is uncommon but choosing when to use each question is part of the strategy.
+
+**Matching Categories** — "Is your nearest ____ the same as mine?"
+
+| Category | Geometry | Map Resolution | Google Fallback Type | Notes |
+|---|---|---|---|---|
+| Commercial airport | Point | `ST_Distance`, compare IDs | `airport` | |
+| Transit line | LineString | `ST_Distance` on route shape, compare route IDs | — | Map-only (uses existing transit dataset) |
+| Admin division (per class) | Polygon | `ST_Contains`, compare IDs | — | Map-only. Classes 1–4, each class = separate question |
+| Mountain | Point | `ST_Distance`, compare IDs | — | Map-only. Peak datasets are readily available |
+| Landmass | Polygon | `ST_Contains`, compare IDs | — | Map-only |
+| Park | Point | `ST_Distance`, compare IDs | `park` | Uses pin location, accepts edge cases for large parks |
+| Amusement park | Point | `ST_Distance`, compare IDs | `amusement_park` | |
+| Zoo | Point | `ST_Distance`, compare IDs | `zoo` | |
+| Aquarium | Point | `ST_Distance`, compare IDs | `aquarium` | |
+| Golf course | Point | `ST_Distance`, compare IDs | `golf_course` | |
+| Museum | Point | `ST_Distance`, compare IDs | `museum` | |
+| Movie theater | Point | `ST_Distance`, compare IDs | `movie_theater` | |
+| Hospital | Point | `ST_Distance`, compare IDs | `hospital` | |
+| Library | Point | `ST_Distance`, compare IDs | `library` | |
+| Foreign consulate | Point | `ST_Distance`, compare IDs | `embassy` | |
+| ~~Street or path~~ | — | — | — | **Punted.** Only useful in endgame; complex to resolve reliably |
+
+**Measuring Categories** — "Compared to me, are you closer to or further from ____?"
+
+| Category | Geometry | Map Resolution | Google Fallback Type | Notes |
+|---|---|---|---|---|
+| Commercial airport | Point | `ST_Distance` + haversine | `airport` | |
+| High speed train line | LineString | `ST_Distance` + haversine | — | Map-only. Distinct from regular transit lines |
+| Rail station | Point | `ST_Distance` + haversine | `train_station` | Distinct from in-game transit stops — includes all rail stations regardless of game exclusions |
+| International border | LineString | `ST_Distance` + haversine | — | Map-only |
+| Admin division border (per class) | LineString | `ST_Distance` + haversine | — | Map-only. Classes 1–2 only, each class = separate question |
+| Coastline | LineString | `ST_Distance` + haversine | — | Map-only |
+| Mountain | Point | `ST_Distance` + haversine | — | Map-only |
+| Park | Point | `ST_Distance` + haversine | `park` | Uses pin location, accepts edge cases |
+| Amusement park | Point | `ST_Distance` + haversine | `amusement_park` | |
+| Zoo | Point | `ST_Distance` + haversine | `zoo` | |
+| Aquarium | Point | `ST_Distance` + haversine | `aquarium` | |
+| Golf course | Point | `ST_Distance` + haversine | `golf_course` | |
+| Museum | Point | `ST_Distance` + haversine | `museum` | |
+| Movie theater | Point | `ST_Distance` + haversine | `movie_theater` | |
+| Hospital | Point | `ST_Distance` + haversine | `hospital` | |
+| Library | Point | `ST_Distance` + haversine | `library` | |
+| Foreign consulate | Point | `ST_Distance` + haversine | `embassy` | |
+| ~~Body of water~~ | — | — | — | **Punted.** Rules allow any named body of water that isn't a pool — rivers, lakes, ponds, etc. Curating this would be extremely burdensome for map creators. Google Maps doesn't have a clean category for it either. Revisit later |
+
+Categories marked "Map-only" have no Google fallback — if the map doesn't define features for them, the category is unavailable.
 
 ### Bona Fide Filtering (Google Maps Categories)
 
@@ -81,28 +114,71 @@ The search radius for Google Maps queries follows the same hierarchy: a global d
 
 ## Map Data: New Tables
 
-Map-sourced categories require new geometry stored alongside the GameMap. These are stored as proper PostGIS geometry with spatial indexes.
+Map-defined features are stored as standalone entities and linked to maps via a join table. This allows multiple maps to share the same feature datasets — e.g., a "US State Boundaries" dataset can be imported once and linked to any map covering that area. Map creators build on each other's work.
 
 ### MapFeature Table
 
-A single table for all map-scoped geographic features (administrative areas, water features). Transit lines already exist in the transit dataset.
+Features exist independently of any map. A single table for **all** feature types — geographic infrastructure (admin areas, borders, coastlines) and POIs (parks, hospitals, airports). Transit lines are the one exception (they already exist in the transit dataset).
 
 ```python
+class FeatureCategory(str, Enum):
+    # Matching-only
+    transit_line = "transit_line"
+    administrative_area = "administrative_area"
+    landmass = "landmass"
+
+    # Measuring-only
+    high_speed_train_line = "high_speed_train_line"
+    rail_station = "rail_station"
+    international_border = "international_border"
+    admin_division_border = "admin_division_border"
+    coastline = "coastline"
+
+    # Both matching and measuring
+    commercial_airport = "commercial_airport"
+    mountain = "mountain"
+    park = "park"
+    amusement_park = "amusement_park"
+    zoo = "zoo"
+    aquarium = "aquarium"
+    golf_course = "golf_course"
+    museum = "museum"
+    movie_theater = "movie_theater"
+    hospital = "hospital"
+    library = "library"
+    foreign_consulate = "foreign_consulate"
+
+
 class MapFeature(SQLModel, table=True):
     __tablename__ = 'map_feature'
 
     id: uuid.UUID                          # PK
-    map_id: uuid.UUID                      # FK → GameMap
-    category: str                          # "administrative_area", "water_feature"
-    stable_id: str                         # Unique within map+category (e.g., "california")
-    name: str                              # Human-readable (e.g., "California")
-    feature_class: int | None              # Tier for hierarchical categories (admin areas)
-    geometry: Geometry                     # PostGIS geometry column (Polygon, LineString, etc.)
+    category: FeatureCategory
+    stable_id: str                         # Unique within category (e.g., "california", "central-park-nyc")
+    name: str                              # Human-readable (e.g., "California", "Central Park")
+    feature_class: int | None              # Tier for hierarchical categories (admin areas, borders)
+    geometry: BaseGeometry = Field(        # Point, Polygon, LineString depending on category
+        sa_column=sa.Column(ShapelyGeometry('GEOMETRY', srid=4326))
+    )
 ```
 
-Spatial index on `geometry`. Composite unique constraint on `(map_id, category, stable_id)`.
+Composite unique constraint on `(category, stable_id)`.
 
-**Why one table instead of separate tables per category?** The resolution logic is the same — find nearest geometry of a given category from a point. A single table with a `category` discriminator keeps the query layer simple and avoids table proliferation as categories grow.
+### GameMapFeature Join Table
+
+Links features to maps. A map includes a feature by creating a row here. Querying "all parks on this map" is a join through this table.
+
+```python
+class GameMapFeature(SQLModel, table=True):
+    __tablename__ = 'game_map_feature'
+
+    game_map_id: uuid.UUID                 # FK → GameMap (composite PK)
+    map_feature_id: uuid.UUID              # FK → MapFeature (composite PK)
+```
+
+Composite primary key on `(game_map_id, map_feature_id)`.
+
+**Why one table instead of separate tables per category?** The resolution logic is the same — find nearest geometry of a given category from a point. A single `MapFeature` table with a `category` discriminator keeps the query layer simple and avoids table proliferation as categories grow. A map with imported park, hospital, and airport datasets just has more rows linked through `GameMapFeature`.
 
 ### Feature Classes (Hierarchical Categories)
 
@@ -118,20 +194,28 @@ feature_classes: list = Field(default_factory=list, sa_type=sa.JSON)
 # e.g., [{"category": "administrative_area", "feature_class": 1, "label": "State"}]
 ```
 
-When asking a question about administrative areas, the seeker **must** specify which class. The question is "are you in the same state as me?" or "are you closer to a state border?" — never "any border type." The `feature_class` is a required parameter for administrative area questions. The inventory slot can lock this, or the seeker picks at ask time.
+When asking a question about administrative areas, the seeker **must** specify which class. The question is "are you in the same state as me?" (`administrative_area`, class 1) or "are you closer to a state border?" (`admin_division_border`, class 1) — never "any border type." The `feature_class` is a required parameter for these questions.
 
-### Transit Lines for Matching/Measuring
+### Transit Lines (Matching Only)
 
-Transit routes already exist in the transit dataset with `shape` geometry (LineString). After PostGIS migration, these become proper PostGIS geometry columns. Resolution uses:
-
-- **Matching**: `ST_Distance(route.shape, point)` ordered ascending, take the nearest → compare route IDs
-- **Measuring**: `ST_Distance(route.shape, point)` → compare distances
+The `transit_line` category supports matching only ("is your nearest transit line the same as mine?"). Transit routes already exist in the transit dataset with `shape: LineString` as a `ShapelyGeometry` column. Resolution uses the DB to find the nearest route (spatial index sort with exclusion filtering), then compares route IDs.
 
 No new tables needed. The `effective_map` query already filters routes by the game map's exclusions — the same filtered set is used for question resolution.
 
-### What About Administrative Borders?
+**High speed train lines** (`high_speed_train_line`) are a separate measuring-only category stored in `MapFeature`, distinct from the in-game transit dataset. These are curated by the map creator and represent long-distance rail corridors (e.g., Shinkansen, TGV), not local transit routes.
 
-"Border" isn't a separate feature — it's derived from administrative area boundaries. "Are you closer to a border?" means "what is your distance to the nearest edge of any administrative area polygon?" This is `ST_Distance(point, ST_Boundary(polygon))`, not a separate dataset.
+### Borders vs Administrative Area Boundaries
+
+Borders are **not** derived from administrative area polygon boundaries at query time. A polygon's boundary includes coastlines, map edges, and other non-border perimeters — the Pacific coastline of California isn't a "state border" in the game sense.
+
+Instead, borders are stored as separate `MapFeature` entries with LineString geometry representing the shared edge between two adjacent areas. When building a map, the map creator extracts these shared edges and stores them explicitly. Two separate categories:
+
+- **`admin_division_border`** — shared edges between adjacent admin divisions. Uses the same `feature_class` tiers (e.g., class 1 = state borders, class 2 = county borders). Classes 1–2 only. Measuring only.
+- **`international_border`** — country borders. No `feature_class` tiers. Measuring only.
+
+Administrative areas and borders support different question types:
+- **`administrative_area`** → matching only ("are you in the same state?")
+- **`admin_division_border`** / **`international_border`** → measuring only ("are you closer to a state border?")
 
 ---
 
@@ -173,7 +257,7 @@ POST /games/{game_id}/questions/preview
 }
 ```
 
-For map-data categories (admin areas, transit lines, water features), the server resolves against PostGIS geometry instead of calling Google Maps. The response shape is the same — `place_id` is replaced with `feature_id`:
+For map-defined categories, the server resolves against `MapFeature` rows in the DB. The response shape is the same — `place_id` is replaced with `feature_id`:
 
 ```json
 {
@@ -285,35 +369,48 @@ For map-sourced categories, `place_id` is replaced with `feature_id`:
 
 ---
 
-## Inventory Changes
+## Inventory & Available Categories
 
-The current `QuestionInventory` has typed slot lists with `DistanceSlot`. Matching and measuring don't use distance — they use categories.
+### Once-Per-Game Rule
+
+Each matching or measuring category may only be asked **once per game**. For categories with `feature_class` (admin divisions, admin division borders), each class counts as a separate question — a map with 3 admin division classes gives 3 matching questions.
+
+Running out of inventory is uncommon, but choosing when to use each question is part of the strategy (e.g., saving certain categories for endgame when they're more informative).
 
 ### Updated Inventory Model
 
-```python
-class CategorySlot(BaseModel):
-    category: str | None = None  # null = seeker picks at ask time
+Matching and measuring inventory is the set of available categories, not a slot list. The `QuestionInventory` tracks which categories have been used:
 
+```python
 class QuestionInventory(BaseModel):
     radars: list[DistanceSlot] = []
     thermometers: list[DistanceSlot] = []
-    matching: list[CategorySlot] = []
-    measuring: list[CategorySlot] = []
+    matching_used: list[str] = []          # e.g., ["hospital", "administrative_area:1"]
+    measuring_used: list[str] = []         # e.g., ["commercial_airport"]
 ```
 
-A `CategorySlot` with `category: null` means the seeker chooses the category when asking (from the set of categories available on this map + Google Maps categories). A slot with `category: "hospital"` locks it to hospitals.
-
-For administrative area questions, the `feature_class` (state vs county, etc.) is specified at ask time as a question parameter — analogous to how radar has `radius_m` and thermometer has `min_travel_m`. The inventory slot determines the category, the seeker determines the granularity.
+A category is available if it's in the game's available set (see below) and not yet in the `_used` list. For classed categories, the key includes the class (e.g., `"administrative_area:1"`).
 
 ### Available Categories
 
-Which categories are available for a game depends on what the map provides:
+Which categories are available for a game depends on the map's state for each category:
 
-- **Always available** (Google Maps): airport, hospital, library, park, museum, zoo, theme_park, golf_course, consulate
-- **Available if map defines them**: administrative_area, transit_line, water_feature
+1. **Map defines features** (`GameMapFeature` rows exist for this category) → category available, uses map data
+2. **Map has no features, category not excluded** → category available via Google Maps fallback (only for categories with a Google fallback type — see taxonomy)
+3. **Map explicitly excludes category** → category unavailable
 
-The client discovers available categories from the map data (presence of `MapFeature` rows for the map, transit routes in the dataset) plus the hardcoded Google Maps list.
+```python
+# New JSON column on GameMap
+excluded_categories: list[str] = Field(default_factory=list, sa_type=sa.JSON)
+# e.g., ["mountain", "landmass"]  — these categories won't appear in the game
+```
+
+Categories with no Google fallback type (marked "Map-only" in the taxonomy) are only available if the map defines features for them. If the map has no transit lines and no mountains, those categories simply aren't in the game — no explicit exclusion needed.
+
+The client discovers available categories from the map data:
+- Query `GameMapFeature` join to find which categories the map defines
+- Check `excluded_categories` on `GameMap` to filter out excluded ones
+- Add Google fallback categories that aren't excluded and don't have map-defined features
 
 ---
 
@@ -321,11 +418,13 @@ The client discovers available categories from the map data (presence of `MapFea
 
 ### Matching
 
+The source (`map_data` or `google_maps`) is determined per-map per-category at question time — see "Per-Map Category States" above.
+
 ```python
 if source == "map_data":
     seeker_feature = resolve_map_feature(category, seeker_location, game_map)
     hider_feature = resolve_map_feature(category, hider_location, game_map)
-else:
+else:  # google_maps fallback
     seeker_feature = resolve_google_place(category, seeker_location, filters)
     hider_feature = resolve_google_place(category, hider_location, filters)
 
@@ -341,11 +440,11 @@ else:
 if source == "map_data":
     seeker_dist = distance_to_nearest_feature(category, seeker_location, game_map)
     hider_dist = distance_to_nearest_feature(category, hider_location, game_map)
-else:
+else:  # google_maps fallback
     seeker_place = resolve_google_place(category, seeker_location, filters)
     hider_place = resolve_google_place(category, hider_location, filters)
-    seeker_dist = geojson_distance(seeker_location, seeker_place.location)
-    hider_dist = geojson_distance(hider_location, hider_place.location)
+    seeker_dist = haversine_distance(seeker_location, seeker_place.location)
+    hider_dist = haversine_distance(hider_location, hider_place.location)
 
 if seeker_dist is None or hider_dist is None:
     answer = None  # null — question not answerable
@@ -361,64 +460,87 @@ The game provides for a `null` answer meaning "question not answerable." This ca
 - No qualifying feature is found for the category at one or both player positions (e.g., no operational hospital within search radius)
 - A player's position can't be resolved (e.g., no location data available for auto-answer)
 
-This is expected to be rare for most categories but is a legitimate game outcome. The slot is still consumed — the question was asked, it just couldn't produce a definitive answer.
+This is expected to be rare for most categories but is a legitimate game outcome. The question is still consumed (marked as used for that category) — it just couldn't produce a definitive answer.
 
-### PostGIS Resolution Queries
+### Python-Side Resolution (shapely)
 
-These are the spatial queries needed for map-data categories:
+Spatial resolution for map-data categories splits responsibility between the database and Python:
+
+- **Database** — spatial filtering and sorting. Uses spatial indexes to find the containing polygon or nearest feature without loading bulk geometry into memory. PostGIS uses the `<->` KNN operator for indexed nearest-neighbor lookups; SpatiaLite falls back to a full scan (fine for test data sizes).
+- **Python** — distance computation. Once the DB returns the relevant feature(s), Python computes geodesic distance in meters using `nearest_points` + haversine, consistent with how radar and thermometer already compute answers.
+
+**Core distance pattern** — given a feature returned by the DB, compute distance in meters:
+
+```python
+from shapely.ops import nearest_points
+from hideandseek.geo import haversine
+
+def distance_to_feature(player: Point, feature_geometry: BaseGeometry) -> float:
+    """Distance in meters from a player point to the nearest point on a geometry."""
+    nearest_pt = nearest_points(feature_geometry, player)[0]
+    return haversine((nearest_pt.y, nearest_pt.x), (player.y, player.x))
+```
+
+All map-defined queries join through `GameMapFeature` to scope features to the current map.
 
 **Administrative area — matching (point-in-polygon):**
-```sql
-SELECT stable_id, name FROM map_feature
-WHERE map_id = :map_id AND category = 'administrative_area'
-  AND feature_class = :class
-  AND ST_Contains(geometry, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326))
-LIMIT 1;
+
+The DB filters to the polygon containing the player:
+
+```python
+stmt = (
+    select(MapFeature)
+    .join(GameMapFeature)
+    .where(
+        GameMapFeature.game_map_id == map_id,
+        MapFeature.category == FeatureCategory.administrative_area,
+        MapFeature.feature_class == class_id,
+        func.ST_Contains(MapFeature.geometry, player_wkb),
+    )
+    .limit(1)
+)
 ```
 
-**Administrative area — measuring (distance to nearest boundary edge of specified class):**
-```sql
-SELECT stable_id, name, ST_Distance(
-    ST_Boundary(geometry)::geography,
-    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
-) AS distance_m
-FROM map_feature
-WHERE map_id = :map_id AND category = 'administrative_area'
-  AND feature_class = :class
-ORDER BY distance_m
-LIMIT 1;
+**Border — measuring (nearest border line):**
+
+The DB finds the nearest border using `ST_Distance` on the actual geometry, Python computes the final distance in meters:
+
+```python
+stmt = (
+    select(MapFeature)
+    .join(GameMapFeature)
+    .where(
+        GameMapFeature.game_map_id == map_id,
+        MapFeature.category == FeatureCategory.admin_division_border,
+        MapFeature.feature_class == class_id,
+    )
+    .order_by(func.ST_Distance(MapFeature.geometry, player_wkb))
+    .limit(1)
+)
+nearest_border = session.exec(stmt).first()
+dist_m = distance_to_feature(player, nearest_border.geometry)
 ```
 
-Note: for matching, `ST_Contains` identifies which polygon the player is inside — this is containment, not distance. For measuring, distance is to the nearest boundary edge of any polygon of the specified class (including the one the player is inside — they're measuring how far they are from leaving it).
+Note: administrative areas use containment for matching — "are you in the same state?" Borders are separate LineString features representing shared edges between adjacent areas (not polygon perimeters, which would include coastlines and map edges). See "Borders vs Administrative Area Boundaries" above.
 
-**Water feature — nearest:**
-```sql
-SELECT stable_id, name, ST_Distance(
-    geometry::geography,
-    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
-) AS distance_m
-FROM map_feature
-WHERE map_id = :map_id AND category = 'water_feature'
-ORDER BY distance_m
-LIMIT 1;
+**Generic nearest feature (parks, hospitals, mountains, etc.):**
+
+Same pattern for any category — DB sorts by actual geometry distance, Python computes distance in meters:
+
+```python
+stmt = (
+    select(MapFeature)
+    .join(GameMapFeature)
+    .where(
+        GameMapFeature.game_map_id == map_id,
+        MapFeature.category == category,
+    )
+    .order_by(func.ST_Distance(MapFeature.geometry, player_wkb))
+    .limit(1)
+)
 ```
 
-**Transit line — nearest:**
-```sql
-SELECT r.stable_id, r.name, ST_Distance(
-    r.shape::geography,
-    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
-) AS distance_m
-FROM route r
-JOIN transit_dataset td ON r.transit_dataset_id = td.id
-JOIN game_map gm ON gm.transit_dataset_id = td.id
-WHERE gm.id = :map_id
-  AND r.stable_id NOT IN (SELECT unnest(gm.excluded_route_ids))
-ORDER BY distance_m
-LIMIT 1;
-```
-
-All distance results are in meters (using `::geography` cast for geodesic math). Spatial indexes on `geometry` columns make these queries fast even with complex polygons.
+The slight inaccuracy of using Cartesian distance for the DB-side sort (vs geodesic) is negligible at game-area scales — it only affects ordering, and the final distance in meters is always computed geodesically by Python.
 
 ---
 
@@ -437,20 +559,18 @@ All distance results are in meters (using `::geography` cast for geodesic math).
 ```json
 {
   "question_type": "matching",
-  "slot_index": 0,
-  "custom_category": "hospital"
+  "category": "hospital"
 }
 ```
 
-`custom_category` is required when the slot's `category` is null (seeker picks). Location is inferred from the seeker's latest reported position (same as radar/thermometer).
+The seeker picks a category from the available set. The server validates that the category hasn't been used yet and is available for this map and question type. Location is inferred from the seeker's latest reported position (same as radar/thermometer).
 
-For administrative area questions, `feature_class` is also required:
+For classed categories, `feature_class` is also required:
 
 ```json
 {
   "question_type": "measuring",
-  "slot_index": 0,
-  "custom_category": "administrative_area",
+  "category": "admin_division_border",
   "feature_class": 1
 }
 ```
@@ -463,15 +583,29 @@ The ask endpoint calls the resolution logic internally to resolve and store the 
 
 ---
 
-## Exclusion Zones (Deferred)
+## Exclusion Zones
 
 Exclusion geometry for matching and measuring is significantly more complex than radar circles or thermometer half-planes. For matching, the exclusion zone is conceptually a Voronoi cell around the resolved feature. For measuring, it's a distance-comparison region. Both require spatial computation that's non-trivial to represent as GeoJSON polygons.
 
-This is deferred — `exclusion` will remain `null` for these question types initially, consistent with the current approach of deferring exclusion zone computation for all question types.
+### Tiered Strategy
+
+Exclusion zone support depends on the data source and dataset size:
+
+1. **Map-defined, < N features** — compute synchronously, return `exclusion` in the question response. Feasible because the complete dataset is small (e.g., a map with 5 admin divisions → simple polygon).
+
+2. **Map-defined, >= N features** — kick to a background job. The question's `exclusion` starts as `null` with a pending status. When the background job completes, the server pushes the computed exclusion zone to seekers.
+
+3. **Google Maps fallback + endgame** — the endgame resets with a significantly smaller map area. The server can fetch a more complete set of features for the reduced area via the Places API, then compute the exclusion zone as a background job.
+
+4. **Google Maps fallback + not endgame** — no exclusion zone. We don't have the complete dataset (only queried for nearest features, not all features on the map), so we can't compute an accurate zone. The answer itself is still informative; it just doesn't render as a map overlay.
+
+The threshold N and the specifics of exclusion zone calculation, scheduling, and delivery are deferred to a separate design document.
 
 ---
 
-## Google Maps Places API Integration
+## Google Maps Places API Integration (Fallback)
+
+When a map doesn't define features for a category and doesn't exclude it, the server falls back to the Google Maps Places API for resolution. This is a degraded mode — no exclusion zones outside of endgame — but keeps categories playable without map creator effort.
 
 ### Nearby Search (New)
 
@@ -524,15 +658,24 @@ Place results can be cached briefly (15–60 minutes) keyed by `(category, lat_r
 
 ## Resolved Decisions
 
-- **Bona fide thresholds**: Hierarchical 4-tier config: category-in-map > map > global-category > global. Allows sensible defaults with per-map tuning.
-- **Search radius**: Global default (50 km), overridable at each config tier.
-- **Transit line matching**: Route-level (e.g., "Central Line"). Mode-level (metro vs bus) could be a separate category added later.
-- **Admin area class**: Must be specified as part of the question. Matching checks containment ("are you in the same state?"), measuring checks distance to border ("are you closer to a state border?"). Never "any border type."
-- **Parks**: Google Maps. Too numerous and variable to curate as map data. Use higher bona fide thresholds to filter pocket parks.
-- **Null answers**: The game provides for a `null` answer ("question not answerable"). Rare but legitimate — slot is still consumed.
+- **Map-defined preferred, Google fallback**: All categories can be map-defined via `MapFeature` + `GameMapFeature`. If the map doesn't define features for a category and doesn't exclude it, categories with a Google fallback type resolve via the Places API. Map-only categories (no fallback type) are simply unavailable if not defined.
+- **Once per game**: Each matching/measuring category can only be asked once per game. Classed categories (admin divisions, admin division borders) get one question per defined class.
+- **Features are shared entities**: `MapFeature` rows exist independently of maps, linked via the `GameMapFeature` join table. Multiple maps can share the same feature datasets.
+- **`FeatureCategory` enum**: All categories are enumerated. The enum is the source of truth for valid category values.
+- **Bona fide thresholds** (Google fallback): Hierarchical 4-tier config: category-in-map > map > global-category > global. Allows sensible defaults with per-map tuning.
+- **Search radius** (Google fallback): Global default (50 km), overridable at each config tier.
+- **Transit line matching**: Route-level (e.g., "Central Line"), matching only. Uses the existing transit dataset, not `MapFeature`. High speed train lines are a separate measuring-only category in `MapFeature`.
+- **Admin areas vs borders**: Administrative areas (`administrative_area`) support matching only (polygon containment). Admin division borders (`admin_division_border`) and international borders (`international_border`) support measuring only (distance to LineString). Borders are explicit geometry — shared edges between adjacent areas, not derived from polygon boundaries (which include coastlines and map edges).
+- **Mountains are map-defined**: Peak datasets are readily available as public data. Stored as Points in `MapFeature`. No Google fallback.
+- **Null answers**: The game provides for a `null` answer ("question not answerable"). Rare but legitimate — the question is still consumed.
+- **Split spatial responsibility**: The database handles spatial filtering and sorting (containment checks, nearest-neighbor via spatial index), Python handles distance computation (shapely `nearest_points` + haversine for meters). PostGIS uses the `<->` KNN operator; SpatiaLite falls back to full scan in tests.
+- **Tiered exclusion zones**: Map-defined categories support exclusion zones (sync for small datasets, background job for large). Google fallback only supports exclusion in endgame. Calculation and scheduling details deferred to a separate design.
 
 ## Open Questions
 
-- **Polygon-sized POIs**: Some Google Maps places are large enough to be polygons rather than points (e.g., Central Park, large theme parks). For distance measuring, treating them as their centroid point could be misleading. Possible future approach: declare places under a certain area threshold as point-like, treat larger ones as polygons with distance-to-boundary semantics. Punt for now — treat all Google Maps results as points.
+- **Large-area Google Maps POIs**: Google fallback treats results as points. For very large places (Central Park, large theme parks), the pin location may not reflect intuitive "closeness." Map-defined features avoid this (DB sorts by actual geometry proximity, Python uses `nearest_points` on the full shape). Punt for now — map creators who care can import better data.
 - **Hider preview for admin areas (matching)**: The hider already knows which area they're in — the preview trivially shows "yes" or "no." Consistent with radar (hider knows if they're within X km) so probably fine, but worth confirming this doesn't reduce strategic depth.
 - **Config storage**: Where do the hierarchical bona fide thresholds and search radius overrides live? Global defaults could be server config (env vars or a config file). Map-level and category-in-map overrides could be JSON columns on `GameMap`.
+- **Map creation API surface**: With `MapFeature` as a shared entity and `GameMapFeature` as the join table, the API for map creation needs design: bulk import of feature datasets, linking/unlinking features to maps, listing available datasets. This is a separate design concern.
+- **Body of water**: Punted for now. Rules allow any named body of water that isn't a pool. Extremely burdensome for map creators (rivers, lakes, ponds, etc.) and no clean Google Maps category. Could revisit with a public dataset approach if demand warrants it.
+- **Street or path**: Punted. Only useful in endgame and complex to resolve reliably.
