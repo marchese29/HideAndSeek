@@ -1,5 +1,6 @@
 import os
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Generator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from typing import Concatenate
@@ -58,6 +59,22 @@ def create_db_and_tables() -> None:
             conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
             conn.commit()
     SQLModel.metadata.create_all(engine)
+
+
+@contextmanager
+def session_scope() -> Generator[Session, None, None]:
+    """Sync session with ContextVar — for background tasks and scripts.
+
+    Sets the ContextVar so @db_read/@db_write query functions work naturally.
+    Commits on success, rolls back on exception (via Session.__exit__).
+    """
+    with Session(engine) as session:
+        token = _session_var.set(session)
+        try:
+            yield session
+            session.commit()
+        finally:
+            _session_var.reset(token)
 
 
 async def get_session() -> AsyncGenerator[Session, None]:

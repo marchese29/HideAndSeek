@@ -671,6 +671,54 @@ Place results can be cached briefly (15–60 minutes) keyed by `(category, lat_r
 - **Split spatial responsibility**: The database handles spatial filtering and sorting (containment checks, nearest-neighbor via spatial index), Python handles distance computation (shapely `nearest_points` + haversine for meters). PostGIS uses the `<->` KNN operator; SpatiaLite falls back to full scan in tests.
 - **Tiered exclusion zones**: Map-defined categories support exclusion zones (sync for small datasets, background job for large). Google fallback only supports exclusion in endgame. Calculation and scheduling details deferred to a separate design.
 
+## Implementation Plan
+
+Three plan-implement cycles, each independently shippable and testable.
+
+### Cycle 1: Data Layer — Models, Enums, Spatial Queries
+
+Foundation that everything else builds on.
+
+- `FeatureCategory` enum in `types.py`
+- `MapFeature` model with `ShapelyGeometry` column, composite unique on `(category, stable_id)`
+- `GameMapFeature` join table with composite PK
+- `GameMap` updates: `feature_classes` and `excluded_categories` JSON columns
+- Query functions in `queries/features.py`:
+  - `resolve_nearest_feature(category, feature_class, location, game_map_id)` — generic nearest by `ST_Distance`
+  - `resolve_containing_feature(category, feature_class, location, game_map_id)` — point-in-polygon via `ST_Contains`
+  - `get_available_categories(game_map_id)` — which categories the map defines features for
+- `distance_to_feature(player, geometry)` utility using shapely `nearest_points` + haversine
+- Tests for all new models and query functions
+- Test fixtures: factory functions for `MapFeature` and `GameMapFeature`
+
+### Cycle 2: API Layer — Question Lifecycle (Map-Defined Features Only)
+
+Fully working matching/measuring for maps with pre-loaded feature data.
+
+- Extend `QuestionType` enum: `matching`, `measuring`
+- `QuestionInventory` updates: `matching_used`, `measuring_used` lists
+- `AskQuestionRequest` updates: `category`, `feature_class` fields
+- Ask-question flow: validate category availability, resolve seeker's nearest, store in parameters
+- Answer computation: compare feature IDs (matching) or distances (measuring)
+- Auto-answer support in Celery task
+- Preview endpoint: `POST /games/{game_id}/questions/preview`
+- Push notification updates for new question types
+- Transit line resolution for matching (uses existing route dataset, not `MapFeature`)
+- Tests + manual verification with curl
+
+### Cycle 3: Google Places API Fallback
+
+Matching/measuring works on any map, even without curated features.
+
+- Places API client (Nearby Search, server-side proxy)
+- Bona fide filtering with hierarchical 4-tier config
+- Fallback logic: map-defined → Google → excluded
+- Category availability that accounts for the fallback
+- Caching (Redis or in-memory, keyed by category + rounded coords)
+- Tests (mocked Places API)
+
+---
+
 ## Open Questions
 
 - **Large-area Google Maps POIs**: Google fallback treats results as points. For very large places (Central Park, large theme parks), the pin location may not reflect intuitive "closeness." Map-defined features avoid this (DB sorts by actual geometry proximity, Python uses `nearest_points` on the full shape). Punt for now — map creators who care can import better data.

@@ -8,7 +8,7 @@ from datetime import datetime
 from geojson_pydantic import Point
 from pydantic import BaseModel, Field
 
-from hideandseek.models.types import PlayerRole, QuestionType
+from hideandseek.models.types import FeatureCategory, PlayerRole, QuestionType
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 
@@ -67,13 +67,34 @@ class LocationReportRequest(BaseModel):
 
 
 class AskQuestionRequest(BaseModel):
-    """Ask a radar or thermometer question, spending an inventory slot."""
+    """Ask a question, spending an inventory slot or category."""
 
-    question_type: QuestionType = Field(description='Type of question: radar or thermometer.')
-    slot_index: int = Field(
-        description='0-based index into the inventory slot list for this question type.'
+    question_type: QuestionType = Field(description='Type of question.')
+    slot_index: int | None = Field(
+        default=None,
+        description='0-based index into the inventory slot list. Required for radar/thermometer.',
     )
     custom_distance_m: int | None = Field(
         default=None,
         description='Required when the chosen slot has distance_m=null (custom slot).',
     )
+    category: FeatureCategory | None = Field(
+        default=None,
+        description='Feature category. Required for matching/measuring questions.',
+    )
+    feature_class: int | None = Field(
+        default=None,
+        description='Feature class tier. Required for classed categories.',
+    )
+
+
+class PreviewQuestionRequest(BaseModel):
+    """Preview the nearest feature for a matching/measuring question without consuming inventory."""
+
+    question_type: QuestionType = Field(description='matching or measuring.')
+    category: FeatureCategory = Field(description='Feature category to preview.')
+    feature_class: int | None = Field(
+        default=None,
+        description='Feature class tier for classed categories.',
+    )
+    location: Point = Field(description='Current position as a GeoJSON Point.')

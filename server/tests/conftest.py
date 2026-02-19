@@ -8,7 +8,7 @@ import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from geoalchemy2 import load_spatialite
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -17,8 +17,9 @@ from hideandseek.db import _session_var, get_session
 from hideandseek.main import app
 from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
+from hideandseek.models.map_feature import GameMapFeature, MapFeature
 from hideandseek.models.transit import TransitDataset
-from hideandseek.models.types import GameStatus, MapSize
+from hideandseek.models.types import FeatureCategory, GameStatus, MapSize
 
 
 @pytest.fixture
@@ -83,6 +84,8 @@ def create_game_map(session: Session, **overrides: Any) -> GameMap:
         'default_inventory': {
             'radars': [{'distance_m': 3000}, {'distance_m': 5000}, {'distance_m': None}],
             'thermometers': [{'distance_m': 500}, {'distance_m': None}],
+            'matching_used': [],
+            'measuring_used': [],
         },
     }
     defaults.update(overrides)
@@ -110,6 +113,8 @@ def create_game(session: Session, **overrides: Any) -> Game:
         'inventory': {
             'radars': [{'distance_m': 3000}, {'distance_m': 5000}, {'distance_m': None}],
             'thermometers': [{'distance_m': 500}, {'distance_m': None}],
+            'matching_used': [],
+            'measuring_used': [],
         },
     }
     defaults.update(overrides)
@@ -134,3 +139,28 @@ def create_player(session: Session, game_id: uuid.UUID, **overrides: Any) -> Pla
     session.commit()
     session.refresh(player)
     return player
+
+
+def create_map_feature(session: Session, **overrides: Any) -> MapFeature:
+    defaults: dict[str, Any] = {
+        'category': FeatureCategory.hospital,
+        'stable_id': f'test-feature-{uuid.uuid4().hex[:8]}',
+        'name': 'Test Hospital',
+        'geometry': Point(0.5, 0.5),
+    }
+    defaults.update(overrides)
+    feature = MapFeature(**defaults)
+    session.add(feature)
+    session.commit()
+    session.refresh(feature)
+    return feature
+
+
+def create_game_map_feature(
+    session: Session, game_map_id: uuid.UUID, map_feature_id: uuid.UUID
+) -> GameMapFeature:
+    link = GameMapFeature(game_map_id=game_map_id, map_feature_id=map_feature_id)
+    session.add(link)
+    session.commit()
+    session.refresh(link)
+    return link

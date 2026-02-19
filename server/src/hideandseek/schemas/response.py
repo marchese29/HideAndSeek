@@ -244,6 +244,17 @@ class LocationHistoryEntry(BaseModel):
         )
 
 
+# ── Feature Preview ──────────────────────────────────────────────────────
+
+
+class FeaturePreviewResponse(BaseModel):
+    """Preview of the nearest/containing feature for a matching or measuring question."""
+
+    feature_id: str = Field(description='Stable identifier of the resolved feature.')
+    name: str = Field(description='Human-readable name of the feature.')
+    distance_m: float = Field(description='Distance in meters from the query location.')
+
+
 # ── Questions ─────────────────────────────────────────────────────────────────
 
 

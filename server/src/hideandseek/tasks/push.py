@@ -7,15 +7,13 @@ import uuid
 from typing import Any
 
 import structlog
-from sqlmodel import Session, select
 
 from hideandseek.celery_app import app
 from hideandseek.config import load_push_config
-from hideandseek.db import engine
-from hideandseek.models.device_token import DeviceToken
-from hideandseek.models.game import Player
+from hideandseek.db import session_scope
 from hideandseek.models.types import PlayerRole, PushEventType
 from hideandseek.push import PushService
+from hideandseek.queries.device_tokens import get_device_tokens_for_game
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -49,15 +47,9 @@ def send_push(
     Fetches device tokens from the DB, optionally filtered by role,
     and delivers via PushService with retry on failure.
     """
-    with Session(engine) as session:
-        stmt = (
-            select(DeviceToken)
-            .join(Player, DeviceToken.client_id == Player.client_id)  # type: ignore[arg-type]
-            .where(Player.game_id == uuid.UUID(game_id))
-        )
-        if role_filter is not None:
-            stmt = stmt.where(Player.role == PlayerRole(role_filter))
-        tokens = list(session.exec(stmt).all())
+    with session_scope():
+        role = PlayerRole(role_filter) if role_filter is not None else None
+        tokens = get_device_tokens_for_game(uuid.UUID(game_id), role_filter=role)
 
     if not tokens:
         logger.info('push_no_tokens', game_id=game_id, event_type=event_type)

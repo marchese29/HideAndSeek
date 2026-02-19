@@ -21,6 +21,7 @@ class GameMap(SQLModel, table=True):
     excluded_route_ids: list = Field(default_factory=list, sa_type=sa.JSON)
     districts: list = Field(default_factory=list, sa_type=sa.JSON)
     district_classes: list = Field(default_factory=list, sa_type=sa.JSON)
+    feature_classes: list = Field(default_factory=list, sa_type=sa.JSON)
     default_inventory: dict = Field(default_factory=dict, sa_type=sa.JSON)
     notes: str | None = None
 

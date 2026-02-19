@@ -3,11 +3,18 @@ from __future__ import annotations
 import uuid
 
 from fastapi.testclient import TestClient
+from shapely.geometry import Point
 from sqlmodel import Session
 
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus, PlayerRole
-from tests.conftest import create_game, create_player
+from tests.conftest import (
+    create_game,
+    create_game_map,
+    create_game_map_feature,
+    create_map_feature,
+    create_player,
+)
 
 
 def _headers(client_id: uuid.UUID) -> dict[str, str]:
@@ -291,3 +298,270 @@ def test_list_questions(client: TestClient, session: Session):
     )
     data = resp.json()
     assert data[0]['hider_location'] is not None
+
+
+# ── Matching / Measuring helpers ─────────────────────────────────────────────
+
+
+def _setup_feature_game(client: TestClient, session: Session) -> tuple[Game, Player, Player]:
+    """Create a seeking game with map features for matching/measuring tests.
+
+    Two hospitals: one near the seeker (-0.115, 51.499), one near the hider (-0.06, 51.519).
+    """
+    gm = create_game_map(session)
+    near_seeker = create_map_feature(
+        session,
+        name='Near Seeker Hospital',
+        stable_id='hosp_near_seeker',
+        geometry=Point(-0.117, 51.498),
+    )
+    near_hider = create_map_feature(
+        session,
+        name='Near Hider Hospital',
+        stable_id='hosp_near_hider',
+        geometry=Point(-0.059, 51.518),
+    )
+    create_game_map_feature(session, gm.id, near_seeker.id)
+    create_game_map_feature(session, gm.id, near_hider.id)
+
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.client_id, -0.115, 51.499)
+    _report_location(client, game.id, hider.client_id, -0.06, 51.519)
+    return game, hider, seeker
+
+
+# ── POST /questions — matching ───────────────────────────────────────────────
+
+
+def test_ask_matching_question(client: TestClient, session: Session):
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'matching', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data['question_type'] == 'matching'
+    assert data['status'] == 'answerable'
+    assert data['parameters']['category'] == 'hospital'
+    assert data['parameters']['source'] == 'map_data'
+    assert data['parameters']['seeker_resolution'] is not None
+    assert data['parameters']['seeker_resolution']['feature_id'] == 'hosp_near_seeker'
+
+
+def test_answer_matching_no(client: TestClient, session: Session):
+    """Different nearest hospitals → answer 'no'."""
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'matching', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['answer'] == 'no'
+    assert data['parameters']['hider_resolution']['feature_id'] == 'hosp_near_hider'
+
+
+def test_answer_matching_yes(client: TestClient, session: Session):
+    """Both players near the same hospital → answer 'yes'."""
+    gm = create_game_map(session)
+    hosp = create_map_feature(
+        session,
+        name='Shared Hospital',
+        stable_id='hosp_shared',
+        geometry=Point(-0.1, 51.5),
+    )
+    create_game_map_feature(session, gm.id, hosp.id)
+
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    # Both near the same hospital
+    _report_location(client, game.id, seeker.client_id, -0.101, 51.501)
+    _report_location(client, game.id, hider.client_id, -0.099, 51.499)
+
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'matching', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.json()['answer'] == 'yes'
+
+
+def test_matching_category_already_used(client: TestClient, session: Session):
+    game, hider, seeker = _setup_feature_game(client, session)
+    # Ask and answer a matching question
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'matching', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+    client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+
+    # Try same category again
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'matching', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 409
+    assert 'already used' in resp.json()['detail']
+
+
+def test_matching_missing_category(client: TestClient, session: Session):
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'matching'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 422
+    assert 'category' in resp.json()['detail']
+
+
+def test_matching_category_not_on_map(client: TestClient, session: Session):
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'matching', 'category': 'zoo'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 422
+    assert 'not available' in resp.json()['detail']
+
+
+def test_matching_consumes_inventory(client: TestClient, session: Session):
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'matching', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+
+    # Check inventory
+    game_resp = client.get(f'/games/{game.id}')
+    assert 'hospital' in game_resp.json()['inventory']['matching_used']
+
+
+# ── POST /questions — measuring ──────────────────────────────────────────────
+
+
+def test_ask_measuring_question(client: TestClient, session: Session):
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'measuring', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data['question_type'] == 'measuring'
+    assert data['status'] == 'answerable'
+    assert data['parameters']['seeker_resolution'] is not None
+
+
+def test_answer_measuring_farther(client: TestClient, session: Session):
+    """Seeker farther from nearest hospital than hider → 'farther'."""
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'measuring', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+    seeker_dist = resp.json()['parameters']['seeker_resolution']['distance_m']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    data = resp.json()
+    hider_dist = data['parameters']['hider_resolution']['distance_m']
+    # Seeker is ~250m from their hospital, hider is ~150m from theirs
+    # So seeker is farther
+    assert data['answer'] == 'farther'
+    assert seeker_dist > hider_dist
+
+
+def test_answer_measuring_closer(client: TestClient, session: Session):
+    """Seeker closer to nearest hospital than hider → 'closer'."""
+    gm = create_game_map(session)
+    hosp = create_map_feature(
+        session,
+        name='Central Hospital',
+        stable_id='hosp_central',
+        geometry=Point(-0.1, 51.5),
+    )
+    create_game_map_feature(session, gm.id, hosp.id)
+
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    # Seeker very close, hider far
+    _report_location(client, game.id, seeker.client_id, -0.1001, 51.5001)
+    _report_location(client, game.id, hider.client_id, -0.2, 51.6)
+
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'measuring', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.json()['answer'] == 'closer'
+
+
+def test_measuring_category_already_used(client: TestClient, session: Session):
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'measuring', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+    client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'measuring', 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 409
+
+
+def test_measuring_missing_category(client: TestClient, session: Session):
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions',
+        json={'question_type': 'measuring'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 422

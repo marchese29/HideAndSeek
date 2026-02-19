@@ -6,15 +6,10 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from shapely.geometry import Point
-from sqlmodel import Session, select
 
 from hideandseek.celery_app import app
-from hideandseek.db import engine
-from hideandseek.geo import distance
-from hideandseek.models.game import Game
-from hideandseek.models.location import LocationUpdate
-from hideandseek.models.question import Question
+from hideandseek.db import session_scope
+from hideandseek.logic import answer_matching, answer_measuring, answer_radar, answer_thermometer
 from hideandseek.models.types import (
     GameStatus,
     PlayerRole,
@@ -22,6 +17,10 @@ from hideandseek.models.types import (
     QuestionStatus,
     QuestionType,
 )
+from hideandseek.queries.games import get_game_by_id, update_game_status
+from hideandseek.queries.location import get_latest_location_for_player
+from hideandseek.queries.questions import get_question, update_question
+from hideandseek.tasks.push import send_push
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -32,8 +31,8 @@ def transition_hiding_to_seeking(game_id: str) -> None:
 
     Idempotent: no-op if the game is not in hiding status.
     """
-    with Session(engine) as session:
-        game = session.get(Game, uuid.UUID(game_id))
+    with session_scope():
+        game = get_game_by_id(uuid.UUID(game_id))
         if not game:
             logger.warning('transition_game_not_found', game_id=game_id)
             return
@@ -41,20 +40,14 @@ def transition_hiding_to_seeking(game_id: str) -> None:
             logger.info('transition_skipped', game_id=game_id, status=game.status)
             return
 
-        game.status = GameStatus.seeking
-        game.seeking_started_at = datetime.now(UTC)
-        session.add(game)
-        session.commit()
-
+        update_game_status(game, GameStatus.seeking)
         logger.info('transition_hiding_to_seeking', game_id=game_id)
 
-    from hideandseek.tasks.push import send_push
-
-    send_push.delay(  # type: ignore[attr-defined]
-        game_id,
-        PushEventType.phase_changed,
-        alert='The seeking phase has begun! Start asking questions.',
-    )
+        send_push.delay(  # type: ignore[attr-defined]
+            game_id,
+            PushEventType.phase_changed,
+            alert='The seeking phase has begun! Start asking questions.',
+        )
 
 
 @app.task
@@ -63,8 +56,8 @@ def auto_answer_question(question_id: str) -> None:
 
     Idempotent: no-op if the question is not in answerable status.
     """
-    with Session(engine) as session:
-        question = session.get(Question, uuid.UUID(question_id))
+    with session_scope():
+        question = get_question(uuid.UUID(question_id))
         if not question:
             logger.warning('auto_answer_question_not_found', question_id=question_id)
             return
@@ -72,56 +65,60 @@ def auto_answer_question(question_id: str) -> None:
             logger.info('auto_answer_skipped', question_id=question_id, status=question.status)
             return
 
-        game = session.get(Game, question.game_id)
+        game = get_game_by_id(question.game_id)
         if not game:
             logger.warning('auto_answer_game_not_found', game_id=str(question.game_id))
             return
 
-        # Find the hider and snapshot their latest location
+        # Find the hider's latest location
         hiders = [p for p in game.players if p.role == PlayerRole.hider]
-        hider_location: Point | None = None
-        if hiders:
-            latest = session.exec(
-                select(LocationUpdate)
-                .where(
-                    LocationUpdate.player_id == hiders[0].id,
-                    LocationUpdate.game_id == game.id,
-                )
-                .order_by(LocationUpdate.id.desc())  # type: ignore[union-attr]
-                .limit(1)
-            ).first()
-            if latest:
-                hider_location = latest.coordinates
+        if not hiders:
+            logger.error('auto_answer_no_hider', game_id=str(game.id))
+            return
+        latest = get_latest_location_for_player(hiders[0].id, game.id)
+        if not latest:
+            logger.error('auto_answer_no_hider_location', game_id=str(game.id))
+            return
+        hider_location = latest.coordinates
 
-        # Compute answer from distance, or fall back to 'pending' if no hider location
-        if hider_location:
-            if question.question_type == QuestionType.radar:
-                dist = distance(question.seeker_location_start, hider_location)
-                question.answer = 'yes' if dist <= question.parameters['radius_m'] else 'no'
-            else:
-                dist_start = distance(question.seeker_location_start, hider_location)
-                dist_end = distance(question.seeker_location_end, hider_location)  # type: ignore[arg-type]
-                question.answer = 'closer' if dist_end < dist_start else 'farther'
+        # Compute answer
+        if question.question_type == QuestionType.radar:
+            answer, params_update = answer_radar(question, hider_location)
+
+        elif question.question_type == QuestionType.thermometer:
+            answer, params_update = answer_thermometer(question, hider_location)
+
+        elif question.question_type == QuestionType.matching:
+            answer, params_update = answer_matching(question, game, hider_location)
+
+        elif question.question_type == QuestionType.measuring:
+            answer, params_update = answer_measuring(question, game, hider_location)
+
         else:
-            question.answer = 'pending'
-        question.exclusion = None
-        question.hider_location = hider_location
-        question.answered_at = datetime.now(UTC)
-        question.status = QuestionStatus.answered
-        session.add(question)
-        session.commit()
+            logger.error('auto_answer_unknown_type', question_type=question.question_type)
+            return
+
+        update_question(
+            question,
+            {
+                'hider_location': hider_location,
+                'answer': answer,
+                'exclusion': None,
+                'answered_at': datetime.now(UTC),
+                'status': QuestionStatus.answered,
+                'parameters': params_update,
+            },
+        )
 
         game_id = str(question.game_id)
         logger.info('auto_answer_question', question_id=question_id, game_id=game_id)
 
-    from hideandseek.tasks.push import send_push
-
-    send_push.delay(  # type: ignore[attr-defined]
-        game_id,
-        PushEventType.question_auto_answered,
-        role_filter='seeker',
-        alert='Question auto-answered! The hider ran out of time.',
-        question_id=question_id,
-        question_type=question.question_type,
-        answer=question.answer,
-    )
+        send_push.delay(  # type: ignore[attr-defined]
+            game_id,
+            PushEventType.question_auto_answered,
+            role_filter='seeker',
+            alert='Question auto-answered! The hider ran out of time.',
+            question_id=question_id,
+            question_type=question.question_type,
+            answer=question.answer,
+        )

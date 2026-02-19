@@ -378,7 +378,7 @@ paths:
       tags:
       - questions
       summary: Ask Question
-      description: Ask a radar or thermometer question, spending an inventory slot.
+      description: Ask a question, spending an inventory slot or category.
       operationId: ask_question_games__game_id__questions_post
       parameters:
       - name: game_id
@@ -571,24 +571,35 @@ components:
       properties:
         question_type:
           $ref: '#/components/schemas/QuestionType'
-          description: 'Type of question: radar or thermometer.'
+          description: Type of question.
         slot_index:
-          type: integer
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Slot Index
-          description: 0-based index into the inventory slot list for this question
-            type.
+          description: 0-based index into the inventory slot list. Required for radar/thermometer.
         custom_distance_m:
           anyOf:
           - type: integer
           - type: 'null'
           title: Custom Distance M
           description: Required when the chosen slot has distance_m=null (custom slot).
+        category:
+          anyOf:
+          - $ref: '#/components/schemas/FeatureCategory'
+          - type: 'null'
+          description: Feature category. Required for matching/measuring questions.
+        feature_class:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Feature Class
+          description: Feature class tier. Required for classed categories.
       type: object
       required:
       - question_type
-      - slot_index
       title: AskQuestionRequest
-      description: Ask a radar or thermometer question, spending an inventory slot.
+      description: Ask a question, spending an inventory slot or category.
     CreateGameRequest:
       properties:
         map_id:
@@ -654,6 +665,30 @@ components:
 
 
         Single source of truth for what the client should render.'
+    FeatureCategory:
+      type: string
+      enum:
+      - transit_line
+      - administrative_area
+      - landmass
+      - high_speed_train_line
+      - rail_station
+      - international_border
+      - admin_division_border
+      - coastline
+      - commercial_airport
+      - mountain
+      - park
+      - amusement_park
+      - zoo
+      - aquarium
+      - golf_course
+      - museum
+      - movie_theater
+      - hospital
+      - library
+      - foreign_consulate
+      title: FeatureCategory
     GameResponse:
       properties:
         id:
@@ -1220,6 +1255,8 @@ components:
       enum:
       - radar
       - thermometer
+      - matching
+      - measuring
       title: QuestionType
     RouteResponse:
       properties:

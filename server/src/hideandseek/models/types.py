@@ -35,9 +35,39 @@ class PlayerRole(StrEnum):
     seeker = 'seeker'
 
 
+class FeatureCategory(StrEnum):
+    # Matching-only
+    transit_line = 'transit_line'
+    administrative_area = 'administrative_area'
+    landmass = 'landmass'
+
+    # Measuring-only
+    high_speed_train_line = 'high_speed_train_line'
+    rail_station = 'rail_station'
+    international_border = 'international_border'
+    admin_division_border = 'admin_division_border'
+    coastline = 'coastline'
+
+    # Both matching and measuring
+    commercial_airport = 'commercial_airport'
+    mountain = 'mountain'
+    park = 'park'
+    amusement_park = 'amusement_park'
+    zoo = 'zoo'
+    aquarium = 'aquarium'
+    golf_course = 'golf_course'
+    museum = 'museum'
+    movie_theater = 'movie_theater'
+    hospital = 'hospital'
+    library = 'library'
+    foreign_consulate = 'foreign_consulate'
+
+
 class QuestionType(StrEnum):
     radar = 'radar'
     thermometer = 'thermometer'
+    matching = 'matching'
+    measuring = 'measuring'
 
 
 class QuestionStatus(StrEnum):
@@ -71,6 +101,8 @@ class DistanceSlot(BaseModel):
 class QuestionInventory(BaseModel):
     radars: list[DistanceSlot] = []
     thermometers: list[DistanceSlot] = []
+    matching_used: list[str] = []
+    measuring_used: list[str] = []
 
 
 class TimingRules(BaseModel):

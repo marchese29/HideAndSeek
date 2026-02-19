@@ -53,22 +53,26 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (sets up logging, creates DB)
 - `src/hideandseek/logging.py` — Centralized structlog configuration (`setup_logging()`). Configures two logger namespaces: `hideandseek.access` (request/response) and root (general app → stderr). Three-tier `ENV`: `local` (default, file+stderr, console), `development` (stderr only, console), `production` (stderr only, JSON).
 - `src/hideandseek/middleware.py` — Raw ASGI `AccessLogMiddleware` for structured request/response logging. Logs method, path, headers (sensitive values redacted), request body (truncated at 1KB), status, duration, response size. Generates `request_id` UUID per request (bound to structlog contextvars, returned in `X-Request-ID` response header). Skips `/health`.
-- `src/hideandseek/db.py` — Database engine (`DATABASE_URL` env var, defaults to SQLite), `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `current_session()`, `@db_read`/`@db_write` decorators
+- `src/hideandseek/db.py` — Database engine (`DATABASE_URL` env var, defaults to SQLite), `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `session_scope()` (sync context manager for Celery tasks), `current_session()`, `@db_read`/`@db_write` decorators
 - `Dockerfile` — Multi-stage build using `uv` image (Python 3.12, bookworm-slim)
 - `src/hideandseek/utils.py` — Shared utilities (`find_server_root()` — walks up to `pyproject.toml`)
-- `src/hideandseek/geo.py` — Pure geographic math: `haversine(a, b)` (great-circle distance in meters between `(lat, lon)` tuples), `distance(point_a, point_b)` (convenience wrapper for shapely Points)
+- `src/hideandseek/geo.py` — Pure geographic math: `haversine(a, b)` (great-circle distance in meters between `(lat, lon)` tuples), `distance(point_a, point_b)` (convenience wrapper for shapely Points), `distance_to_feature(player, geometry)` (distance in meters from a point to the nearest point on any geometry using shapely `nearest_points` + haversine)
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/celery_app.py` — Celery app instance, config from `celery_config`, autodiscovers `hideandseek.tasks`
 - `src/hideandseek/celery_config.py` — Celery configuration (broker URL, eager mode, serialization)
+- `src/hideandseek/validators.py` — Request validation for questions. Pure validation — raises `HTTPException` on invalid requests, returns nothing (except `validate_answer_request` which returns `(Question, Point)`). Called from routers before business logic.
+- `src/hideandseek/logic.py` — Question lifecycle orchestration (ask and answer). Called by routers after validation. Handles inventory mutation, question creation, feature resolution, and answer computation. No HTTP concerns (no `HTTPException`, no push).
+- `src/hideandseek/resolution.py` — Business logic for matching/measuring feature resolution. Category classification sets (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`), `get_available_categories()`, `resolve_feature_for_player()` (picks containment vs nearest strategy), `compute_matching_answer()`, `compute_measuring_answer()`.
 - `src/hideandseek/tasks/` — Celery task modules
-  - `game_timers.py` — `transition_hiding_to_seeking`, `auto_answer_question` (game timer tasks)
-  - `push.py` — `send_push` (push delivery task with retry)
+  - `game_timers.py` — `transition_hiding_to_seeking`, `auto_answer_question` (game timer tasks). Uses `session_scope()` for DB access.
+  - `push.py` — `send_push` (push delivery task with retry). Uses `session_scope()` for DB access.
 - `src/hideandseek/models/` — SQLModel table models and types
-  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, `PushEventType`, etc.), value objects
+  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, `PushEventType`, `FeatureCategory`, etc.), value objects
   - `geo_types.py` — `ShapelyGeometry(Geometry)` column type for transparent shapely↔WKB conversion
   - `transit.py` — `TransitDataset`, `Stop`, `Route`, `RouteStop`
-  - `game_map.py` — `GameMap`
+  - `game_map.py` — `GameMap` (includes `feature_classes` JSON column for matching/measuring question support)
+  - `map_feature.py` — `MapFeature` (map-defined geographic features with `ShapelyGeometry` column, composite unique on `(category, stable_id)`), `GameMapFeature` (join table linking features to maps, composite PK)
   - `game.py` — `Game`, `Player`
   - `location.py` — `LocationUpdate`
   - `question.py` — `Question`
@@ -82,8 +86,9 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - `src/hideandseek/queries/` — Database query/mutation functions, split by domain
   - `device_tokens.py` — `upsert_device_token`, `get_device_tokens_for_game`, `delete_device_token`
   - `maps.py` — `list_maps`, `get_map`
-  - `games.py` — `generate_join_code`, `create_game`, `find_game_by_join_code`, `add_player`, `get_player`, `update_player`, `update_game_status`
+  - `games.py` — `generate_join_code`, `create_game`, `find_game_by_join_code`, `add_player`, `get_player`, `update_player`, `update_game_status`, `get_game_by_id`
   - `effective_map.py` — `get_effective_map_data`, `RouteWithStops`, `EffectiveMapData` dataclasses
+  - `features.py` — `resolve_nearest_feature` (nearest by `ST_Distance`), `resolve_containing_feature` (point-in-polygon via `ST_Contains`), `get_map_feature_categories` (distinct category/class pairs on a map). All join through `GameMapFeature` for map scoping.
   - `location.py` — `create_location_update`, `get_visible_players`, `get_location_history`, `get_latest_location_for_player`, `get_avg_seeker_location`, `VisiblePlayerData` dataclass
   - `questions.py` — `has_unanswered_question`, `get_question_count`, `create_question`, `get_question`, `list_questions`, `update_question`, `update_game_inventory`
 - `src/hideandseek/routers/` — API route modules
@@ -92,7 +97,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - `location.py` — `POST .../location`, `GET .../location-history`
   - `questions.py` — `POST .../questions`, `POST .../questions/{id}/lock-in`, `POST .../questions/{id}/answer`, `GET .../questions`
 - `tests/conftest.py` — In-memory SQLite fixtures (`session`, `client`) and factory functions
-- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`)
+- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`; plus `test_features.py` for spatial queries, `test_geo.py` for distance utilities, and `test_resolution.py` for resolution business logic)
 - `scripts/generate_openapi.py` — dumps `app.openapi()` to `openapi/openapi.yaml`
 - `data/` — SQLite database file (gitignored)
 
@@ -105,10 +110,10 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - **`@db_read` / `@db_write` decorators**: Applied to all query functions. Both inject session from the ContextVar and strip `Session` from the external signature. `@db_write` additionally flushes the session after the function (making writes visible to subsequent queries in the same request). Typed with PEP 695 generics (`[T, **P]`) via `Concatenate[Session, P]`.
 - **Router-level session dependency**: Each router uses `dependencies=[Depends(get_session)]` to ensure the ContextVar is always set for every route. Handlers never declare `session` in their signatures.
 - **Query layer**: `queries/` package (one module per domain) handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLModel objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek.queries.games import create_game`), not from the package root. Callers invoke query functions without passing session (e.g., `create_game(map_id=..., ...)`).
-- **Background jobs (Celery + Redis)**: All push delivery and game timers go through Celery tasks. Broker resolution: (1) `CELERY_BROKER_URL` env var if set, (2) auto-detect Redis on `localhost:6379`, (3) eager mode (tasks run synchronously in-process). Set `CELERY_BROKER_URL=''` to force eager mode when Redis is running. Routers call `.delay()` or `.apply_async()` instead of `BackgroundTasks`. Worker tasks create their own `Session(engine)` — no shared state with the API process except the database.
+- **Background jobs (Celery + Redis)**: All push delivery and game timers go through Celery tasks. Broker resolution: (1) `CELERY_BROKER_URL` env var if set, (2) auto-detect Redis on `localhost:6379`, (3) eager mode (tasks run synchronously in-process). Set `CELERY_BROKER_URL=''` to force eager mode when Redis is running. Routers call `.delay()` or `.apply_async()` instead of `BackgroundTasks`. Worker tasks use `session_scope()` to get a DB session with ContextVar — all `@db_read`/`@db_write` query functions work naturally inside the `with session_scope():` block.
 - **Task ID convention**: Deterministic IDs (`hiding_timer:{game_id}`, `answer_deadline:{question_id}`) so the API can revoke tasks without storing IDs in the DB.
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). All push delivery goes through the `send_push` Celery task (with retry). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
-- **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`) create test data with sensible defaults and accept `**overrides`.
+- **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_map_feature`, `create_game_map_feature`) create test data with sensible defaults and accept `**overrides`.
 - **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
 - **Geometry — three layers**: Geometry flows through three representations:
   - **API boundary** — GeoJSON via `geojson-pydantic` types (`Point`, `Polygon`, `LineString`). Requests accept GeoJSON; responses return GeoJSON.
@@ -116,7 +121,13 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - **Database** — native spatial columns (PostGIS for Docker/production, SpatiaLite for local/tests). The `ShapelyGeometry(Geometry)` column type in `models/geo_types.py` transparently converts between shapely and WKB — model code never touches WKB directly.
 
   Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column type bridges Python↔DB automatically.
-- **Geo math**: `geo.py` provides pure distance functions: `haversine(a, b)` for `(lat, lon)` tuples and `distance(point_a, point_b)` for shapely Points. Answer computation (radar yes/no, thermometer closer/farther) lives inline in the router and game_timers task. Exclusion zone geometry (circle polygons, half-plane polygons) is still deferred (`exclusion: null`).
+- **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic.py` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) and answer computation helpers used by `logic.py`.
+- **Question types**: Four types with two inventory models:
+  - **Slot-based** (radar, thermometer): consume a slot from `inventory.radars`/`inventory.thermometers`. Radar → `answerable` immediately; thermometer → `in_progress` until seeker locks in.
+  - **Category-based** (matching, measuring): consume a category key (e.g. `"hospital"`, `"administrative_area:1"`) appended to `inventory.matching_used`/`inventory.measuring_used`. Both → `answerable` immediately. Available categories are inclusion-based: derived from map features (via `GameMapFeature`) minus already-used.
+  - **Matching**: resolves each player's nearest feature (or containing feature for `CONTAINMENT_CATEGORIES`); answer is `"yes"` (same `stable_id`), `"no"` (different), or `"null"` (either player unresolvable).
+  - **Measuring**: resolves each player's distance to nearest feature; answer is `"closer"` (seeker closer), `"farther"`, or `"null"`.
+- **Geo math**: `geo.py` provides pure distance functions: `haversine(a, b)` for `(lat, lon)` tuples, `distance(point_a, point_b)` for shapely Points, and `distance_to_feature(player, geometry)` for distance to any geometry. All answer computation lives in `logic.py`. Exclusion zone geometry is still deferred (`exclusion: null`).
 
 ## Game States
 

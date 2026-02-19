@@ -48,6 +48,12 @@ def create_game(
 
 
 @db_read
+def get_game_by_id(session: Session, game_id: uuid.UUID) -> Game | None:
+    """Return a game by ID."""
+    return session.get(Game, game_id)
+
+
+@db_read
 def find_game_by_join_code(session: Session, join_code: str) -> Game | None:
     """Find a game by its join code."""
     return session.exec(select(Game).where(Game.join_code == join_code.upper())).first()
