@@ -4,6 +4,11 @@
 # Uses cached hashes of staged content so steps are skipped when
 # nothing has changed since the last successful run.
 
+# Beads: flush pending changes to JSONL before commit
+if command -v bd >/dev/null 2>&1; then
+    bd hooks run pre-commit "$@" || exit 1
+fi
+
 CACHE_DIR=".git/hooks-cache"
 
 # Run a command only if staged files under a path have changed since

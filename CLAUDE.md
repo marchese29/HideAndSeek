@@ -8,7 +8,7 @@ Geographic "Hide and Seek" game — hiders use public transit to hide in a game 
 - `server/` — Python FastAPI backend (UV). See `server/CLAUDE.md`.
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.
 - `design/` — AI-generated design artifacts. See `design/CLAUDE.md`.
-- `hooks/` — Git hooks (auto-configured via `core.hooksPath`).
+- `hooks/` — Git hooks (symlinked into `.git/hooks/`; see Setup below).
 - `docker-compose.yml` — Docker Compose (PostGIS + Redis + API server + Celery worker).
 - `scripts/dev.sh` — Local dev launcher (uvicorn + Celery worker with Redis).
 - `scripts/manual-test.sh` — End-to-end game flow against a running Docker server (seeds data, exercises all endpoints).
@@ -30,7 +30,7 @@ CLAUDE.md files exist at:
 ## Conventions
 
 - Issue tracking: use `bd` (beads) CLI. Run `bd onboard` to get started.
-- Git hooks are in `hooks/` and configured via `git config core.hooksPath hooks`.
+- Git hooks: `hooks/pre-commit` is the versioned pre-commit hook (server checks + OpenAPI regen + beads JSONL flush). It's symlinked into `.git/hooks/`. Beads installs its own shims for other hooks (`pre-push`, `post-merge`, `post-checkout`, `prepare-commit-msg`) directly in `.git/hooks/`. See Setup below.
 - The pre-commit hook runs server checks (lint, format, typecheck, test) and regenerates `openapi/openapi.yaml` when `server/` files change.
 - The OpenAPI regen step auto-stages the updated spec (`git add openapi/openapi.yaml`), so it's included in the commit automatically — no manual step needed.
 - Hook steps use `run_if_changed` with hash caching (`.git/hooks-cache/`) to skip work when staged content hasn't changed since the last successful run.
@@ -72,11 +72,20 @@ When ending a work session, complete ALL steps below. Work is NOT complete until
    ```
 5. **Hand off** — provide context for next session
 
+## Setup (after fresh clone)
+
+```bash
+# System dependencies
+brew install libspatialite
+
+# Hooks: install beads shims, then symlink our pre-commit over theirs
+bd hooks install
+ln -sf ../../hooks/pre-commit .git/hooks/pre-commit  # target is relative to symlink location
+```
+
 ## Quick Start
 
 ```bash
-# System dependency for SpatiaLite (local dev/tests)
-brew install libspatialite
 
 # Server (Docker — preferred for manual testing, closest to prod — uses PostGIS)
 docker compose up --build          # Start all 4 services (localhost:8000)
