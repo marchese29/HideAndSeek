@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from hideandseek.db import db_read, db_write
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus
+from hideandseek.queries.questions import create_inventory_slots
 
 
 @db_read
@@ -33,17 +34,20 @@ def create_game(
     map_id: uuid.UUID,
     host_client_id: uuid.UUID,
     timing: dict,
-    inventory: dict,
+    default_inventory: dict,
 ) -> Game:
-    """Create a game with a generated join code."""
+    """Create a game with a generated join code and inventory slots from map template."""
     game = Game(
         map_id=map_id,
         host_client_id=host_client_id,
         join_code=generate_join_code(),
         timing=timing,
-        inventory=inventory,
     )
     session.add(game)
+    session.flush()  # Materialize game.id for FK references
+
+    create_inventory_slots(game.id, default_inventory)
+
     return game
 
 

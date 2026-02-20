@@ -12,29 +12,24 @@ from shapely.geometry import Point
 
 from hideandseek.geo import distance
 from hideandseek.models.game import Game
-from hideandseek.models.map_feature import MapFeature
+from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.question import Question
+from hideandseek.models.question_params import FeatureQuestionParams
 from hideandseek.models.types import (
     FeatureCategory,
-    QuestionInventory,
     QuestionStatus,
     QuestionType,
 )
 from hideandseek.queries.questions import (
+    consume_slot,
+    create_feature_params,
     create_question,
+    create_radar_params,
+    create_thermometer_params,
     get_question_count,
-    update_game_inventory,
+    record_category_usage,
 )
-from hideandseek.resolution import category_key, resolve_feature_for_player
-
-
-def _resolution_dict(feature: MapFeature, dist: float) -> dict:
-    return {
-        'feature_id': feature.stable_id,
-        'name': feature.name,
-        'distance_m': dist,
-    }
-
+from hideandseek.resolution import resolve_feature_for_player
 
 # ── Ask ──────────────────────────────────────────────────────────────────
 
@@ -43,52 +38,52 @@ def ask_radar(
     game: Game,
     player_id: uuid.UUID,
     seeker_location: Point,
-    slot_index: int,
+    slot: InventorySlot,
     custom_distance_m: int | None,
 ) -> Question:
     """Create a radar question: consume slot, persist. Immediately answerable."""
-    inventory = QuestionInventory(**game.inventory)
-    distance_m = inventory.radars[slot_index].distance_m or custom_distance_m
+    distance_m = slot.distance_m or custom_distance_m
     assert distance_m is not None  # guaranteed by validator
 
-    inventory.radars.pop(slot_index)
-    update_game_inventory(game, inventory.model_dump())
+    consume_slot(slot)
 
-    return create_question(
+    question = create_question(
         game_id=game.id,
         sequence=get_question_count(game.id) + 1,
         question_type=QuestionType.radar,
         status=QuestionStatus.answerable,
-        parameters={'radius_m': distance_m},
         asked_by=player_id,
         seeker_location_start=seeker_location,
     )
+    create_radar_params(question.id, radius_m=distance_m)
+
+    return question
 
 
 def ask_thermometer(
     game: Game,
     player_id: uuid.UUID,
     seeker_location: Point,
-    slot_index: int,
+    slot: InventorySlot,
     custom_distance_m: int | None,
 ) -> Question:
     """Create a thermometer question: consume slot, persist. Starts in_progress."""
-    inventory = QuestionInventory(**game.inventory)
-    distance_m = inventory.thermometers[slot_index].distance_m or custom_distance_m
+    distance_m = slot.distance_m or custom_distance_m
     assert distance_m is not None  # guaranteed by validator
 
-    inventory.thermometers.pop(slot_index)
-    update_game_inventory(game, inventory.model_dump())
+    consume_slot(slot)
 
-    return create_question(
+    question = create_question(
         game_id=game.id,
         sequence=get_question_count(game.id) + 1,
         question_type=QuestionType.thermometer,
         status=QuestionStatus.in_progress,
-        parameters={'min_travel_m': distance_m},
         asked_by=player_id,
         seeker_location_start=seeker_location,
     )
+    create_thermometer_params(question.id, min_travel_m=distance_m)
+
+    return question
 
 
 def ask_matching(
@@ -98,7 +93,10 @@ def ask_matching(
     category: FeatureCategory,
     feature_class: int | None,
 ) -> Question:
-    """Create a matching question: resolve seeker feature, consume category, persist."""
+    """Create a matching question: resolve seeker feature, consume category, persist.
+
+    Raises ValueError if seeker feature cannot be resolved.
+    """
     seeker_feature, seeker_dist = resolve_feature_for_player(
         category=category,
         location=seeker_location,
@@ -107,94 +105,30 @@ def ask_matching(
         for_matching=True,
     )
 
-    parameters: dict = {
-        'category': str(category),
-        'source': 'map_data',
-        'seeker_resolution': (
-            _resolution_dict(seeker_feature, seeker_dist) if seeker_feature else None
-        ),
-    }
-    if feature_class is not None:
-        parameters['feature_class'] = feature_class
+    if seeker_feature is None:
+        raise ValueError(f'No feature found for category {category} near the seeker location.')
 
-    # Consume category in inventory
-    inventory = QuestionInventory(**game.inventory)
-    inventory.matching_used.append(category_key(category, feature_class))
-    update_game_inventory(game, inventory.model_dump())
+    record_category_usage(game.id, QuestionType.matching, category, feature_class)
 
-    return create_question(
+    question = create_question(
         game_id=game.id,
         sequence=get_question_count(game.id) + 1,
         question_type=QuestionType.matching,
         status=QuestionStatus.answerable,
-        parameters=parameters,
         asked_by=player_id,
         seeker_location_start=seeker_location,
     )
-
-
-# ── Answer ───────────────────────────────────────────────────────────────
-
-
-def answer_radar(
-    question: Question,
-    hider_location: Point,
-) -> tuple[str, dict]:
-    """Compute radar answer. Returns (answer, parameters).
-
-    Answer is 'yes' if hider is within the radius, 'no' otherwise.
-    """
-    dist = distance(question.seeker_location_start, hider_location)
-    answer = 'yes' if dist <= question.parameters['radius_m'] else 'no'
-    return answer, question.parameters
-
-
-def answer_thermometer(
-    question: Question,
-    hider_location: Point,
-) -> tuple[str, dict]:
-    """Compute thermometer answer. Returns (answer, parameters).
-
-    Answer is 'closer' if seeker moved closer, 'farther' otherwise.
-    """
-    dist_start = distance(question.seeker_location_start, hider_location)
-    dist_end = distance(question.seeker_location_end, hider_location)  # type: ignore[arg-type]
-    answer = 'closer' if dist_end < dist_start else 'farther'
-    return answer, question.parameters
-
-
-def answer_matching(
-    question: Question,
-    game: Game,
-    hider_location: Point,
-) -> tuple[str, dict]:
-    """Compute matching answer. Returns (answer, updated_parameters).
-
-    Answer is 'yes' if same feature, 'no' if different, 'null' if either player
-    is not inside any feature (containment categories only).
-    """
-    category = FeatureCategory(question.parameters['category'])
-    feature_class = question.parameters.get('feature_class')
-
-    hider_feature, hider_dist = resolve_feature_for_player(
+    create_feature_params(
+        question.id,
         category=category,
-        location=hider_location,
-        game_map_id=game.map_id,
         feature_class=feature_class,
-        for_matching=True,
+        source='map_data',
+        seeker_feature_id=seeker_feature.stable_id,
+        seeker_feature_name=seeker_feature.name,
+        seeker_distance_m=seeker_dist,
     )
 
-    params = dict(question.parameters)
-    params['hider_resolution'] = (
-        _resolution_dict(hider_feature, hider_dist) if hider_feature else None
-    )
-
-    seeker_resolution = question.parameters.get('seeker_resolution')
-    if seeker_resolution is None or hider_feature is None:
-        return 'null', params
-
-    answer = 'yes' if seeker_resolution['feature_id'] == hider_feature.stable_id else 'no'
-    return answer, params
+    return question
 
 
 def ask_measuring(
@@ -204,7 +138,10 @@ def ask_measuring(
     category: FeatureCategory,
     feature_class: int | None,
 ) -> Question:
-    """Create a measuring question: resolve seeker feature distance, consume category, persist."""
+    """Create a measuring question: resolve seeker feature distance, consume category, persist.
+
+    Raises ValueError if seeker feature cannot be resolved.
+    """
     seeker_feature, seeker_dist = resolve_feature_for_player(
         category=category,
         location=seeker_location,
@@ -213,61 +150,115 @@ def ask_measuring(
         for_matching=False,
     )
 
-    parameters: dict = {
-        'category': str(category),
-        'source': 'map_data',
-        'seeker_resolution': (
-            _resolution_dict(seeker_feature, seeker_dist) if seeker_feature else None
-        ),
-    }
-    if feature_class is not None:
-        parameters['feature_class'] = feature_class
+    if seeker_feature is None:
+        raise ValueError(f'No feature found for category {category} near the seeker location.')
 
-    # Consume category in inventory
-    inventory = QuestionInventory(**game.inventory)
-    inventory.measuring_used.append(category_key(category, feature_class))
-    update_game_inventory(game, inventory.model_dump())
+    record_category_usage(game.id, QuestionType.measuring, category, feature_class)
 
-    return create_question(
+    question = create_question(
         game_id=game.id,
         sequence=get_question_count(game.id) + 1,
         question_type=QuestionType.measuring,
         status=QuestionStatus.answerable,
-        parameters=parameters,
         asked_by=player_id,
         seeker_location_start=seeker_location,
     )
+    create_feature_params(
+        question.id,
+        category=category,
+        feature_class=feature_class,
+        source='map_data',
+        seeker_feature_id=seeker_feature.stable_id,
+        seeker_feature_name=seeker_feature.name,
+        seeker_distance_m=seeker_dist,
+    )
+
+    return question
 
 
-def answer_measuring(
-    question: Question,
-    game: Game,
-    hider_location: Point,
-) -> tuple[str, dict]:
-    """Compute measuring answer. Returns (answer, updated_parameters).
+# ── Answer ───────────────────────────────────────────────────────────────
 
-    Answer is 'closer' if seeker is closer to the feature, 'farther' if not,
-    'null' if either player's feature could not be resolved.
+
+def answer_radar(question: Question) -> str:
+    """Compute radar answer.
+
+    Answer is 'yes' if hider is within the radius, 'no' otherwise.
     """
-    category = FeatureCategory(question.parameters['category'])
-    feature_class = question.parameters.get('feature_class')
+    assert question.radar_params is not None
+    assert question.hider_location is not None
+    dist = distance(question.seeker_location_start, question.hider_location)
+    return 'yes' if dist <= question.radar_params.radius_m else 'no'
+
+
+def answer_thermometer(question: Question) -> str:
+    """Compute thermometer answer.
+
+    Answer is 'closer' if seeker moved closer, 'farther' otherwise.
+    """
+    assert question.hider_location is not None
+    assert question.seeker_location_end is not None
+    dist_start = distance(question.seeker_location_start, question.hider_location)
+    dist_end = distance(question.seeker_location_end, question.hider_location)
+    return 'closer' if dist_end < dist_start else 'farther'
+
+
+def answer_matching(question: Question, game: Game) -> str:
+    """Compute matching answer.
+
+    Resolves hider feature and updates feature_params.
+    Answer is 'yes' if same feature, 'no' if different, 'null' if hider unresolvable.
+    """
+    params = question.feature_params
+    assert params is not None
+    assert question.hider_location is not None
 
     hider_feature, hider_dist = resolve_feature_for_player(
-        category=category,
-        location=hider_location,
+        category=params.category,
+        location=question.hider_location,
         game_map_id=game.map_id,
-        feature_class=feature_class,
+        feature_class=params.feature_class,
+        for_matching=True,
+    )
+
+    if hider_feature is None:
+        return 'null'
+
+    _update_hider_resolution(params, hider_feature.stable_id, hider_feature.name, hider_dist)
+    return 'yes' if params.seeker_feature_id == hider_feature.stable_id else 'no'
+
+
+def answer_measuring(question: Question, game: Game) -> str:
+    """Compute measuring answer.
+
+    Resolves hider feature distance and updates feature_params.
+    Answer is 'closer' if seeker is closer, 'farther' if not, 'null' if hider unresolvable.
+    """
+    params = question.feature_params
+    assert params is not None
+    assert question.hider_location is not None
+
+    hider_feature, hider_dist = resolve_feature_for_player(
+        category=params.category,
+        location=question.hider_location,
+        game_map_id=game.map_id,
+        feature_class=params.feature_class,
         for_matching=False,
     )
 
-    params = dict(question.parameters)
-    params['hider_resolution'] = (
-        _resolution_dict(hider_feature, hider_dist) if hider_feature else None
-    )
+    if hider_feature is None:
+        return 'null'
 
-    seeker_resolution = question.parameters.get('seeker_resolution')
-    if seeker_resolution is None or hider_feature is None:
-        return 'null', params
+    _update_hider_resolution(params, hider_feature.stable_id, hider_feature.name, hider_dist)
+    return 'closer' if params.seeker_distance_m < hider_dist else 'farther'
 
-    answer = 'closer' if seeker_resolution['distance_m'] < hider_dist else 'farther'
-    return answer, params
+
+def _update_hider_resolution(
+    params: FeatureQuestionParams,
+    feature_id: str,
+    feature_name: str,
+    distance_m: float,
+) -> None:
+    """Populate hider resolution fields on feature params."""
+    params.hider_feature_id = feature_id
+    params.hider_feature_name = feature_name
+    params.hider_distance_m = distance_m

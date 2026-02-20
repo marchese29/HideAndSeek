@@ -1,6 +1,8 @@
 """Request validation for questions.
 
-Pure validation — raises HTTPException on invalid requests, returns nothing.
+Pure validation — raises HTTPException on invalid requests, returns nothing
+(except validate_slot_request which returns the resolved InventorySlot, and
+validate_answer_request which returns (Question, Point)).
 Called from routers before business logic.
 """
 
@@ -12,10 +14,20 @@ from fastapi import HTTPException
 from shapely.geometry import Point
 
 from hideandseek.models.game import Game
+from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.question import Question
-from hideandseek.models.types import QuestionInventory, QuestionStatus, QuestionType
+from hideandseek.models.types import (
+    FeatureCategory,
+    QuestionStatus,
+    QuestionType,
+    SlotType,
+)
 from hideandseek.queries.location import get_latest_location_for_player
-from hideandseek.queries.questions import get_question
+from hideandseek.queries.questions import (
+    get_available_slots,
+    get_question,
+    is_category_used,
+)
 from hideandseek.resolution import (
     CLASSED_CATEGORIES,
     MATCHING_CATEGORIES,
@@ -23,82 +35,61 @@ from hideandseek.resolution import (
     category_key,
     get_available_categories,
 )
-from hideandseek.schemas.request import AskQuestionRequest
 
 
-def validate_slot_request(body: AskQuestionRequest, game: Game) -> None:
-    """Validate a radar/thermometer request."""
-    if body.slot_index is None:
-        raise HTTPException(status_code=422, detail='slot_index is required for radar/thermometer.')
+def validate_slot_request(
+    slot_index: int,
+    custom_distance_m: int | None,
+    game: Game,
+    slot_type: SlotType,
+) -> InventorySlot:
+    """Validate a radar/thermometer request. Returns the resolved slot."""
+    available = get_available_slots(game.id, slot_type)
 
-    inventory = QuestionInventory(**game.inventory)
-    slots = inventory.radars if body.question_type == QuestionType.radar else inventory.thermometers
-
-    if body.slot_index < 0 or body.slot_index >= len(slots):
+    if slot_index < 0 or slot_index >= len(available):
         raise HTTPException(status_code=422, detail='Invalid slot index.')
 
-    if slots[body.slot_index].distance_m is None and body.custom_distance_m is None:
+    slot = available[slot_index]
+    if slot.distance_m is None and custom_distance_m is None:
         raise HTTPException(
             status_code=422, detail='custom_distance_m is required for custom slots.'
         )
 
+    return slot
 
-def validate_matching_request(body: AskQuestionRequest, game: Game) -> None:
-    """Validate a matching question request."""
-    if body.category is None:
-        raise HTTPException(status_code=422, detail='category is required for matching questions.')
-    if body.category not in MATCHING_CATEGORIES:
+
+def validate_category_request(
+    category: FeatureCategory,
+    feature_class: int | None,
+    game: Game,
+    question_type: QuestionType,
+) -> None:
+    """Validate a matching or measuring question request."""
+    type_categories = (
+        MATCHING_CATEGORIES if question_type == QuestionType.matching else MEASURING_CATEGORIES
+    )
+    if category not in type_categories:
         raise HTTPException(
             status_code=422,
-            detail=f'{body.category} is not valid for matching questions.',
+            detail=f'{category} is not valid for {question_type} questions.',
         )
-    if body.category in CLASSED_CATEGORIES and body.feature_class is None:
+    if category in CLASSED_CATEGORIES and feature_class is None:
         raise HTTPException(
             status_code=422,
-            detail=f'feature_class is required for {body.category}.',
+            detail=f'feature_class is required for {category}.',
         )
 
-    inventory = QuestionInventory(**game.inventory)
-    key = category_key(body.category, body.feature_class)
-    if key in inventory.matching_used:
+    if is_category_used(game.id, question_type, category, feature_class):
+        key = category_key(category, feature_class)
         raise HTTPException(status_code=409, detail=f'Category {key} already used.')
 
     available = get_available_categories(
         map_id=game.map_id,
-        question_type=QuestionType.matching,
-        inventory=game.inventory,
+        question_type=question_type,
+        game_id=game.id,
     )
     available_keys = {category_key(c, cls) for c, cls in available}
-    if key not in available_keys:
-        raise HTTPException(status_code=422, detail=f'Category {key} is not available on this map.')
-
-
-def validate_measuring_request(body: AskQuestionRequest, game: Game) -> None:
-    """Validate a measuring question request."""
-    if body.category is None:
-        raise HTTPException(status_code=422, detail='category is required for measuring questions.')
-    if body.category not in MEASURING_CATEGORIES:
-        raise HTTPException(
-            status_code=422,
-            detail=f'{body.category} is not valid for measuring questions.',
-        )
-    if body.category in CLASSED_CATEGORIES and body.feature_class is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f'feature_class is required for {body.category}.',
-        )
-
-    inventory = QuestionInventory(**game.inventory)
-    key = category_key(body.category, body.feature_class)
-    if key in inventory.measuring_used:
-        raise HTTPException(status_code=409, detail=f'Category {key} already used.')
-
-    available = get_available_categories(
-        map_id=game.map_id,
-        question_type=QuestionType.measuring,
-        inventory=game.inventory,
-    )
-    available_keys = {category_key(c, cls) for c, cls in available}
+    key = category_key(category, feature_class)
     if key not in available_keys:
         raise HTTPException(status_code=422, detail=f'Category {key} is not available on this map.')
 

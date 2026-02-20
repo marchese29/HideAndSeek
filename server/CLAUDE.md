@@ -61,41 +61,43 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/celery_app.py` — Celery app instance, config from `celery_config`, autodiscovers `hideandseek.tasks`
 - `src/hideandseek/celery_config.py` — Celery configuration (broker URL, eager mode, serialization)
-- `src/hideandseek/validators.py` — Request validation for questions. Pure validation — raises `HTTPException` on invalid requests, returns nothing (except `validate_answer_request` which returns `(Question, Point)`). Called from routers before business logic.
+- `src/hideandseek/validators.py` — Request validation for questions. `validate_slot_request` returns the `InventorySlot` to consume. `validate_category_request` checks category availability. `validate_answer_request` returns `(Question, Point)`. All raise `HTTPException` on invalid requests. Called from routers before business logic.
 - `src/hideandseek/logic.py` — Question lifecycle orchestration (ask and answer). Called by routers after validation. Handles inventory mutation, question creation, feature resolution, and answer computation. No HTTP concerns (no `HTTPException`, no push).
-- `src/hideandseek/resolution.py` — Business logic for matching/measuring feature resolution. Category classification sets (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`), `get_available_categories()`, `resolve_feature_for_player()` (picks containment vs nearest strategy), `compute_matching_answer()`, `compute_measuring_answer()`.
+- `src/hideandseek/resolution.py` — Business logic for matching/measuring feature resolution. Category classification sets (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`), `get_available_categories()`, `resolve_feature_for_player()` (picks containment vs nearest strategy).
 - `src/hideandseek/tasks/` — Celery task modules
   - `game_timers.py` — `transition_hiding_to_seeking`, `auto_answer_question` (game timer tasks). Uses `session_scope()` for DB access.
   - `push.py` — `send_push` (push delivery task with retry). Uses `session_scope()` for DB access.
 - `src/hideandseek/models/` — SQLModel table models and types
-  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, `PushEventType`, `FeatureCategory`, etc.), value objects
+  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, `PushEventType`, `FeatureCategory`, `SlotType`, `QuestionType`, `QuestionStatus`, etc.)
   - `geo_types.py` — `ShapelyGeometry(Geometry)` column type for transparent shapely↔WKB conversion
   - `transit.py` — `TransitDataset`, `Stop`, `Route`, `RouteStop`
-  - `game_map.py` — `GameMap` (includes `feature_classes` JSON column for matching/measuring question support)
+  - `game_map.py` — `GameMap` (includes `feature_classes` JSON column for matching/measuring question support, `default_inventory` JSON template for slot creation)
   - `map_feature.py` — `MapFeature` (map-defined geographic features with `ShapelyGeometry` column, composite unique on `(category, stable_id)`), `GameMapFeature` (join table linking features to maps, composite PK)
-  - `game.py` — `Game`, `Player`
+  - `game.py` — `Game` (relationships: `inventory_slots`, `category_usages`, `players`), `Player`
+  - `inventory.py` — `InventorySlot` (radar/thermometer slot with `consumed_at` soft-delete), `CategoryUsage` (tracks used matching/measuring categories per game, unique on `(game_id, question_type, category, feature_class)`)
   - `location.py` — `LocationUpdate`
-  - `question.py` — `Question`
+  - `question.py` — `Question` (relationships: `radar_params`, `thermometer_params`, `feature_params` — one-to-one with param tables)
+  - `question_params.py` — `RadarParams` (`radius_m`), `ThermometerParams` (`min_travel_m`), `FeatureQuestionParams` (category, source, seeker/hider feature resolution fields)
   - `device_token.py` — `DeviceToken` (maps `client_id` → APNS token)
   - `__init__.py` — Re-exports all models (import this to register tables on metadata)
 - `src/hideandseek/schemas/` — Request/response Pydantic schemas (separate from DB models)
-  - `request.py` — Request body schemas (`CreateGameRequest`, `JoinGameRequest`, etc.)
+  - `request.py` — Request body schemas (`CreateGameRequest`, `JoinGameRequest`, `AskRadarRequest`, `AskThermometerRequest`, `AskMatchingRequest`, `AskMeasuringRequest`, etc.)
   - `response.py` — Response schemas with `from_model()` static methods for DB→API transformation
   - `common.py` — Shared utilities (pagination params)
 - `src/hideandseek/dependencies.py` — Shared FastAPI dependencies (`get_client_id`, `get_game`, `get_player_in_game`)
 - `src/hideandseek/queries/` — Database query/mutation functions, split by domain
   - `device_tokens.py` — `upsert_device_token`, `get_device_tokens_for_game`, `delete_device_token`
   - `maps.py` — `list_maps`, `get_map`
-  - `games.py` — `generate_join_code`, `create_game`, `find_game_by_join_code`, `add_player`, `get_player`, `update_player`, `update_game_status`, `get_game_by_id`
+  - `games.py` — `generate_join_code`, `create_game` (creates `InventorySlot` rows from map's `default_inventory` template), `find_game_by_join_code`, `add_player`, `get_player`, `update_player`, `update_game_status`, `get_game_by_id`
   - `effective_map.py` — `get_effective_map_data`, `RouteWithStops`, `EffectiveMapData` dataclasses
   - `features.py` — `resolve_nearest_feature` (nearest by `ST_Distance`), `resolve_containing_feature` (point-in-polygon via `ST_Contains`), `get_map_feature_categories` (distinct category/class pairs on a map). All join through `GameMapFeature` for map scoping.
-  - `location.py` — `create_location_update`, `get_visible_players`, `get_location_history`, `get_latest_location_for_player`, `get_avg_seeker_location`, `VisiblePlayerData` dataclass
-  - `questions.py` — `has_unanswered_question`, `get_question_count`, `create_question`, `get_question`, `list_questions`, `update_question`, `update_game_inventory`
+  - `location.py` — `create_location_update`, `get_visible_players`, `get_location_history`, `get_latest_location_for_player`, `VisiblePlayerData` dataclass
+  - `questions.py` — `has_unanswered_question`, `get_question_count`, `create_question`, `get_question`, `list_questions`, `update_question`, `create_radar_params`, `create_thermometer_params`, `create_feature_params`, `consume_slot`, `record_category_usage`, `get_category_usages`, `is_category_used`
 - `src/hideandseek/routers/` — API route modules
   - `maps.py` — `GET /maps`, `GET /maps/{map_id}`
   - `games.py` — `POST /games`, `POST /games/join`, `GET /games/{game_id}`, `PATCH .../players/{player_id}`, `POST .../start`, `POST .../end`, `GET .../map`
   - `location.py` — `POST .../location`, `GET .../location-history`
-  - `questions.py` — `POST .../questions`, `POST .../questions/{id}/lock-in`, `POST .../questions/{id}/answer`, `GET .../questions`
+  - `questions.py` — `POST .../questions/radar`, `POST .../questions/thermometer`, `POST .../questions/matching`, `POST .../questions/measuring`, `POST .../questions/thermometer/{id}/lock-in`, `POST .../questions/{id}/answer`, `GET .../questions`
 - `tests/conftest.py` — In-memory SQLite fixtures (`session`, `client`) and factory functions
 - `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`; plus `test_features.py` for spatial queries, `test_geo.py` for distance utilities, and `test_resolution.py` for resolution business logic)
 - `scripts/generate_openapi.py` — dumps `app.openapi()` to `openapi/openapi.yaml`
@@ -113,7 +115,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - **Background jobs (Celery + Redis)**: All push delivery and game timers go through Celery tasks. Broker resolution: (1) `CELERY_BROKER_URL` env var if set, (2) auto-detect Redis on `localhost:6379`, (3) eager mode (tasks run synchronously in-process). Set `CELERY_BROKER_URL=''` to force eager mode when Redis is running. Routers call `.delay()` or `.apply_async()` instead of `BackgroundTasks`. Worker tasks use `session_scope()` to get a DB session with ContextVar — all `@db_read`/`@db_write` query functions work naturally inside the `with session_scope():` block.
 - **Task ID convention**: Deterministic IDs (`hiding_timer:{game_id}`, `answer_deadline:{question_id}`) so the API can revoke tasks without storing IDs in the DB.
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). All push delivery goes through the `send_push` Celery task (with retry). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
-- **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_map_feature`, `create_game_map_feature`) create test data with sensible defaults and accept `**overrides`.
+- **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_inventory_slot`, `create_map_feature`, `create_game_map_feature`) create test data with sensible defaults and accept `**overrides`. `create_game` automatically creates `InventorySlot` rows from the default template.
 - **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
 - **Geometry — three layers**: Geometry flows through three representations:
   - **API boundary** — GeoJSON via `geojson-pydantic` types (`Point`, `Polygon`, `LineString`). Requests accept GeoJSON; responses return GeoJSON.
@@ -121,12 +123,21 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - **Database** — native spatial columns (PostGIS for Docker/production, SpatiaLite for local/tests). The `ShapelyGeometry(Geometry)` column type in `models/geo_types.py` transparently converts between shapely and WKB — model code never touches WKB directly.
 
   Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column type bridges Python↔DB automatically.
-- **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic.py` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) and answer computation helpers used by `logic.py`.
+- **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic.py` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic.py`.
+- **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All accept seeker `location` in the request body, which is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer and list endpoints remain unified.
+- **Relational inventory model**: Game inventory uses proper relational tables instead of JSON:
+  - **`InventorySlot`** table: pre-populated from the map's `default_inventory` template at game creation. Slots are consumed by setting `consumed_at` (soft-delete). `Game.inventory_slots` relationship (ordered by `slot_index`).
+  - **`CategoryUsage`** table: created when a matching/measuring question is asked. Unique constraint on `(game_id, question_type, category, feature_class)`. `Game.category_usages` relationship.
+- **Per-type question parameters**: Question parameters use one-to-one relational tables instead of a JSON column:
+  - `RadarParams` (`radius_m`) — one-to-one via `Question.radar_params`
+  - `ThermometerParams` (`min_travel_m`) — one-to-one via `Question.thermometer_params`
+  - `FeatureQuestionParams` (category, source, seeker/hider resolution) — one-to-one via `Question.feature_params`, shared by matching and measuring
+  - Seeker resolution fields are **non-optional** — if the seeker's feature can't be resolved, the ask endpoint returns 422. Hider resolution fields are populated at answer time.
 - **Question types**: Four types with two inventory models:
-  - **Slot-based** (radar, thermometer): consume a slot from `inventory.radars`/`inventory.thermometers`. Radar → `answerable` immediately; thermometer → `in_progress` until seeker locks in.
-  - **Category-based** (matching, measuring): consume a category key (e.g. `"hospital"`, `"administrative_area:1"`) appended to `inventory.matching_used`/`inventory.measuring_used`. Both → `answerable` immediately. Available categories are inclusion-based: derived from map features (via `GameMapFeature`) minus already-used.
-  - **Matching**: resolves each player's nearest feature (or containing feature for `CONTAINMENT_CATEGORIES`); answer is `"yes"` (same `stable_id`), `"no"` (different), or `"null"` (either player unresolvable).
-  - **Measuring**: resolves each player's distance to nearest feature; answer is `"closer"` (seeker closer), `"farther"`, or `"null"`.
+  - **Slot-based** (radar, thermometer): consume an `InventorySlot` row. Radar → `answerable` immediately; thermometer → `in_progress` until seeker locks in.
+  - **Category-based** (matching, measuring): create a `CategoryUsage` row. Both → `answerable` immediately. Available categories are inclusion-based: derived from map features (via `GameMapFeature`) minus existing `CategoryUsage` rows.
+  - **Matching**: resolves each player's nearest feature (or containing feature for `CONTAINMENT_CATEGORIES`); answer is `"yes"` (same `stable_id`), `"no"` (different), or `"null"` (hider unresolvable).
+  - **Measuring**: resolves each player's distance to nearest feature; answer is `"closer"` (seeker closer), `"farther"`, or `"null"` (hider unresolvable).
 - **Geo math**: `geo.py` provides pure distance functions: `haversine(a, b)` for `(lat, lon)` tuples, `distance(point_a, point_b)` for shapely Points, and `distance_to_feature(player, geometry)` for distance to any geometry. All answer computation lives in `logic.py`. Exclusion zone geometry is still deferred (`exclusion: null`).
 
 ## Game States
@@ -142,7 +153,7 @@ The `GameStatus` enum reflects this. Games can be ended from any active state (h
 - SQLModel for all table models (wraps SQLAlchemy + Pydantic).
 - **Do NOT use `from __future__ import annotations` in model files or `db.py`** — it breaks SQLModel relationship resolution and PEP 695 generics. Use quoted string forward references instead (e.g., `game_map: 'GameMap' = Relationship(...)`).
 - Geometry uses the three-layer pattern (see Architecture Patterns): GeoJSON at API, shapely in Python, native spatial in DB. System dep: `brew install libspatialite` (auto-detected; `SPATIALITE_LIBRARY_PATH` override if non-standard).
-- Value objects (TimingRules, QuestionInventory, etc.) stored as JSON columns on their parent table.
+- Value objects (TimingRules, etc.) stored as JSON columns on their parent table. Game inventory and question parameters use proper relational tables (see Architecture Patterns).
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int).
 - Relationships use bottom-of-file imports and quoted forward references to avoid circular dependencies.
 - Enums are `StrEnum` — stored as VARCHAR, human-readable in DB.

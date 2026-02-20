@@ -8,7 +8,7 @@ from datetime import datetime
 from geojson_pydantic import Point
 from pydantic import BaseModel, Field
 
-from hideandseek.models.types import FeatureCategory, PlayerRole, QuestionType
+from hideandseek.models.types import FeatureCategory, PlayerRole
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 
@@ -66,22 +66,44 @@ class LocationReportRequest(BaseModel):
 # ── Questions ─────────────────────────────────────────────────────────────────
 
 
-class AskQuestionRequest(BaseModel):
-    """Ask a question, spending an inventory slot or category."""
+class AskRadarRequest(BaseModel):
+    """Ask a radar question, spending a radar inventory slot."""
 
-    question_type: QuestionType = Field(description='Type of question.')
-    slot_index: int | None = Field(
-        default=None,
-        description='0-based index into the inventory slot list. Required for radar/thermometer.',
-    )
+    location: Point = Field(description='Current seeker position as a GeoJSON Point.')
+    slot_index: int = Field(description='0-based index into the available radar slot list.')
     custom_distance_m: int | None = Field(
         default=None,
         description='Required when the chosen slot has distance_m=null (custom slot).',
     )
-    category: FeatureCategory | None = Field(
+
+
+class AskThermometerRequest(BaseModel):
+    """Ask a thermometer question, spending a thermometer inventory slot."""
+
+    location: Point = Field(description='Current seeker position as a GeoJSON Point.')
+    slot_index: int = Field(description='0-based index into the available thermometer slot list.')
+    custom_distance_m: int | None = Field(
         default=None,
-        description='Feature category. Required for matching/measuring questions.',
+        description='Required when the chosen slot has distance_m=null (custom slot).',
     )
+
+
+class AskMatchingRequest(BaseModel):
+    """Ask a matching question about a feature category."""
+
+    location: Point = Field(description='Current seeker position as a GeoJSON Point.')
+    category: FeatureCategory = Field(description='Feature category to match on.')
+    feature_class: int | None = Field(
+        default=None,
+        description='Feature class tier. Required for classed categories.',
+    )
+
+
+class AskMeasuringRequest(BaseModel):
+    """Ask a measuring question about a feature category."""
+
+    location: Point = Field(description='Current seeker position as a GeoJSON Point.')
+    category: FeatureCategory = Field(description='Feature category to measure distance to.')
     feature_class: int | None = Field(
         default=None,
         description='Feature class tier. Required for classed categories.',
@@ -91,7 +113,7 @@ class AskQuestionRequest(BaseModel):
 class PreviewQuestionRequest(BaseModel):
     """Preview the nearest feature for a matching/measuring question without consuming inventory."""
 
-    question_type: QuestionType = Field(description='matching or measuring.')
+    question_type: str = Field(description='matching or measuring.')
     category: FeatureCategory = Field(description='Feature category to preview.')
     feature_class: int | None = Field(
         default=None,

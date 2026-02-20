@@ -16,7 +16,6 @@ class Game(SQLModel, table=True):
     status: GameStatus = GameStatus.lobby
     join_code: str | None = Field(default=None, sa_column_kwargs={'unique': True, 'index': True})
     timing: dict = Field(default_factory=dict, sa_type=sa.JSON)  # TimingRules
-    inventory: dict = Field(default_factory=dict, sa_type=sa.JSON)  # QuestionInventory
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     hiding_started_at: datetime | None = None
     seeking_started_at: datetime | None = None
@@ -24,6 +23,11 @@ class Game(SQLModel, table=True):
     game_map: 'GameMap' = Relationship(back_populates='games')  # noqa: F821
     players: list['Player'] = Relationship(back_populates='game')
     questions: list['Question'] = Relationship(back_populates='game')  # noqa: F821
+    inventory_slots: list['InventorySlot'] = Relationship(  # noqa: F821
+        back_populates='game',
+        sa_relationship_kwargs={'order_by': 'InventorySlot.slot_index'},
+    )
+    category_usages: list['CategoryUsage'] = Relationship(back_populates='game')  # noqa: F821
 
 
 class Player(SQLModel, table=True):
@@ -45,7 +49,16 @@ class Player(SQLModel, table=True):
 
 # Avoid circular imports — resolved at runtime by SQLModel.
 from hideandseek.models.game_map import GameMap  # noqa: E402
+from hideandseek.models.inventory import CategoryUsage, InventorySlot  # noqa: E402
 from hideandseek.models.location import LocationUpdate  # noqa: E402
 from hideandseek.models.question import Question  # noqa: E402
 
-__all__ = ['Game', 'Player', 'GameMap', 'LocationUpdate', 'Question']
+__all__ = [
+    'CategoryUsage',
+    'Game',
+    'GameMap',
+    'InventorySlot',
+    'LocationUpdate',
+    'Player',
+    'Question',
+]

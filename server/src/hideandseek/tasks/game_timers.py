@@ -81,18 +81,21 @@ def auto_answer_question(question_id: str) -> None:
             return
         hider_location = latest.coordinates
 
+        # Set hider location before computing answer
+        update_question(question, {'hider_location': hider_location})
+
         # Compute answer
         if question.question_type == QuestionType.radar:
-            answer, params_update = answer_radar(question, hider_location)
+            answer = answer_radar(question)
 
         elif question.question_type == QuestionType.thermometer:
-            answer, params_update = answer_thermometer(question, hider_location)
+            answer = answer_thermometer(question)
 
         elif question.question_type == QuestionType.matching:
-            answer, params_update = answer_matching(question, game, hider_location)
+            answer = answer_matching(question, game)
 
         elif question.question_type == QuestionType.measuring:
-            answer, params_update = answer_measuring(question, game, hider_location)
+            answer = answer_measuring(question, game)
 
         else:
             logger.error('auto_answer_unknown_type', question_type=question.question_type)
@@ -101,12 +104,10 @@ def auto_answer_question(question_id: str) -> None:
         update_question(
             question,
             {
-                'hider_location': hider_location,
                 'answer': answer,
                 'exclusion': None,
                 'answered_at': datetime.now(UTC),
                 'status': QuestionStatus.answered,
-                'parameters': params_update,
             },
         )
 

@@ -3,39 +3,45 @@ from __future__ import annotations
 from hideandseek.models.device_token import DeviceToken
 from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
+from hideandseek.models.inventory import CategoryUsage, InventorySlot
 from hideandseek.models.location import LocationUpdate
 from hideandseek.models.map_feature import GameMapFeature, MapFeature
 from hideandseek.models.question import Question
+from hideandseek.models.question_params import FeatureQuestionParams, RadarParams, ThermometerParams
 from hideandseek.models.transit import Route, RouteStop, Stop, TransitDataset
 from hideandseek.models.types import (
-    DistanceSlot,
     DistrictClass,
     FeatureCategory,
     GameStatus,
     MapSize,
     PlayerRole,
     PushEventType,
-    QuestionInventory,
     QuestionStatus,
     QuestionType,
     RestPeriod,
     RouteType,
+    SlotType,
     TimingRules,
 )
 
 __all__ = [
     # Table models
+    'CategoryUsage',
     'DeviceToken',
+    'FeatureQuestionParams',
     'Game',
     'GameMap',
     'GameMapFeature',
+    'InventorySlot',
     'LocationUpdate',
     'MapFeature',
     'Player',
     'Question',
+    'RadarParams',
     'Route',
     'RouteStop',
     'Stop',
+    'ThermometerParams',
     'TransitDataset',
     # Enums
     'FeatureCategory',
@@ -46,10 +52,9 @@ __all__ = [
     'QuestionStatus',
     'QuestionType',
     'RouteType',
+    'SlotType',
     # Value objects
-    'DistanceSlot',
     'DistrictClass',
-    'QuestionInventory',
     'RestPeriod',
     'TimingRules',
 ]

@@ -63,6 +63,11 @@ class FeatureCategory(StrEnum):
     foreign_consulate = 'foreign_consulate'
 
 
+class SlotType(StrEnum):
+    radar = 'radar'
+    thermometer = 'thermometer'
+
+
 class QuestionType(StrEnum):
     radar = 'radar'
     thermometer = 'thermometer'
@@ -92,17 +97,6 @@ class PushEventType(StrEnum):
 class RestPeriod(BaseModel):
     start: str  # HH:MM time string
     end: str
-
-
-class DistanceSlot(BaseModel):
-    distance_m: int | None = None
-
-
-class QuestionInventory(BaseModel):
-    radars: list[DistanceSlot] = []
-    thermometers: list[DistanceSlot] = []
-    matching_used: list[str] = []
-    measuring_used: list[str] = []
 
 
 class TimingRules(BaseModel):

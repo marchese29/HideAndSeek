@@ -19,7 +19,6 @@ class Question(SQLModel, table=True):
     sequence: int
     question_type: QuestionType
     status: QuestionStatus = QuestionStatus.asked
-    parameters: dict = Field(default_factory=dict, sa_type=sa.JSON)
     asked_by: uuid.UUID = Field(foreign_key='player.id')
     asked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     seeker_location_start: Point = Field(sa_column=sa.Column(ShapelyGeometry('POINT', srid=4326)))
@@ -37,9 +36,32 @@ class Question(SQLModel, table=True):
     )
 
     game: 'Game' = Relationship(back_populates='questions')  # noqa: F821
+    radar_params: 'RadarParams' = Relationship(  # noqa: F821
+        back_populates='question',
+        sa_relationship_kwargs={'uselist': False},
+    )
+    thermometer_params: 'ThermometerParams' = Relationship(  # noqa: F821
+        back_populates='question',
+        sa_relationship_kwargs={'uselist': False},
+    )
+    feature_params: 'FeatureQuestionParams' = Relationship(  # noqa: F821
+        back_populates='question',
+        sa_relationship_kwargs={'uselist': False},
+    )
 
 
 # Avoid circular imports — resolved at runtime by SQLModel.
 from hideandseek.models.game import Game  # noqa: E402
+from hideandseek.models.question_params import (  # noqa: E402
+    FeatureQuestionParams,
+    RadarParams,
+    ThermometerParams,
+)
 
-__all__ = ['Question', 'Game']
+__all__ = [
+    'FeatureQuestionParams',
+    'Game',
+    'Question',
+    'RadarParams',
+    'ThermometerParams',
+]

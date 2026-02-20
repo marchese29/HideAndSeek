@@ -111,27 +111,3 @@ def get_latest_location_for_player(
         .order_by(LocationUpdate.id.desc())  # type: ignore[union-attr]
         .limit(1)
     ).first()
-
-
-@db_read
-def get_avg_seeker_location(session: Session, game: Game) -> Point | None:
-    """Compute the average position of all seekers based on their latest reports.
-
-    Returns a shapely Point or None if no seeker locations exist.
-    """
-    seekers = [p for p in game.players if p.role == PlayerRole.seeker]
-    if not seekers:
-        return None
-
-    lngs: list[float] = []
-    lats: list[float] = []
-    for seeker in seekers:
-        lu = get_latest_location_for_player(seeker.id, game.id)
-        if lu:
-            lngs.append(lu.coordinates.x)
-            lats.append(lu.coordinates.y)
-
-    if not lngs:
-        return None
-
-    return Point(sum(lngs) / len(lngs), sum(lats) / len(lats))

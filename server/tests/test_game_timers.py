@@ -12,7 +12,9 @@ from sqlmodel import Session
 from hideandseek.models.game import Game
 from hideandseek.models.location import LocationUpdate
 from hideandseek.models.question import Question
+from hideandseek.models.question_params import FeatureQuestionParams, RadarParams
 from hideandseek.models.types import (
+    FeatureCategory,
     GameStatus,
     PlayerRole,
     QuestionStatus,
@@ -90,12 +92,15 @@ def _create_answerable_question(session: Session) -> tuple[Game, Question]:
         sequence=1,
         question_type=QuestionType.radar,
         status=QuestionStatus.answerable,
-        parameters={'radius_m': 3000},
         asked_by=seeker.id,
         seeker_location_start=Point(-0.1, 51.5),
         answerable_at=datetime.now(UTC),
     )
     session.add(question)
+    session.flush()
+
+    params = RadarParams(question_id=question.id, radius_m=3000)
+    session.add(params)
     session.commit()
     session.refresh(question)
     return game, question
@@ -163,29 +168,32 @@ def test_auto_answer_matching_question(session: Session):
         sequence=1,
         question_type=QuestionType.matching,
         status=QuestionStatus.answerable,
-        parameters={
-            'category': 'hospital',
-            'source': 'map_data',
-            'seeker_resolution': {
-                'feature_id': 'hosp_a',
-                'name': 'Hospital A',
-                'distance_m': 100.0,
-            },
-        },
         asked_by=seeker.id,
         seeker_location_start=Point(-0.1, 51.5),
         answerable_at=datetime.now(UTC),
     )
     session.add(question)
+    session.flush()
+
+    fp = FeatureQuestionParams(
+        question_id=question.id,
+        category=FeatureCategory.hospital,
+        source='map_data',
+        seeker_feature_id='hosp_a',
+        seeker_feature_name='Hospital A',
+        seeker_distance_m=100.0,
+    )
+    session.add(fp)
     session.commit()
     session.refresh(question)
 
     auto_answer_question(str(question.id))
     session.expire_all()
     session.refresh(question)
+    session.refresh(fp)
     assert question.status == QuestionStatus.answered
     assert question.answer == 'no'  # different hospitals
-    assert question.parameters['hider_resolution']['feature_id'] == 'hosp_b'
+    assert fp.hider_feature_id == 'hosp_b'
 
 
 def test_auto_answer_measuring_question(session: Session):
@@ -218,20 +226,22 @@ def test_auto_answer_measuring_question(session: Session):
         sequence=1,
         question_type=QuestionType.measuring,
         status=QuestionStatus.answerable,
-        parameters={
-            'category': 'hospital',
-            'source': 'map_data',
-            'seeker_resolution': {
-                'feature_id': 'hosp_1',
-                'name': 'Hospital',
-                'distance_m': 50.0,
-            },
-        },
         asked_by=seeker.id,
         seeker_location_start=Point(-0.1001, 51.5001),
         answerable_at=datetime.now(UTC),
     )
     session.add(question)
+    session.flush()
+
+    fp = FeatureQuestionParams(
+        question_id=question.id,
+        category=FeatureCategory.hospital,
+        source='map_data',
+        seeker_feature_id='hosp_1',
+        seeker_feature_name='Hospital',
+        seeker_distance_m=50.0,
+    )
+    session.add(fp)
     session.commit()
     session.refresh(question)
 

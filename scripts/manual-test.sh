@@ -13,6 +13,8 @@ set -euo pipefail
 BASE="${1:-http://localhost:8000}"
 DS_ID="00000000-0000-0000-0000-000000000001"
 MAP_ID="00000000-0000-0000-0000-000000000002"
+FEAT_SEEKER="00000000-0000-0000-0000-000000000010"
+FEAT_HIDER="00000000-0000-0000-0000-000000000011"
 HOST_CLIENT="11111111-1111-1111-1111-111111111111"
 SEEKER_CLIENT="22222222-2222-2222-2222-222222222222"
 HIDER_CLIENT="33333333-3333-3333-3333-333333333333"
@@ -28,14 +30,28 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO game_map (id, name, size, transit_dataset_id, boundary,
                       excluded_stop_ids, excluded_route_ids, districts,
-                      district_classes, default_inventory)
+                      district_classes, feature_classes, default_inventory)
 VALUES (
   '$MAP_ID', 'Central London', 'medium', '$DS_ID',
   ST_GeomFromText('POLYGON((-0.2 51.4, 0.1 51.4, 0.1 51.6, -0.2 51.6, -0.2 51.4))', 4326),
-  '[]', '[]', '[]', '[]',
+  '[]', '[]', '[]', '[]', '{}',
   '{"radars":[{"distance_m":3000},{"distance_m":5000},{"distance_m":null}],
     "thermometers":[{"distance_m":500},{"distance_m":null}]}'
 ) ON CONFLICT DO NOTHING;
+-- Seed two hospital features: one near the seeker, one near the hider
+INSERT INTO map_feature (id, category, stable_id, name, geometry)
+VALUES
+  ('$FEAT_SEEKER', 'hospital', 'hosp_near_seeker', 'Seeker Hospital',
+   ST_GeomFromText('POINT(-0.11 51.51)', 4326)),
+  ('$FEAT_HIDER', 'hospital', 'hosp_near_hider', 'Hider Hospital',
+   ST_GeomFromText('POINT(0.01 51.01)', 4326))
+ON CONFLICT DO NOTHING;
+
+INSERT INTO game_map_feature (game_map_id, map_feature_id)
+VALUES
+  ('$MAP_ID', '$FEAT_SEEKER'),
+  ('$MAP_ID', '$FEAT_HIDER')
+ON CONFLICT DO NOTHING;
 SQL
 echo "Done."
 
@@ -108,11 +124,11 @@ curl -sf -X POST "$BASE/games/$GAME_ID/location" \
   -d '{"coordinates":{"type":"Point","coordinates":[0.0,51.0]},"timestamp":"2026-02-17T10:01:00Z"}' | pp
 
 echo ""
-echo "=== POST /questions (3km radar) ==="
-Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions" \
+echo "=== POST /questions/radar (3km radar) ==="
+Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/radar" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $SEEKER_CLIENT" \
-  -d '{"question_type":"radar","slot_index":0}')
+  -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"slot_index":0}')
 echo "$Q" | pp
 Q_ID=$(echo "$Q" | jq_val "['id']")
 
@@ -120,6 +136,71 @@ echo ""
 echo "=== POST /questions/{id}/answer (hider answers — expect 'no', ~56km apart) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Client-Id: $HIDER_CLIENT" | pp
+
+echo ""
+echo "=== POST /questions/thermometer (500m thermometer) ==="
+Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/thermometer" \
+  -H "Content-Type: application/json" \
+  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"slot_index":0}')
+echo "$Q" | pp
+Q_ID=$(echo "$Q" | jq_val "['id']")
+echo "  Status should be 'in_progress': $(echo "$Q" | jq_val "['status']")"
+
+echo ""
+echo "=== POST /location (seeker moves closer to hider → -0.05, 51.3) ==="
+curl -sf -X POST "$BASE/games/$GAME_ID/location" \
+  -H "Content-Type: application/json" \
+  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -d '{"coordinates":{"type":"Point","coordinates":[-0.05,51.3]},"timestamp":"2026-02-17T10:05:00Z"}' | pp
+
+echo ""
+echo "=== POST /questions/thermometer/{id}/lock-in ==="
+curl -sf -X POST "$BASE/games/$GAME_ID/questions/thermometer/$Q_ID/lock-in" \
+  -H "X-Client-Id: $SEEKER_CLIENT" | pp
+
+echo ""
+echo "=== POST /questions/{id}/answer (thermometer — expect 'closer') ==="
+curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
+  -H "X-Client-Id: $HIDER_CLIENT" | pp
+
+echo ""
+echo "=== POST /questions/matching (hospital category) ==="
+Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/matching" \
+  -H "Content-Type: application/json" \
+  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"category":"hospital"}')
+echo "$Q" | pp
+Q_ID=$(echo "$Q" | jq_val "['id']")
+echo "  Seeker feature: $(echo "$Q" | jq_val "['parameters']['seeker_resolution']['name']")"
+
+echo ""
+echo "=== POST /questions/{id}/answer (matching — expect 'no', different hospitals) ==="
+curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
+  -H "X-Client-Id: $HIDER_CLIENT" | pp
+
+echo ""
+echo "=== POST /questions/measuring (hospital category) ==="
+Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/measuring" \
+  -H "Content-Type: application/json" \
+  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"category":"hospital"}')
+echo "$Q" | pp
+Q_ID=$(echo "$Q" | jq_val "['id']")
+
+echo ""
+echo "=== POST /questions/{id}/answer (measuring — seeker vs hider distance) ==="
+curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
+  -H "X-Client-Id: $HIDER_CLIENT" | pp
+
+echo ""
+echo "=== GET /questions (all 4 questions) ==="
+curl -sf "$BASE/games/$GAME_ID/questions" \
+  -H "X-Client-Id: $SEEKER_CLIENT" | pp
+
+echo ""
+echo "=== GET /games/{id} (inventory after consuming slots + categories) ==="
+curl -sf "$BASE/games/$GAME_ID" | pp
 
 echo ""
 echo "=== POST /games/{id}/end ==="

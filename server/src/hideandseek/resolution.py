@@ -21,6 +21,7 @@ from hideandseek.queries.features import (
     resolve_containing_feature,
     resolve_nearest_feature,
 )
+from hideandseek.queries.questions import get_category_usages
 
 # ── Category classification ──────────────────────────────────────────────
 
@@ -84,20 +85,21 @@ def category_key(category: FeatureCategory, feature_class: int | None) -> str:
 def get_available_categories(
     map_id: uuid.UUID,
     question_type: QuestionType,
-    inventory: dict,
+    game_id: uuid.UUID,
 ) -> list[tuple[FeatureCategory, int | None]]:
     """Categories available for asking.
 
     Availability is inclusion-based: a category is available if features for it
     exist on the map (via GameMapFeature). Filters by:
     1. Question type support (matching vs measuring)
-    2. Already-used categories from inventory
+    2. Already-used categories from CategoryUsage table
     """
     type_categories = (
         MATCHING_CATEGORIES if question_type == QuestionType.matching else MEASURING_CATEGORIES
     )
-    used_key = 'matching_used' if question_type == QuestionType.matching else 'measuring_used'
-    used_keys: set[str] = set(inventory.get(used_key, []))
+
+    usages = get_category_usages(game_id, question_type)
+    used_keys: set[str] = {category_key(u.category, u.feature_class) for u in usages}
 
     map_cats = get_map_feature_categories(game_map_id=map_id)
 

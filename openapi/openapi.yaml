@@ -373,13 +373,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /games/{game_id}/questions:
+  /games/{game_id}/questions/radar:
     post:
       tags:
       - questions
-      summary: Ask Question
-      description: Ask a question, spending an inventory slot or category.
-      operationId: ask_question_games__game_id__questions_post
+      summary: Ask Radar Question
+      description: Ask a radar question, spending a radar inventory slot.
+      operationId: ask_radar_question_games__game_id__questions_radar_post
       parameters:
       - name: game_id
         in: path
@@ -400,7 +400,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AskQuestionRequest'
+              $ref: '#/components/schemas/AskRadarRequest'
       responses:
         '201':
           description: Successful Response
@@ -414,13 +414,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-    get:
+  /games/{game_id}/questions/thermometer:
+    post:
       tags:
       - questions
-      summary: List Game Questions
-      description: Chronological list of all questions. Hider location hidden from
-        seekers.
-      operationId: list_game_questions_games__game_id__questions_get
+      summary: Ask Thermometer Question
+      description: Ask a thermometer question, spending a thermometer inventory slot.
+      operationId: ask_thermometer_question_games__game_id__questions_thermometer_post
       parameters:
       - name: game_id
         in: path
@@ -436,29 +436,114 @@ paths:
           type: string
           format: uuid
           title: X-Client-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskThermometerRequest'
       responses:
-        '200':
+        '201':
           description: Successful Response
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/QuestionResponse'
-                title: Response List Game Questions Games  Game Id  Questions Get
+                $ref: '#/components/schemas/QuestionResponse'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /games/{game_id}/questions/{question_id}/lock-in:
+  /games/{game_id}/questions/matching:
+    post:
+      tags:
+      - questions
+      summary: Ask Matching Question
+      description: Ask a matching question about a feature category.
+      operationId: ask_matching_question_games__game_id__questions_matching_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskMatchingRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/measuring:
+    post:
+      tags:
+      - questions
+      summary: Ask Measuring Question
+      description: Ask a measuring question about a feature category.
+      operationId: ask_measuring_question_games__game_id__questions_measuring_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskMeasuringRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/thermometer/{question_id}/lock-in:
     post:
       tags:
       - questions
       summary: Lock In Question
       description: Lock in the seeker's end position for a thermometer question.
-      operationId: lock_in_question_games__game_id__questions__question_id__lock_in_post
+      operationId: lock_in_question_games__game_id__questions_thermometer__question_id__lock_in_post
       parameters:
       - name: question_id
         in: path
@@ -537,6 +622,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions:
+    get:
+      tags:
+      - questions
+      summary: List Game Questions
+      description: Chronological list of all questions. Hider location hidden from
+        seekers.
+      operationId: list_game_questions_games__game_id__questions_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QuestionResponse'
+                title: Response List Game Questions Games  Game Id  Questions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       summary: Root
@@ -567,28 +691,14 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
-    AskQuestionRequest:
+    AskMatchingRequest:
       properties:
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-          description: Type of question.
-        slot_index:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Slot Index
-          description: 0-based index into the inventory slot list. Required for radar/thermometer.
-        custom_distance_m:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Custom Distance M
-          description: Required when the chosen slot has distance_m=null (custom slot).
+        location:
+          $ref: '#/components/schemas/Point'
+          description: Current seeker position as a GeoJSON Point.
         category:
-          anyOf:
-          - $ref: '#/components/schemas/FeatureCategory'
-          - type: 'null'
-          description: Feature category. Required for matching/measuring questions.
+          $ref: '#/components/schemas/FeatureCategory'
+          description: Feature category to match on.
         feature_class:
           anyOf:
           - type: integer
@@ -597,9 +707,92 @@ components:
           description: Feature class tier. Required for classed categories.
       type: object
       required:
-      - question_type
-      title: AskQuestionRequest
-      description: Ask a question, spending an inventory slot or category.
+      - location
+      - category
+      title: AskMatchingRequest
+      description: Ask a matching question about a feature category.
+    AskMeasuringRequest:
+      properties:
+        location:
+          $ref: '#/components/schemas/Point'
+          description: Current seeker position as a GeoJSON Point.
+        category:
+          $ref: '#/components/schemas/FeatureCategory'
+          description: Feature category to measure distance to.
+        feature_class:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Feature Class
+          description: Feature class tier. Required for classed categories.
+      type: object
+      required:
+      - location
+      - category
+      title: AskMeasuringRequest
+      description: Ask a measuring question about a feature category.
+    AskRadarRequest:
+      properties:
+        location:
+          $ref: '#/components/schemas/Point'
+          description: Current seeker position as a GeoJSON Point.
+        slot_index:
+          type: integer
+          title: Slot Index
+          description: 0-based index into the available radar slot list.
+        custom_distance_m:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Custom Distance M
+          description: Required when the chosen slot has distance_m=null (custom slot).
+      type: object
+      required:
+      - location
+      - slot_index
+      title: AskRadarRequest
+      description: Ask a radar question, spending a radar inventory slot.
+    AskThermometerRequest:
+      properties:
+        location:
+          $ref: '#/components/schemas/Point'
+          description: Current seeker position as a GeoJSON Point.
+        slot_index:
+          type: integer
+          title: Slot Index
+          description: 0-based index into the available thermometer slot list.
+        custom_distance_m:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Custom Distance M
+          description: Required when the chosen slot has distance_m=null (custom slot).
+      type: object
+      required:
+      - location
+      - slot_index
+      title: AskThermometerRequest
+      description: Ask a thermometer question, spending a thermometer inventory slot.
+    CategoryUsageResponse:
+      properties:
+        category:
+          type: string
+          title: Category
+        feature_class:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Feature Class
+        consumed_at:
+          type: string
+          format: date-time
+          title: Consumed At
+      type: object
+      required:
+      - category
+      - consumed_at
+      title: CategoryUsageResponse
+      description: A used matching or measuring category.
     CreateGameRequest:
       properties:
         map_id:
@@ -689,6 +882,65 @@ components:
       - library
       - foreign_consulate
       title: FeatureCategory
+    FeatureParamsResponse:
+      properties:
+        type:
+          type: string
+          enum:
+          - matching
+          - measuring
+          title: Type
+        category:
+          type: string
+          title: Category
+          description: Feature category.
+        feature_class:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Feature Class
+          description: Feature class tier, if applicable.
+        source:
+          type: string
+          title: Source
+          description: Data source (e.g. map_data).
+        seeker_resolution:
+          $ref: '#/components/schemas/FeatureResolution'
+          description: Seeker feature resolution.
+        hider_resolution:
+          anyOf:
+          - $ref: '#/components/schemas/FeatureResolution'
+          - type: 'null'
+          description: Hider feature resolution (populated at answer time).
+      type: object
+      required:
+      - type
+      - category
+      - source
+      - seeker_resolution
+      title: FeatureParamsResponse
+      description: Parameters for a matching or measuring question.
+    FeatureResolution:
+      properties:
+        feature_id:
+          type: string
+          title: Feature Id
+          description: Stable identifier of the resolved feature.
+        name:
+          type: string
+          title: Name
+          description: Human-readable name.
+        distance_m:
+          type: number
+          title: Distance M
+          description: Distance in meters.
+      type: object
+      required:
+      - feature_id
+      - name
+      - distance_m
+      title: FeatureResolution
+      description: Resolution result for one player's feature lookup.
     GameResponse:
       properties:
         id:
@@ -713,10 +965,8 @@ components:
           title: Timing
           description: 'TimingRules: hiding_time_min, rest_periods, etc.'
         inventory:
-          additionalProperties: true
-          type: object
-          title: Inventory
-          description: Remaining question inventory (radars + thermometers).
+          $ref: '#/components/schemas/InventoryResponse'
+          description: Question inventory (slots + category usage).
         players:
           items:
             $ref: '#/components/schemas/PlayerResponse'
@@ -770,6 +1020,40 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    InventoryResponse:
+      properties:
+        radar_slots:
+          items:
+            $ref: '#/components/schemas/SlotResponse'
+          type: array
+          title: Radar Slots
+          description: Radar question slots.
+        thermometer_slots:
+          items:
+            $ref: '#/components/schemas/SlotResponse'
+          type: array
+          title: Thermometer Slots
+          description: Thermometer question slots.
+        matching_used:
+          items:
+            $ref: '#/components/schemas/CategoryUsageResponse'
+          type: array
+          title: Matching Used
+          description: Matching categories already used.
+        measuring_used:
+          items:
+            $ref: '#/components/schemas/CategoryUsageResponse'
+          type: array
+          title: Measuring Used
+          description: Measuring categories already used.
+      type: object
+      required:
+      - radar_slots
+      - thermometer_slots
+      - matching_used
+      - measuring_used
+      title: InventoryResponse
+      description: Structured question inventory for a game.
     JoinGameRequest:
       properties:
         join_code:
@@ -1169,10 +1453,12 @@ components:
         status:
           $ref: '#/components/schemas/QuestionStatus'
         parameters:
-          additionalProperties: true
-          type: object
+          anyOf:
+          - $ref: '#/components/schemas/RadarParamsResponse'
+          - $ref: '#/components/schemas/ThermometerParamsResponse'
+          - $ref: '#/components/schemas/FeatureParamsResponse'
           title: Parameters
-          description: radius_m for radar, min_travel_m for thermometer.
+          description: Type-specific question parameters.
         asked_by:
           type: string
           format: uuid
@@ -1258,6 +1544,22 @@ components:
       - matching
       - measuring
       title: QuestionType
+    RadarParamsResponse:
+      properties:
+        type:
+          type: string
+          const: radar
+          title: Type
+          default: radar
+        radius_m:
+          type: integer
+          title: Radius M
+          description: Radar radius in meters.
+      type: object
+      required:
+      - radius_m
+      title: RadarParamsResponse
+      description: Parameters for a radar question.
     RouteResponse:
       properties:
         id:
@@ -1300,6 +1602,34 @@ components:
       - stop_ids
       title: RouteResponse
       description: A transit route on the effective game map, with ordered stop IDs.
+    SlotResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        slot_index:
+          type: integer
+          title: Slot Index
+          description: Original ordering index.
+        distance_m:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Distance M
+          description: Preset distance, or null for custom.
+        consumed:
+          type: boolean
+          title: Consumed
+          description: Whether this slot has been used.
+      type: object
+      required:
+      - id
+      - slot_index
+      - distance_m
+      - consumed
+      title: SlotResponse
+      description: A single inventory slot (radar or thermometer).
     StopResponse:
       properties:
         id:
@@ -1324,6 +1654,22 @@ components:
       - coordinates
       title: StopResponse
       description: A transit stop on the effective game map.
+    ThermometerParamsResponse:
+      properties:
+        type:
+          type: string
+          const: thermometer
+          title: Type
+          default: thermometer
+        min_travel_m:
+          type: integer
+          title: Min Travel M
+          description: Minimum travel distance in meters.
+      type: object
+      required:
+      - min_travel_m
+      title: ThermometerParamsResponse
+      description: Parameters for a thermometer question.
     ValidationError:
       properties:
         loc:

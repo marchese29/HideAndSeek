@@ -6,6 +6,7 @@ from shapely.geometry import Point, Polygon
 from sqlmodel import Session
 
 from hideandseek.models.types import FeatureCategory, QuestionType
+from hideandseek.queries.questions import record_category_usage
 from hideandseek.resolution import (
     category_key,
     compute_matching_answer,
@@ -14,6 +15,7 @@ from hideandseek.resolution import (
     resolve_feature_for_player,
 )
 from tests.conftest import (
+    create_game,
     create_game_map,
     create_game_map_feature,
     create_map_feature,
@@ -47,15 +49,17 @@ def test_available_categories_filters_by_type(session: Session):
     create_game_map_feature(session, gm.id, hosp.id)
     create_game_map_feature(session, gm.id, rail.id)
 
+    game = create_game(session, map_id=gm.id)
+
     matching = get_available_categories(
         map_id=gm.id,
         question_type=QuestionType.matching,
-        inventory={'matching_used': [], 'measuring_used': []},
+        game_id=game.id,
     )
     measuring = get_available_categories(
         map_id=gm.id,
         question_type=QuestionType.measuring,
-        inventory={'matching_used': [], 'measuring_used': []},
+        game_id=game.id,
     )
 
     matching_cats = {c for c, _ in matching}
@@ -71,10 +75,13 @@ def test_available_categories_excludes_used(session: Session):
     hosp = create_map_feature(session, category=FeatureCategory.hospital)
     create_game_map_feature(session, gm.id, hosp.id)
 
+    game = create_game(session, map_id=gm.id)
+    record_category_usage(game.id, QuestionType.matching, FeatureCategory.hospital, None)
+
     avail = get_available_categories(
         map_id=gm.id,
         question_type=QuestionType.matching,
-        inventory={'matching_used': ['hospital'], 'measuring_used': []},
+        game_id=game.id,
     )
     assert len(avail) == 0
 
