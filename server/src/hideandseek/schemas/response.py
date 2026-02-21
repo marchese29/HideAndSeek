@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, Literal
 from geojson_pydantic import LineString as GeoJSONLineString
 from geojson_pydantic import Point as GeoJSONPoint
 from geojson_pydantic import Polygon as GeoJSONPolygon
-from pydantic import BaseModel, Field
+from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
+from pydantic import BaseModel, Field, TypeAdapter
 from shapely.geometry import mapping
 
 from hideandseek.models.types import (
@@ -379,6 +380,15 @@ QuestionParamsResponse = RadarParamsResponse | ThermometerParamsResponse | Featu
 # ── Questions ─────────────────────────────────────────────────────────────────
 
 
+_geojson_adapter: TypeAdapter[GeoJSONGeometry] = TypeAdapter(GeoJSONGeometry)
+
+
+def _geom_or_none(geom: object) -> GeoJSONGeometry | None:
+    if geom is None:
+        return None
+    return _geojson_adapter.validate_python(mapping(geom))  # type: ignore[arg-type]
+
+
 class QuestionResponse(BaseModel):
     """A question in the game — state machine: asked -> in_progress -> answerable -> answered."""
 
@@ -404,7 +414,10 @@ class QuestionResponse(BaseModel):
         description='GeoJSON Point — hider position at answer time. Hidden from seekers.'
     )
     answer: str | None = Field(description='yes/no for radar, closer/farther for thermometer.')
-    exclusion: dict | None = Field(description='GeoJSON geometry — the exclusion zone.')
+    exclusion: GeoJSONGeometry | None = Field(description='GeoJSON geometry — the exclusion zone.')
+    total_exclusion: GeoJSONGeometry | None = Field(
+        description='GeoJSON geometry — cumulative exclusion across all answered questions.'
+    )
 
     @staticmethod
     def from_model(
@@ -464,5 +477,6 @@ class QuestionResponse(BaseModel):
             answered_at=question.answered_at,
             hider_location=None if hide_hider_location else _point_or_none(question.hider_location),
             answer=question.answer,
-            exclusion=dict(mapping(question.exclusion)) if question.exclusion else None,
+            exclusion=_geom_or_none(question.exclusion),
+            total_exclusion=_geom_or_none(question.total_exclusion),
         )

@@ -56,13 +56,14 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - `src/hideandseek/db.py` — Database engine (`DATABASE_URL` env var, defaults to SQLite), `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `session_scope()` (sync context manager for Celery tasks), `current_session()`, `@db_read`/`@db_write` decorators
 - `Dockerfile` — Multi-stage build using `uv` image (Python 3.12, bookworm-slim)
 - `src/hideandseek/utils.py` — Shared utilities (`find_server_root()` — walks up to `pyproject.toml`)
-- `src/hideandseek/geo.py` — Pure geographic math: `haversine(a, b)` (great-circle distance in meters between `(lat, lon)` tuples), `distance(point_a, point_b)` (convenience wrapper for shapely Points), `distance_to_feature(player, geometry)` (distance in meters from a point to the nearest point on any geometry using shapely `nearest_points` + haversine)
+- `src/hideandseek/geo.py` — Pure geographic math: `distance(point_a, point_b)` (geodesic distance in meters between shapely Points via pyproj), `distance_to_feature(player, geometry)` (distance in meters from a point to the nearest point on any geometry using shapely `nearest_points` + geodesic)
+- `src/hideandseek/exclusion.py` — Exclusion zone geometry for each question type. `exclude_radar` (circle include/exclude), `exclude_thermometer` (half-plane via Voronoi bisector), `exclude_matching` (Voronoi partitioning of POIs), `exclude_measuring` (buffer around POIs). Uses AEQD projection for metric operations. Called from `logic.py` answer functions.
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/celery_app.py` — Celery app instance, config from `celery_config`, autodiscovers `hideandseek.tasks`
 - `src/hideandseek/celery_config.py` — Celery configuration (broker URL, eager mode, serialization)
 - `src/hideandseek/validators.py` — Request validation for questions. `validate_slot_request` returns the `InventorySlot` to consume. `validate_category_request` checks category availability. `validate_answer_request` returns `(Question, Point)`. All raise `HTTPException` on invalid requests. Called from routers before business logic.
-- `src/hideandseek/logic.py` — Question lifecycle orchestration (ask and answer). Called by routers after validation. Handles inventory mutation, question creation, feature resolution, and answer computation. No HTTP concerns (no `HTTPException`, no push).
+- `src/hideandseek/logic.py` — Question lifecycle orchestration (ask and answer). Called by routers after validation. Ask functions handle inventory mutation, question creation, and feature resolution. Answer functions own the full lifecycle: compute answer, generate exclusion zone via `exclusion.py`, accumulate `total_exclusion`, and persist via `update_question`. No HTTP concerns (no `HTTPException`, no push).
 - `src/hideandseek/resolution.py` — Business logic for matching/measuring feature resolution. Category classification sets (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`), `get_available_categories()`, `resolve_feature_for_player()` (picks containment vs nearest strategy).
 - `src/hideandseek/tasks/` — Celery task modules
   - `game_timers.py` — `transition_hiding_to_seeking`, `auto_answer_question` (game timer tasks). Uses `session_scope()` for DB access.
@@ -76,7 +77,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - `game.py` — `Game` (relationships: `inventory_slots`, `category_usages`, `players`), `Player`
   - `inventory.py` — `InventorySlot` (radar/thermometer slot with `consumed_at` soft-delete), `CategoryUsage` (tracks used matching/measuring categories per game, unique on `(game_id, question_type, category, feature_class)`)
   - `location.py` — `LocationUpdate`
-  - `question.py` — `Question` (relationships: `radar_params`, `thermometer_params`, `feature_params` — one-to-one with param tables)
+  - `question.py` — `Question` (relationships: `radar_params`, `thermometer_params`, `feature_params` — one-to-one with param tables; `exclusion` and `total_exclusion` geometry columns for exclusion zones)
   - `question_params.py` — `RadarParams` (`radius_m`), `ThermometerParams` (`min_travel_m`), `FeatureQuestionParams` (category, source, seeker/hider feature resolution fields)
   - `device_token.py` — `DeviceToken` (maps `client_id` → APNS token)
   - `__init__.py` — Re-exports all models (import this to register tables on metadata)
@@ -90,16 +91,16 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - `maps.py` — `list_maps`, `get_map`
   - `games.py` — `generate_join_code`, `create_game` (creates `InventorySlot` rows from map's `default_inventory` template), `find_game_by_join_code`, `add_player`, `get_player`, `update_player`, `update_game_status`, `get_game_by_id`
   - `effective_map.py` — `get_effective_map_data`, `RouteWithStops`, `EffectiveMapData` dataclasses
-  - `features.py` — `resolve_nearest_feature` (nearest by `ST_Distance`), `resolve_containing_feature` (point-in-polygon via `ST_Contains`), `get_map_feature_categories` (distinct category/class pairs on a map). All join through `GameMapFeature` for map scoping.
+  - `features.py` — `resolve_nearest_feature` (nearest by `ST_Distance`), `resolve_containing_feature` (point-in-polygon via `ST_Contains`), `get_features_by_category` (all features of a category/class on a map), `get_map_feature_categories` (distinct category/class pairs on a map). All join through `GameMapFeature` for map scoping.
   - `location.py` — `create_location_update`, `get_visible_players`, `get_location_history`, `get_latest_location_for_player`, `VisiblePlayerData` dataclass
-  - `questions.py` — `has_unanswered_question`, `get_question_count`, `create_question`, `get_question`, `list_questions`, `update_question`, `create_radar_params`, `create_thermometer_params`, `create_feature_params`, `consume_slot`, `record_category_usage`, `get_category_usages`, `is_category_used`
+  - `questions.py` — `has_unanswered_question`, `get_question_count`, `create_question`, `get_question`, `get_latest_total_exclusion`, `list_questions`, `update_question`, `create_radar_params`, `create_thermometer_params`, `create_feature_params`, `consume_slot`, `record_category_usage`, `get_category_usages`, `is_category_used`
 - `src/hideandseek/routers/` — API route modules
   - `maps.py` — `GET /maps`, `GET /maps/{map_id}`
   - `games.py` — `POST /games`, `POST /games/join`, `GET /games/{game_id}`, `PATCH .../players/{player_id}`, `POST .../start`, `POST .../end`, `GET .../map`
   - `location.py` — `POST .../location`, `GET .../location-history`
   - `questions.py` — `POST .../questions/radar`, `POST .../questions/thermometer`, `POST .../questions/matching`, `POST .../questions/measuring`, `POST .../questions/thermometer/{id}/lock-in`, `POST .../questions/{id}/answer`, `GET .../questions`
 - `tests/conftest.py` — In-memory SQLite fixtures (`session`, `client`) and factory functions
-- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`; plus `test_features.py` for spatial queries, `test_geo.py` for distance utilities, and `test_resolution.py` for resolution business logic)
+- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`; plus `test_features.py` for spatial queries, `test_geo.py` for distance utilities, `test_resolution.py` for resolution business logic, and `test_exclusion.py` for exclusion zone geometry)
 - `scripts/generate_openapi.py` — dumps `app.openapi()` to `openapi/openapi.yaml`
 - `data/` — SQLite database file (gitignored)
 
@@ -138,7 +139,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - **Category-based** (matching, measuring): create a `CategoryUsage` row. Both → `answerable` immediately. Available categories are inclusion-based: derived from map features (via `GameMapFeature`) minus existing `CategoryUsage` rows.
   - **Matching**: resolves each player's nearest feature (or containing feature for `CONTAINMENT_CATEGORIES`); answer is `"yes"` (same `stable_id`), `"no"` (different), or `"null"` (hider unresolvable).
   - **Measuring**: resolves each player's distance to nearest feature; answer is `"closer"` (seeker closer), `"farther"`, or `"null"` (hider unresolvable).
-- **Geo math**: `geo.py` provides pure distance functions: `haversine(a, b)` for `(lat, lon)` tuples, `distance(point_a, point_b)` for shapely Points, and `distance_to_feature(player, geometry)` for distance to any geometry. All answer computation lives in `logic.py`. Exclusion zone geometry is still deferred (`exclusion: null`).
+- **Geo math**: `geo.py` provides pure distance functions: `distance(point_a, point_b)` for shapely Points (geodesic via pyproj) and `distance_to_feature(player, geometry)` for distance to any geometry. Answer computation and exclusion zone generation live in `logic.py`, which delegates to `exclusion.py` for the geometry. Each answered question has an `exclusion` (this question's zone) and `total_exclusion` (cumulative union across all answered questions in the game).
 
 ## Game States
 

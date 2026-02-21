@@ -590,3 +590,131 @@ def test_measuring_category_already_used(client: TestClient, session: Session):
         headers=_headers(seeker.client_id),
     )
     assert resp.status_code == 409
+
+
+# ── Exclusion zone integration tests ──────────────────────────────────────────
+
+
+def test_radar_answer_has_exclusion(client: TestClient, session: Session):
+    """Answered radar question should have non-null exclusion and total_exclusion."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['exclusion'] is not None
+    assert data['exclusion']['type'] in ('Polygon', 'MultiPolygon')
+    assert data['total_exclusion'] is not None
+
+
+def test_total_exclusion_accumulates(client: TestClient, session: Session):
+    """total_exclusion should grow as more questions are answered."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+
+    # Ask + answer first radar question (slot 0)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    q1_id = resp.json()['id']
+    resp = client.post(
+        f'/games/{game.id}/questions/{q1_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    total_1 = resp.json()['total_exclusion']
+    assert total_1 is not None
+
+    # Ask + answer second radar question (slot 1, different distance)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.05, 51.52), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    q2_id = resp.json()['id']
+    resp = client.post(
+        f'/games/{game.id}/questions/{q2_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    total_2 = resp.json()['total_exclusion']
+    assert total_2 is not None
+
+
+def test_matching_answer_has_exclusion(client: TestClient, session: Session):
+    """Answered matching question should have non-null exclusion."""
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/matching',
+        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['exclusion'] is not None
+    assert data['total_exclusion'] is not None
+
+
+def test_thermometer_answer_has_exclusion(client: TestClient, session: Session):
+    """Answered thermometer question should have non-null exclusion."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+
+    resp = client.post(
+        f'/games/{game.id}/questions/thermometer',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    _report_location(client, game.id, seeker.client_id, -0.05, 51.3)
+
+    resp = client.post(
+        f'/games/{game.id}/questions/thermometer/{question_id}/lock-in',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 200
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['exclusion'] is not None
+    assert data['total_exclusion'] is not None
+
+
+def test_measuring_answer_has_exclusion(client: TestClient, session: Session):
+    """Answered measuring question should have non-null exclusion."""
+    game, hider, seeker = _setup_feature_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/measuring',
+        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['exclusion'] is not None
+    assert data['total_exclusion'] is not None

@@ -1,7 +1,7 @@
 """Business logic for matching and measuring question resolution.
 
 Layer responsibilities:
-- geo.py — pure math (haversine, distance, distance_to_feature)
+- geo.py — pure math (geodesic distance, distance_to_feature)
 - queries/features.py — pure data access (spatial SQL)
 - resolution.py (this file) — business logic (answer computation, availability)
 - routers/questions.py — HTTP orchestration

@@ -65,6 +65,27 @@ def resolve_containing_feature(
 
 
 @db_read
+def get_features_by_category(
+    session: Session,
+    game_map_id: uuid.UUID,
+    category: FeatureCategory,
+    feature_class: int | None = None,
+) -> list[MapFeature]:
+    """Return all features of a category on a map."""
+    stmt = (
+        select(MapFeature)
+        .join(GameMapFeature)  # type: ignore[arg-type]
+        .where(
+            GameMapFeature.game_map_id == game_map_id,
+            MapFeature.category == category,
+        )
+    )
+    if feature_class is not None:
+        stmt = stmt.where(MapFeature.feature_class == feature_class)
+    return list(session.exec(stmt).all())
+
+
+@db_read
 def get_map_feature_categories(
     session: Session,
     game_map_id: uuid.UUID,

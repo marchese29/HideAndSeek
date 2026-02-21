@@ -254,7 +254,7 @@ def lock_in_question(
     if not latest:
         raise HTTPException(status_code=409, detail='No location reported yet.')
 
-    question = update_question(
+    update_question(
         question,
         {
             'seeker_location_end': latest.coordinates,
@@ -284,43 +284,28 @@ def answer_question(
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
 ) -> QuestionResponse:
-    """Hider answers a question — snapshot location and compute answer."""
+    """Hider answers a question — snapshot location, compute answer and exclusion."""
     question, hider_location = validate_answer_request(question_id, game, player.id, player.role)
 
     # Revoke the auto-answer deadline
     if not celery_app.conf.task_always_eager:
         celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
 
-    # Set hider location before computing answer
-    question = update_question(question, {'hider_location': hider_location})
+    # Set hider location, compute answer + exclusion, persist
+    update_question(question, {'hider_location': hider_location})
 
-    # Compute answer based on question type
     if question.question_type == QuestionType.radar:
-        answer = answer_radar(question)
-
+        answer_radar(question, game)
     elif question.question_type == QuestionType.thermometer:
-        answer = answer_thermometer(question)
-
+        answer_thermometer(question, game)
     elif question.question_type == QuestionType.matching:
-        answer = answer_matching(question, game)
-
+        answer_matching(question, game)
     elif question.question_type == QuestionType.measuring:
-        answer = answer_measuring(question, game)
-
+        answer_measuring(question, game)
     else:
         raise HTTPException(
             status_code=422, detail=f'Unsupported question type: {question.question_type}'
         )
-
-    question = update_question(
-        question,
-        {
-            'answer': answer,
-            'exclusion': None,
-            'answered_at': datetime.now(UTC),
-            'status': QuestionStatus.answered,
-        },
-    )
 
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),

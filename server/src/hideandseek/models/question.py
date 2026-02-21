@@ -34,6 +34,10 @@ class Question(SQLModel, table=True):
     exclusion: BaseGeometry | None = Field(
         default=None, sa_column=sa.Column(ShapelyGeometry('GEOMETRY', srid=4326), nullable=True)
     )
+    total_exclusion: BaseGeometry | None = Field(
+        default=None,
+        sa_column=sa.Column(ShapelyGeometry('GEOMETRY', srid=4326), nullable=True),
+    )
 
     game: 'Game' = Relationship(back_populates='questions')  # noqa: F821
     radar_params: 'RadarParams' = Relationship(  # noqa: F821

@@ -1,15 +1,25 @@
 """Question lifecycle logic — ask and answer orchestration.
 
 Called by routers after validation. Handles inventory mutation, question creation,
-feature resolution, and answer computation. No HTTP concerns (no HTTPException, no push).
+feature resolution, answer computation, and exclusion zone generation.
+No HTTP concerns (no HTTPException, no push).
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from shapely.geometry import Point
+from shapely.geometry.base import BaseGeometry
+from shapely.ops import unary_union
 
+from hideandseek.exclusion import (
+    exclude_matching,
+    exclude_measuring,
+    exclude_radar,
+    exclude_thermometer,
+)
 from hideandseek.geo import distance
 from hideandseek.models.game import Game
 from hideandseek.models.inventory import InventorySlot
@@ -20,14 +30,17 @@ from hideandseek.models.types import (
     QuestionStatus,
     QuestionType,
 )
+from hideandseek.queries.features import get_features_by_category
 from hideandseek.queries.questions import (
     consume_slot,
     create_feature_params,
     create_question,
     create_radar_params,
     create_thermometer_params,
+    get_latest_total_exclusion,
     get_question_count,
     record_category_usage,
+    update_question,
 )
 from hideandseek.resolution import resolve_feature_for_player
 
@@ -179,31 +192,85 @@ def ask_measuring(
 # ── Answer ───────────────────────────────────────────────────────────────
 
 
-def answer_radar(question: Question) -> str:
-    """Compute radar answer.
+def _accumulate_exclusion(
+    game_id: uuid.UUID, exclusion: BaseGeometry | None
+) -> BaseGeometry | None:
+    """Compute cumulative total_exclusion by unioning with previous."""
+    prev = get_latest_total_exclusion(game_id)
+    if exclusion is None:
+        return prev
+    if prev is None:
+        return exclusion
+    return unary_union([prev, exclusion])
+
+
+def answer_radar(question: Question, game: Game) -> None:
+    """Compute radar answer, exclusion zone, and persist.
 
     Answer is 'yes' if hider is within the radius, 'no' otherwise.
     """
     assert question.radar_params is not None
     assert question.hider_location is not None
+    boundary = game.game_map.boundary
+
     dist = distance(question.seeker_location_start, question.hider_location)
-    return 'yes' if dist <= question.radar_params.radius_m else 'no'
+    answer = 'yes' if dist <= question.radar_params.radius_m else 'no'
+
+    exclusion = exclude_radar(
+        boundary,
+        question.seeker_location_start,
+        question.radar_params.radius_m,
+        hit=answer == 'yes',
+    )
+    total = _accumulate_exclusion(game.id, exclusion)
+
+    update_question(
+        question,
+        {
+            'answer': answer,
+            'exclusion': exclusion,
+            'total_exclusion': total,
+            'answered_at': datetime.now(UTC),
+            'status': QuestionStatus.answered,
+        },
+    )
 
 
-def answer_thermometer(question: Question) -> str:
-    """Compute thermometer answer.
+def answer_thermometer(question: Question, game: Game) -> None:
+    """Compute thermometer answer, exclusion zone, and persist.
 
     Answer is 'closer' if seeker moved closer, 'farther' otherwise.
     """
     assert question.hider_location is not None
     assert question.seeker_location_end is not None
+    boundary = game.game_map.boundary
+
     dist_start = distance(question.seeker_location_start, question.hider_location)
     dist_end = distance(question.seeker_location_end, question.hider_location)
-    return 'closer' if dist_end < dist_start else 'farther'
+    answer = 'closer' if dist_end < dist_start else 'farther'
+
+    exclusion = exclude_thermometer(
+        boundary,
+        question.seeker_location_start,
+        question.seeker_location_end,
+        seeker_closer=answer == 'closer',
+    )
+    total = _accumulate_exclusion(game.id, exclusion)
+
+    update_question(
+        question,
+        {
+            'answer': answer,
+            'exclusion': exclusion,
+            'total_exclusion': total,
+            'answered_at': datetime.now(UTC),
+            'status': QuestionStatus.answered,
+        },
+    )
 
 
-def answer_matching(question: Question, game: Game) -> str:
-    """Compute matching answer.
+def answer_matching(question: Question, game: Game) -> None:
+    """Compute matching answer, exclusion zone, and persist.
 
     Resolves hider feature and updates feature_params.
     Answer is 'yes' if same feature, 'no' if different, 'null' if hider unresolvable.
@@ -211,6 +278,7 @@ def answer_matching(question: Question, game: Game) -> str:
     params = question.feature_params
     assert params is not None
     assert question.hider_location is not None
+    boundary = game.game_map.boundary
 
     hider_feature, hider_dist = resolve_feature_for_player(
         category=params.category,
@@ -221,14 +289,46 @@ def answer_matching(question: Question, game: Game) -> str:
     )
 
     if hider_feature is None:
-        return 'null'
+        answer = 'null'
+        exclusion = None
+    else:
+        _update_hider_resolution(params, hider_feature.stable_id, hider_feature.name, hider_dist)
+        answer = 'yes' if params.seeker_feature_id == hider_feature.stable_id else 'no'
 
-    _update_hider_resolution(params, hider_feature.stable_id, hider_feature.name, hider_dist)
-    return 'yes' if params.seeker_feature_id == hider_feature.stable_id else 'no'
+        features = get_features_by_category(
+            game_map_id=game.map_id,
+            category=params.category,
+            feature_class=params.feature_class,
+        )
+        seeker_poi = None
+        other_pois: list[BaseGeometry] = []
+        for f in features:
+            if f.stable_id == params.seeker_feature_id:
+                seeker_poi = f.geometry
+            else:
+                other_pois.append(f.geometry)
+
+        if seeker_poi is not None and other_pois:
+            exclusion = exclude_matching(boundary, seeker_poi, other_pois, same=answer == 'yes')
+        else:
+            exclusion = None
+
+    total = _accumulate_exclusion(game.id, exclusion)
+
+    update_question(
+        question,
+        {
+            'answer': answer,
+            'exclusion': exclusion,
+            'total_exclusion': total,
+            'answered_at': datetime.now(UTC),
+            'status': QuestionStatus.answered,
+        },
+    )
 
 
-def answer_measuring(question: Question, game: Game) -> str:
-    """Compute measuring answer.
+def answer_measuring(question: Question, game: Game) -> None:
+    """Compute measuring answer, exclusion zone, and persist.
 
     Resolves hider feature distance and updates feature_params.
     Answer is 'closer' if seeker is closer, 'farther' if not, 'null' if hider unresolvable.
@@ -236,6 +336,7 @@ def answer_measuring(question: Question, game: Game) -> str:
     params = question.feature_params
     assert params is not None
     assert question.hider_location is not None
+    boundary = game.game_map.boundary
 
     hider_feature, hider_dist = resolve_feature_for_player(
         category=params.category,
@@ -246,10 +347,38 @@ def answer_measuring(question: Question, game: Game) -> str:
     )
 
     if hider_feature is None:
-        return 'null'
+        answer = 'null'
+        exclusion = None
+    else:
+        _update_hider_resolution(params, hider_feature.stable_id, hider_feature.name, hider_dist)
+        answer = 'closer' if params.seeker_distance_m < hider_dist else 'farther'
 
-    _update_hider_resolution(params, hider_feature.stable_id, hider_feature.name, hider_dist)
-    return 'closer' if params.seeker_distance_m < hider_dist else 'farther'
+        features = get_features_by_category(
+            game_map_id=game.map_id,
+            category=params.category,
+            feature_class=params.feature_class,
+        )
+        pois = [f.geometry for f in features]
+
+        if pois:
+            exclusion = exclude_measuring(
+                boundary, params.seeker_distance_m, pois, hider_closer=answer == 'closer'
+            )
+        else:
+            exclusion = None
+
+    total = _accumulate_exclusion(game.id, exclusion)
+
+    update_question(
+        question,
+        {
+            'answer': answer,
+            'exclusion': exclusion,
+            'total_exclusion': total,
+            'answered_at': datetime.now(UTC),
+            'status': QuestionStatus.answered,
+        },
+    )
 
 
 def _update_hider_resolution(

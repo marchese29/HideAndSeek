@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 from shapely.geometry import Point
+from shapely.geometry.base import BaseGeometry
 from sqlmodel import Session, select
 
 from hideandseek.db import db_read, db_write
@@ -112,6 +113,21 @@ def create_feature_params(
     )
     session.add(params)
     return params
+
+
+@db_read
+def get_latest_total_exclusion(session: Session, game_id: uuid.UUID) -> BaseGeometry | None:
+    """Return the most recent answered question's total_exclusion for a game."""
+    question = session.exec(
+        select(Question)
+        .where(
+            Question.game_id == game_id,
+            Question.status == QuestionStatus.answered,
+        )
+        .order_by(Question.sequence.desc())  # type: ignore[arg-type]
+        .limit(1)
+    ).first()
+    return question.total_exclusion if question else None
 
 
 @db_read

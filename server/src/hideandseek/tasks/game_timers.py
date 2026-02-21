@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
 import structlog
 
@@ -79,37 +78,21 @@ def auto_answer_question(question_id: str) -> None:
         if not latest:
             logger.error('auto_answer_no_hider_location', game_id=str(game.id))
             return
-        hider_location = latest.coordinates
 
-        # Set hider location before computing answer
-        update_question(question, {'hider_location': hider_location})
+        # Set hider location, compute answer + exclusion, persist
+        update_question(question, {'hider_location': latest.coordinates})
 
-        # Compute answer
         if question.question_type == QuestionType.radar:
-            answer = answer_radar(question)
-
+            answer_radar(question, game)
         elif question.question_type == QuestionType.thermometer:
-            answer = answer_thermometer(question)
-
+            answer_thermometer(question, game)
         elif question.question_type == QuestionType.matching:
-            answer = answer_matching(question, game)
-
+            answer_matching(question, game)
         elif question.question_type == QuestionType.measuring:
-            answer = answer_measuring(question, game)
-
+            answer_measuring(question, game)
         else:
             logger.error('auto_answer_unknown_type', question_type=question.question_type)
             return
-
-        update_question(
-            question,
-            {
-                'answer': answer,
-                'exclusion': None,
-                'answered_at': datetime.now(UTC),
-                'status': QuestionStatus.answered,
-            },
-        )
 
         game_id = str(question.game_id)
         logger.info('auto_answer_question', question_id=question_id, game_id=game_id)

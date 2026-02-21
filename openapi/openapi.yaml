@@ -584,8 +584,8 @@ paths:
       tags:
       - questions
       summary: Answer Question
-      description: "Hider answers a question \u2014 snapshot location and compute\
-        \ answer."
+      description: "Hider answers a question \u2014 snapshot location, compute answer\
+        \ and exclusion."
       operationId: answer_question_games__game_id__questions__question_id__answer_post
       parameters:
       - name: question_id
@@ -1011,6 +1011,62 @@ components:
       - endgame
       - finished
       title: GameStatus
+    GeometryCollection:
+      properties:
+        bbox:
+          anyOf:
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 4
+            minItems: 4
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 6
+            minItems: 6
+          - type: 'null'
+          title: Bbox
+        type:
+          type: string
+          const: GeometryCollection
+          title: Type
+        geometries:
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+            discriminator:
+              propertyName: type
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+          type: array
+          title: Geometries
+      type: object
+      required:
+      - type
+      - geometries
+      title: GeometryCollection
+      description: GeometryCollection Model
     HTTPValidationError:
       properties:
         detail:
@@ -1276,6 +1332,137 @@ components:
       - region
       title: MapSummary
       description: "A map in the browse list \u2014 name, size, and region."
+    MultiLineString:
+      properties:
+        bbox:
+          anyOf:
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 4
+            minItems: 4
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 6
+            minItems: 6
+          - type: 'null'
+          title: Bbox
+        type:
+          type: string
+          const: MultiLineString
+          title: Type
+        coordinates:
+          items:
+            items:
+              anyOf:
+              - $ref: '#/components/schemas/Position2D'
+              - $ref: '#/components/schemas/Position3D'
+            type: array
+            minItems: 2
+          type: array
+          title: Coordinates
+      type: object
+      required:
+      - type
+      - coordinates
+      title: MultiLineString
+      description: MultiLineString Model
+    MultiPoint:
+      properties:
+        bbox:
+          anyOf:
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 4
+            minItems: 4
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 6
+            minItems: 6
+          - type: 'null'
+          title: Bbox
+        type:
+          type: string
+          const: MultiPoint
+          title: Type
+        coordinates:
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/Position2D'
+            - $ref: '#/components/schemas/Position3D'
+          type: array
+          title: Coordinates
+      type: object
+      required:
+      - type
+      - coordinates
+      title: MultiPoint
+      description: MultiPoint Model
+    MultiPolygon:
+      properties:
+        bbox:
+          anyOf:
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 4
+            minItems: 4
+          - prefixItems:
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            - type: number
+            type: array
+            maxItems: 6
+            minItems: 6
+          - type: 'null'
+          title: Bbox
+        type:
+          type: string
+          const: MultiPolygon
+          title: Type
+        coordinates:
+          items:
+            items:
+              items:
+                anyOf:
+                - $ref: '#/components/schemas/Position2D'
+                - $ref: '#/components/schemas/Position3D'
+              type: array
+              minItems: 4
+            type: array
+          type: array
+          title: Coordinates
+      type: object
+      required:
+      - type
+      - coordinates
+      title: MultiPolygon
+      description: MultiPolygon Model
     PlayerResponse:
       properties:
         id:
@@ -1504,11 +1691,51 @@ components:
           description: yes/no for radar, closer/farther for thermometer.
         exclusion:
           anyOf:
-          - additionalProperties: true
-            type: object
+          - oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+            discriminator:
+              propertyName: type
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
           - type: 'null'
           title: Exclusion
           description: "GeoJSON geometry \u2014 the exclusion zone."
+        total_exclusion:
+          anyOf:
+          - oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+            discriminator:
+              propertyName: type
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+          - type: 'null'
+          title: Total Exclusion
+          description: "GeoJSON geometry \u2014 cumulative exclusion across all answered\
+            \ questions."
       type: object
       required:
       - id
@@ -1525,6 +1752,7 @@ components:
       - hider_location
       - answer
       - exclusion
+      - total_exclusion
       title: QuestionResponse
       description: "A question in the game \u2014 state machine: asked -> in_progress\
         \ -> answerable -> answered."
