@@ -10,6 +10,7 @@ AI-generated design documents and artifacts for the HideAndSeek game.
 - `background-jobs.md` — Background jobs and timers: Celery + Redis for durable game-state timers (hiding→seeking, answer deadlines), resilient push delivery, and task revocation. Includes Docker Compose setup with PostgreSQL.
 - `matching-measuring-questions.md` — Matching ("is your nearest X the same as mine?") and measuring ("are you closer to or further from X?") question types. Covers feature categories (map data vs Google Maps Places API), PostGIS spatial queries, bona fide filtering with hierarchical config, server-side Places proxy, and inventory changes.
 - `distance-conventions.md` — Metric and imperial distance support: convention enum on GameMap, default inventory sets per convention and game size, map-level overrides, data model renames (`distance_m` → `distance`, etc.), conversion boundary for geo math, and API surface changes.
+- `endgame.md` — Endgame design: hiding zones, station auto-selection at hiding timer expiry, no server-side endgame state (client-side lens over seeking phase), server-assisted endgame exclusion view, candidate stations query via PostGIS geography buffering, seeker proximity notifications, and hiding zone radius override for mid-game card effects.
 
 ## Conventions
 
