@@ -14,6 +14,7 @@ from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
+from hideandseek.conventions import from_meters, to_meters
 from hideandseek.exclusion import (
     exclude_matching,
     exclude_measuring,
@@ -52,11 +53,11 @@ def ask_radar(
     player_id: uuid.UUID,
     seeker_location: Point,
     slot: InventorySlot,
-    custom_distance_m: int | None,
+    custom_distance: float | None,
 ) -> Question:
     """Create a radar question: consume slot, persist. Immediately answerable."""
-    distance_m = slot.distance_m or custom_distance_m
-    assert distance_m is not None  # guaranteed by validator
+    dist = slot.distance or custom_distance
+    assert dist is not None  # guaranteed by validator
 
     consume_slot(slot)
 
@@ -68,7 +69,7 @@ def ask_radar(
         asked_by=player_id,
         seeker_location_start=seeker_location,
     )
-    create_radar_params(question.id, radius_m=distance_m)
+    create_radar_params(question.id, radius=dist)
 
     return question
 
@@ -78,11 +79,11 @@ def ask_thermometer(
     player_id: uuid.UUID,
     seeker_location: Point,
     slot: InventorySlot,
-    custom_distance_m: int | None,
+    custom_distance: float | None,
 ) -> Question:
     """Create a thermometer question: consume slot, persist. Starts in_progress."""
-    distance_m = slot.distance_m or custom_distance_m
-    assert distance_m is not None  # guaranteed by validator
+    dist = slot.distance or custom_distance
+    assert dist is not None  # guaranteed by validator
 
     consume_slot(slot)
 
@@ -94,7 +95,7 @@ def ask_thermometer(
         asked_by=player_id,
         seeker_location_start=seeker_location,
     )
-    create_thermometer_params(question.id, min_travel_m=distance_m)
+    create_thermometer_params(question.id, min_travel=dist)
 
     return question
 
@@ -131,6 +132,7 @@ def ask_matching(
         asked_by=player_id,
         seeker_location_start=seeker_location,
     )
+    convention = game.game_map.convention
     create_feature_params(
         question.id,
         category=category,
@@ -138,7 +140,7 @@ def ask_matching(
         source='map_data',
         seeker_feature_id=seeker_feature.stable_id,
         seeker_feature_name=seeker_feature.name,
-        seeker_distance_m=seeker_dist,
+        seeker_distance=from_meters(seeker_dist, convention),
     )
 
     return question
@@ -176,6 +178,7 @@ def ask_measuring(
         asked_by=player_id,
         seeker_location_start=seeker_location,
     )
+    convention = game.game_map.convention
     create_feature_params(
         question.id,
         category=category,
@@ -183,7 +186,7 @@ def ask_measuring(
         source='map_data',
         seeker_feature_id=seeker_feature.stable_id,
         seeker_feature_name=seeker_feature.name,
-        seeker_distance_m=seeker_dist,
+        seeker_distance=from_meters(seeker_dist, convention),
     )
 
     return question
@@ -212,14 +215,16 @@ def answer_radar(question: Question, game: Game) -> None:
     assert question.radar_params is not None
     assert question.hider_location is not None
     boundary = game.game_map.boundary
+    convention = game.game_map.convention
 
+    radius_m = to_meters(question.radar_params.radius, convention)
     dist = distance(question.seeker_location_start, question.hider_location)
-    answer = 'yes' if dist <= question.radar_params.radius_m else 'no'
+    answer = 'yes' if dist <= radius_m else 'no'
 
     exclusion = exclude_radar(
         boundary,
         question.seeker_location_start,
-        question.radar_params.radius_m,
+        radius_m,
         hit=answer == 'yes',
     )
     total = _accumulate_exclusion(game.id, exclusion)
@@ -279,6 +284,7 @@ def answer_matching(question: Question, game: Game) -> None:
     assert params is not None
     assert question.hider_location is not None
     boundary = game.game_map.boundary
+    convention = game.game_map.convention
 
     hider_feature, hider_dist = resolve_feature_for_player(
         category=params.category,
@@ -292,7 +298,12 @@ def answer_matching(question: Question, game: Game) -> None:
         answer = 'null'
         exclusion = None
     else:
-        _update_hider_resolution(params, hider_feature.stable_id, hider_feature.name, hider_dist)
+        _update_hider_resolution(
+            params,
+            hider_feature.stable_id,
+            hider_feature.name,
+            from_meters(hider_dist, convention),
+        )
         answer = 'yes' if params.seeker_feature_id == hider_feature.stable_id else 'no'
 
         features = get_features_by_category(
@@ -337,6 +348,7 @@ def answer_measuring(question: Question, game: Game) -> None:
     assert params is not None
     assert question.hider_location is not None
     boundary = game.game_map.boundary
+    convention = game.game_map.convention
 
     hider_feature, hider_dist = resolve_feature_for_player(
         category=params.category,
@@ -350,8 +362,14 @@ def answer_measuring(question: Question, game: Game) -> None:
         answer = 'null'
         exclusion = None
     else:
-        _update_hider_resolution(params, hider_feature.stable_id, hider_feature.name, hider_dist)
-        answer = 'closer' if params.seeker_distance_m < hider_dist else 'farther'
+        hider_dist_conv = from_meters(hider_dist, convention)
+        _update_hider_resolution(
+            params,
+            hider_feature.stable_id,
+            hider_feature.name,
+            hider_dist_conv,
+        )
+        answer = 'closer' if params.seeker_distance < hider_dist_conv else 'farther'
 
         features = get_features_by_category(
             game_map_id=game.map_id,
@@ -361,8 +379,9 @@ def answer_measuring(question: Question, game: Game) -> None:
         pois = [f.geometry for f in features]
 
         if pois:
+            seeker_distance_m = to_meters(params.seeker_distance, convention)
             exclusion = exclude_measuring(
-                boundary, params.seeker_distance_m, pois, hider_closer=answer == 'closer'
+                boundary, seeker_distance_m, pois, hider_closer=answer == 'closer'
             )
         else:
             exclusion = None
@@ -385,9 +404,9 @@ def _update_hider_resolution(
     params: FeatureQuestionParams,
     feature_id: str,
     feature_name: str,
-    distance_m: float,
+    distance: float,
 ) -> None:
     """Populate hider resolution fields on feature params."""
     params.hider_feature_id = feature_id
     params.hider_feature_name = feature_name
-    params.hider_distance_m = distance_m
+    params.hider_distance = distance

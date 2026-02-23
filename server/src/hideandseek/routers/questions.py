@@ -10,6 +10,7 @@ from geojson_pydantic import Point as GeoJSONPoint
 from shapely.geometry import Point as ShapelyPoint
 
 from hideandseek.celery_app import app as celery_app
+from hideandseek.conventions import format_distance_label
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_game, get_player_in_game
 from hideandseek.logic import (
@@ -102,14 +103,13 @@ def ask_radar_question(
     _validate_can_ask(game, player)
     seeker_location = _record_seeker_location(body.location, player, game)
 
-    slot = validate_slot_request(body.slot_index, body.custom_distance_m, game, SlotType.radar)
-    question = ask_radar(game, player.id, seeker_location, slot, body.custom_distance_m)
+    slot = validate_slot_request(body.slot_index, body.custom_distance, game, SlotType.radar)
+    question = ask_radar(game, player.id, seeker_location, slot, body.custom_distance)
     _schedule_auto_answer(game, question.id)
 
     rp = question.radar_params
     assert rp is not None
-    distance_m = rp.radius_m
-    distance_label = f'{distance_m / 1000:g} km' if distance_m >= 1000 else f'{distance_m} m'
+    distance_label = format_distance_label(rp.radius, game.game_map.convention)
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.question_asked,
@@ -133,15 +133,12 @@ def ask_thermometer_question(
     _validate_can_ask(game, player)
     seeker_location = _record_seeker_location(body.location, player, game)
 
-    slot = validate_slot_request(
-        body.slot_index, body.custom_distance_m, game, SlotType.thermometer
-    )
-    question = ask_thermometer(game, player.id, seeker_location, slot, body.custom_distance_m)
+    slot = validate_slot_request(body.slot_index, body.custom_distance, game, SlotType.thermometer)
+    question = ask_thermometer(game, player.id, seeker_location, slot, body.custom_distance)
 
     tp = question.thermometer_params
     assert tp is not None
-    distance_m = tp.min_travel_m
-    distance_label = f'{distance_m / 1000:g} km' if distance_m >= 1000 else f'{distance_m} m'
+    distance_label = format_distance_label(tp.min_travel, game.game_map.convention)
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.question_asked,

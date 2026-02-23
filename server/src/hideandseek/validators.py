@@ -39,7 +39,7 @@ from hideandseek.resolution import (
 
 def validate_slot_request(
     slot_index: int,
-    custom_distance_m: int | None,
+    custom_distance: float | None,
     game: Game,
     slot_type: SlotType,
 ) -> InventorySlot:
@@ -50,10 +50,8 @@ def validate_slot_request(
         raise HTTPException(status_code=422, detail='Invalid slot index.')
 
     slot = available[slot_index]
-    if slot.distance_m is None and custom_distance_m is None:
-        raise HTTPException(
-            status_code=422, detail='custom_distance_m is required for custom slots.'
-        )
+    if slot.distance is None and custom_distance is None:
+        raise HTTPException(status_code=422, detail='custom_distance is required for custom slots.')
 
     return slot
 

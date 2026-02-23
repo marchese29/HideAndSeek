@@ -71,9 +71,9 @@ class AskRadarRequest(BaseModel):
 
     location: Point = Field(description='Current seeker position as a GeoJSON Point.')
     slot_index: int = Field(description='0-based index into the available radar slot list.')
-    custom_distance_m: int | None = Field(
+    custom_distance: float | None = Field(
         default=None,
-        description='Required when the chosen slot has distance_m=null (custom slot).',
+        description='Required for custom slots (distance=null). In convention units.',
     )
 
 
@@ -82,9 +82,9 @@ class AskThermometerRequest(BaseModel):
 
     location: Point = Field(description='Current seeker position as a GeoJSON Point.')
     slot_index: int = Field(description='0-based index into the available thermometer slot list.')
-    custom_distance_m: int | None = Field(
+    custom_distance: float | None = Field(
         default=None,
-        description='Required when the chosen slot has distance_m=null (custom slot).',
+        description='Required for custom slots (distance=null). In convention units.',
     )
 
 

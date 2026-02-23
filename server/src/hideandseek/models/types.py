@@ -15,6 +15,11 @@ class RouteType(StrEnum):
     ferry = 'ferry'
 
 
+class DistanceConvention(StrEnum):
+    metric = 'metric'
+    imperial = 'imperial'
+
+
 class MapSize(StrEnum):
     small = 'small'
     medium = 'medium'

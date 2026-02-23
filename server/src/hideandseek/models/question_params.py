@@ -11,7 +11,7 @@ class RadarParams(SQLModel, table=True):
     __tablename__ = 'radar_params'  # type: ignore[assignment]
 
     question_id: uuid.UUID = Field(foreign_key='question.id', primary_key=True)
-    radius_m: int
+    radius: float
 
     question: 'Question' = Relationship(back_populates='radar_params')  # noqa: F821
 
@@ -26,7 +26,7 @@ class ThermometerParams(SQLModel, table=True):
     __tablename__ = 'thermometer_params'  # type: ignore[assignment]
 
     question_id: uuid.UUID = Field(foreign_key='question.id', primary_key=True)
-    min_travel_m: int
+    min_travel: float
 
     question: 'Question' = Relationship(back_populates='thermometer_params')  # noqa: F821
 
@@ -46,10 +46,10 @@ class FeatureQuestionParams(SQLModel, table=True):
     source: str = 'map_data'
     seeker_feature_id: str
     seeker_feature_name: str
-    seeker_distance_m: float
+    seeker_distance: float
     hider_feature_id: str | None = None
     hider_feature_name: str | None = None
-    hider_distance_m: float | None = None
+    hider_distance: float | None = None
 
     question: 'Question' = Relationship(back_populates='feature_params')  # noqa: F821
 

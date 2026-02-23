@@ -99,7 +99,7 @@ def _create_answerable_question(session: Session) -> tuple[Game, Question]:
     session.add(question)
     session.flush()
 
-    params = RadarParams(question_id=question.id, radius_m=3000)
+    params = RadarParams(question_id=question.id, radius=3000)
     session.add(params)
     session.commit()
     session.refresh(question)
@@ -181,7 +181,7 @@ def test_auto_answer_matching_question(session: Session):
         source='map_data',
         seeker_feature_id='hosp_a',
         seeker_feature_name='Hospital A',
-        seeker_distance_m=100.0,
+        seeker_distance=100.0,
     )
     session.add(fp)
     session.commit()
@@ -239,7 +239,7 @@ def test_auto_answer_measuring_question(session: Session):
         source='map_data',
         seeker_feature_id='hosp_1',
         seeker_feature_name='Hospital',
-        seeker_distance_m=50.0,
+        seeker_distance=50.0,
     )
     session.add(fp)
     session.commit()

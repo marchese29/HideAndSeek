@@ -7,7 +7,7 @@ from shapely.geometry import Point
 from sqlmodel import Session
 
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import GameStatus, PlayerRole
+from hideandseek.models.types import DistanceConvention, GameStatus, PlayerRole
 from tests.conftest import (
     create_game,
     create_game_map,
@@ -65,32 +65,32 @@ def test_ask_radar_question(client: TestClient, session: Session):
     assert data['question_type'] == 'radar'
     assert data['status'] == 'answerable'
     assert data['parameters']['type'] == 'radar'
-    assert data['parameters']['radius_m'] == 3000
+    assert data['parameters']['radius'] == 3000
     assert data['sequence'] == 1
     assert data['answerable_at'] is not None
 
 
 def test_ask_custom_slot_requires_distance(client: TestClient, session: Session):
     game, hider, seeker = _setup_seeking_game(client, session)
-    # slot_index 2 is the custom radar slot (distance_m: null)
+    # slot_index 2 is the custom radar slot (distance: null)
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 2},
         headers=_headers(seeker.client_id),
     )
     assert resp.status_code == 422
-    assert 'custom_distance_m' in resp.json()['detail']
+    assert 'custom_distance' in resp.json()['detail']
 
 
 def test_ask_custom_slot_with_distance(client: TestClient, session: Session):
     game, hider, seeker = _setup_seeking_game(client, session)
     resp = client.post(
         f'/games/{game.id}/questions/radar',
-        json={'location': _point(-0.1, 51.5), 'slot_index': 2, 'custom_distance_m': 4000},
+        json={'location': _point(-0.1, 51.5), 'slot_index': 2, 'custom_distance': 4000},
         headers=_headers(seeker.client_id),
     )
     assert resp.status_code == 201
-    assert resp.json()['parameters']['radius_m'] == 4000
+    assert resp.json()['parameters']['radius'] == 4000
 
 
 def test_ask_question_deducts_slot(client: TestClient, session: Session):
@@ -183,7 +183,7 @@ def test_ask_thermometer_question(client: TestClient, session: Session):
     assert data['question_type'] == 'thermometer'
     assert data['status'] == 'in_progress'
     assert data['parameters']['type'] == 'thermometer'
-    assert data['parameters']['min_travel_m'] == 500
+    assert data['parameters']['min_travel'] == 500
 
 
 # ── POST /games/{game_id}/questions/thermometer/{id}/lock-in ─────────────────
@@ -247,7 +247,7 @@ def test_thermometer_full_flow(client: TestClient, session: Session):
     assert data['status'] == 'answered'
     assert data['answer'] == 'closer'  # seeker moved closer to hider
     assert data['parameters']['type'] == 'thermometer'
-    assert data['parameters']['min_travel_m'] == 500
+    assert data['parameters']['min_travel'] == 500
 
 
 def test_lock_in_wrong_status(client: TestClient, session: Session):
@@ -525,14 +525,14 @@ def test_answer_measuring_farther(client: TestClient, session: Session):
         headers=_headers(seeker.client_id),
     )
     q_id = resp.json()['id']
-    seeker_dist = resp.json()['parameters']['seeker_resolution']['distance_m']
+    seeker_dist = resp.json()['parameters']['seeker_resolution']['distance']
 
     resp = client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
         headers=_headers(hider.client_id),
     )
     data = resp.json()
-    hider_dist = data['parameters']['hider_resolution']['distance_m']
+    hider_dist = data['parameters']['hider_resolution']['distance']
     # Seeker is ~250m from their hospital, hider is ~150m from theirs
     # So seeker is farther
     assert data['answer'] == 'farther'
@@ -718,3 +718,132 @@ def test_measuring_answer_has_exclusion(client: TestClient, session: Session):
     data = resp.json()
     assert data['exclusion'] is not None
     assert data['total_exclusion'] is not None
+
+
+# ── Imperial convention tests ──────────────────────────────────────────────
+
+
+def _setup_imperial_seeking_game(
+    client: TestClient, session: Session
+) -> tuple[Game, Player, Player]:
+    """Create a seeking game on an imperial map with hider and seeker."""
+    gm = create_game_map(session, convention=DistanceConvention.imperial)
+    inventory = {
+        'radars': [{'distance': 1}],  # 1 mile ≈ 1609 m
+        'thermometers': [{'distance': 0.5}],
+    }
+    game = create_game(
+        session,
+        map_id=gm.id,
+        status=GameStatus.seeking,
+        inventory_template=inventory,
+    )
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.client_id, -0.1, 51.5)
+    _report_location(client, game.id, hider.client_id, 0.0, 51.0)
+    return game, hider, seeker
+
+
+def test_imperial_game_response_convention(client: TestClient, session: Session):
+    """GameResponse should include convention='imperial' for imperial maps."""
+    game, _, _ = _setup_imperial_seeking_game(client, session)
+    resp = client.get(f'/games/{game.id}')
+    assert resp.status_code == 200
+    assert resp.json()['convention'] == 'imperial'
+
+
+def test_imperial_radar_stores_miles(client: TestClient, session: Session):
+    """Radar params should store the value in miles (convention units)."""
+    game, hider, seeker = _setup_imperial_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+    assert resp.json()['parameters']['radius'] == 1  # 1 mile
+
+
+def test_imperial_radar_conversion_for_answer(client: TestClient, session: Session):
+    """Imperial radar answer uses converted distance (miles → meters).
+
+    Seeker at (-0.1, 51.5), hider at (-0.1, 51.514). Distance ~1556 m.
+    1 mile = 1609 m → hider IS within 1 mile → answer should be 'yes'.
+    If conversion didn't happen, 1 (raw) < 1556 (meters) → wrong 'no'.
+    """
+    gm = create_game_map(session, convention=DistanceConvention.imperial)
+    inventory = {'radars': [{'distance': 1}], 'thermometers': []}
+    game = create_game(
+        session,
+        map_id=gm.id,
+        status=GameStatus.seeking,
+        inventory_template=inventory,
+    )
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.client_id, -0.1, 51.5)
+    # Hider ~1556 m away (within 1 mile ≈ 1609 m)
+    _report_location(client, game.id, hider.client_id, -0.1, 51.514)
+
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    q_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()['answer'] == 'yes'
+
+
+def test_imperial_measuring_distances_in_miles(client: TestClient, session: Session):
+    """Measuring question stores seeker/hider distances in miles."""
+    gm = create_game_map(session, convention=DistanceConvention.imperial)
+    hosp = create_map_feature(
+        session,
+        name='Hospital',
+        stable_id='hosp_imp',
+        geometry=Point(-0.1, 51.5),
+    )
+    create_game_map_feature(session, gm.id, hosp.id)
+
+    inventory = {'radars': [], 'thermometers': []}
+    game = create_game(
+        session,
+        map_id=gm.id,
+        status=GameStatus.seeking,
+        inventory_template=inventory,
+    )
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    # Seeker very close to hospital
+    _report_location(client, game.id, seeker.client_id, -0.1001, 51.5001)
+    # Hider far from hospital
+    _report_location(client, game.id, hider.client_id, -0.2, 51.6)
+
+    resp = client.post(
+        f'/games/{game.id}/questions/measuring',
+        json={'location': _point(-0.1001, 51.5001), 'category': 'hospital'},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+    seeker_dist = resp.json()['parameters']['seeker_resolution']['distance']
+    # Seeker is ~10-15 meters from hospital → should be a small fraction of a mile
+    assert seeker_dist < 0.1  # less than 0.1 miles
+
+    q_id = resp.json()['id']
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['answer'] == 'closer'  # seeker much closer
+    hider_dist = data['parameters']['hider_resolution']['distance']
+    # Hider ~8 miles from hospital
+    assert hider_dist > 1  # more than 1 mile

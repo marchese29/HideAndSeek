@@ -166,7 +166,7 @@ async def test_push_service_builds_standard_payload():
         question_id=question_id,
         question_type='radar',
         question_status='answerable',
-        parameters={'radius_m': 3000},
+        parameters={'radius': 3000},
     )
 
     assert len(sent_requests) == 1
@@ -182,7 +182,7 @@ async def test_push_service_builds_standard_payload():
     assert payload['data']['game_id'] == str(game_id)
     assert payload['data']['question_id'] == str(question_id)
     assert payload['data']['question_type'] == 'radar'
-    assert payload['data']['parameters'] == {'radius_m': 3000}
+    assert payload['data']['parameters'] == {'radius': 3000}
 
 
 @pytest.mark.anyio

@@ -28,15 +28,15 @@ INSERT INTO transit_dataset (id, name, region, imported_at)
 VALUES ('$DS_ID', 'London Transit', 'London', NOW())
 ON CONFLICT DO NOTHING;
 
-INSERT INTO game_map (id, name, size, transit_dataset_id, boundary,
+INSERT INTO game_map (id, name, size, convention, transit_dataset_id, boundary,
                       excluded_stop_ids, excluded_route_ids, districts,
                       district_classes, feature_classes, default_inventory)
 VALUES (
-  '$MAP_ID', 'Central London', 'medium', '$DS_ID',
+  '$MAP_ID', 'Central London', 'medium', 'metric', '$DS_ID',
   ST_GeomFromText('POLYGON((-0.2 51.4, 0.1 51.4, 0.1 51.6, -0.2 51.6, -0.2 51.4))', 4326),
   '[]', '[]', '[]', '[]', '{}',
-  '{"radars":[{"distance_m":3000},{"distance_m":5000},{"distance_m":null}],
-    "thermometers":[{"distance_m":500},{"distance_m":null}]}'
+  '{"radars":[{"distance":3000},{"distance":5000},{"distance":null}],
+    "thermometers":[{"distance":500},{"distance":null}]}'
 ) ON CONFLICT DO NOTHING;
 -- Seed two hospital features: one near the seeker, one near the hider
 INSERT INTO map_feature (id, category, stable_id, name, geometry)

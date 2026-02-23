@@ -11,7 +11,8 @@ Geographic "Hide and Seek" game — hiders use public transit to hide in a game 
 - `hooks/` — Git hooks (symlinked into `.git/hooks/`; see Setup below).
 - `docker-compose.yml` — Docker Compose (PostGIS + Redis + API server + Celery worker).
 - `scripts/dev.sh` — Local dev launcher (uvicorn + Celery worker with Redis).
-- `scripts/manual-test.sh` — End-to-end game flow against a running Docker server (seeds data, exercises all endpoints).
+- `scripts/manual-test.sh` — End-to-end metric game flow against a running Docker server (seeds data, exercises all endpoints).
+- `scripts/manual-test-imperial.sh` — End-to-end imperial convention game flow with assertions (run after `manual-test.sh`).
 - `.beads/` — Beads issue tracker.
 
 ## CLAUDE.md Is the Source of Truth

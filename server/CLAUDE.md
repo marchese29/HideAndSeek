@@ -57,28 +57,29 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 - `Dockerfile` — Multi-stage build using `uv` image (Python 3.12, bookworm-slim)
 - `src/hideandseek/utils.py` — Shared utilities (`find_server_root()` — walks up to `pyproject.toml`)
 - `src/hideandseek/geo.py` — Pure geographic math: `distance(point_a, point_b)` (geodesic distance in meters between shapely Points via pyproj), `distance_to_feature(player, geometry)` (distance in meters from a point to the nearest point on any geometry using shapely `nearest_points` + geodesic)
+- `src/hideandseek/conventions.py` — Distance convention utilities. `to_meters(value, convention)` / `from_meters(meters, convention)` for metric/imperial conversion, `format_distance_label()` for push notification labels, and `get_default_inventory(convention, size)` for code-level inventory defaults when maps don't provide overrides.
 - `src/hideandseek/exclusion.py` — Exclusion zone geometry for each question type. `exclude_radar` (circle include/exclude), `exclude_thermometer` (half-plane via Voronoi bisector), `exclude_matching` (Voronoi partitioning of POIs), `exclude_measuring` (buffer around POIs). Uses AEQD projection for metric operations. Called from `logic.py` answer functions.
 - `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
 - `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
 - `src/hideandseek/celery_app.py` — Celery app instance, config from `celery_config`, autodiscovers `hideandseek.tasks`
 - `src/hideandseek/celery_config.py` — Celery configuration (broker URL, eager mode, serialization)
 - `src/hideandseek/validators.py` — Request validation for questions. `validate_slot_request` returns the `InventorySlot` to consume. `validate_category_request` checks category availability. `validate_answer_request` returns `(Question, Point)`. All raise `HTTPException` on invalid requests. Called from routers before business logic.
-- `src/hideandseek/logic.py` — Question lifecycle orchestration (ask and answer). Called by routers after validation. Ask functions handle inventory mutation, question creation, and feature resolution. Answer functions own the full lifecycle: compute answer, generate exclusion zone via `exclusion.py`, accumulate `total_exclusion`, and persist via `update_question`. No HTTP concerns (no `HTTPException`, no push).
+- `src/hideandseek/logic.py` — Question lifecycle orchestration (ask and answer). Called by routers after validation. Ask functions handle inventory mutation, question creation, and feature resolution. Answer functions own the full lifecycle: compute answer, generate exclusion zone via `exclusion.py`, accumulate `total_exclusion`, and persist via `update_question`. This is the **conversion boundary** — `to_meters()` converts stored convention-unit values to meters before geo math, and `from_meters()` converts resolved distances back to convention units for storage. No HTTP concerns (no `HTTPException`, no push).
 - `src/hideandseek/resolution.py` — Business logic for matching/measuring feature resolution. Category classification sets (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`), `get_available_categories()`, `resolve_feature_for_player()` (picks containment vs nearest strategy).
 - `src/hideandseek/tasks/` — Celery task modules
   - `game_timers.py` — `transition_hiding_to_seeking`, `auto_answer_question` (game timer tasks). Uses `session_scope()` for DB access.
   - `push.py` — `send_push` (push delivery task with retry). Uses `session_scope()` for DB access.
 - `src/hideandseek/models/` — SQLModel table models and types
-  - `types.py` — StrEnums (`GameStatus`, `PlayerRole`, `PushEventType`, `FeatureCategory`, `SlotType`, `QuestionType`, `QuestionStatus`, etc.)
+  - `types.py` — StrEnums (`DistanceConvention`, `GameStatus`, `PlayerRole`, `PushEventType`, `FeatureCategory`, `SlotType`, `QuestionType`, `QuestionStatus`, etc.)
   - `geo_types.py` — `ShapelyGeometry(Geometry)` column type for transparent shapely↔WKB conversion
   - `transit.py` — `TransitDataset`, `Stop`, `Route`, `RouteStop`
-  - `game_map.py` — `GameMap` (includes `feature_classes` JSON column for matching/measuring question support, `default_inventory` JSON template for slot creation)
+  - `game_map.py` — `GameMap` (includes `convention: DistanceConvention` for metric/imperial, `feature_classes` JSON column for matching/measuring question support, `default_inventory` JSON template for slot creation)
   - `map_feature.py` — `MapFeature` (map-defined geographic features with `ShapelyGeometry` column, composite unique on `(category, stable_id)`), `GameMapFeature` (join table linking features to maps, composite PK)
   - `game.py` — `Game` (relationships: `inventory_slots`, `category_usages`, `players`), `Player`
-  - `inventory.py` — `InventorySlot` (radar/thermometer slot with `consumed_at` soft-delete), `CategoryUsage` (tracks used matching/measuring categories per game, unique on `(game_id, question_type, category, feature_class)`)
+  - `inventory.py` — `InventorySlot` (radar/thermometer slot with `distance: float | None` in convention units, `consumed_at` soft-delete), `CategoryUsage` (tracks used matching/measuring categories per game, unique on `(game_id, question_type, category, feature_class)`)
   - `location.py` — `LocationUpdate`
   - `question.py` — `Question` (relationships: `radar_params`, `thermometer_params`, `feature_params` — one-to-one with param tables; `exclusion` and `total_exclusion` geometry columns for exclusion zones)
-  - `question_params.py` — `RadarParams` (`radius_m`), `ThermometerParams` (`min_travel_m`), `FeatureQuestionParams` (category, source, seeker/hider feature resolution fields)
+  - `question_params.py` — `RadarParams` (`radius: float`), `ThermometerParams` (`min_travel: float`), `FeatureQuestionParams` (category, source, `seeker_distance`/`hider_distance` in convention units, seeker/hider feature resolution fields)
   - `device_token.py` — `DeviceToken` (maps `client_id` → APNS token)
   - `__init__.py` — Re-exports all models (import this to register tables on metadata)
 - `src/hideandseek/schemas/` — Request/response Pydantic schemas (separate from DB models)
@@ -100,7 +101,7 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - `location.py` — `POST .../location`, `GET .../location-history`
   - `questions.py` — `POST .../questions/radar`, `POST .../questions/thermometer`, `POST .../questions/matching`, `POST .../questions/measuring`, `POST .../questions/thermometer/{id}/lock-in`, `POST .../questions/{id}/answer`, `GET .../questions`
 - `tests/conftest.py` — In-memory SQLite fixtures (`session`, `client`) and factory functions
-- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`; plus `test_features.py` for spatial queries, `test_geo.py` for distance utilities, `test_resolution.py` for resolution business logic, and `test_exclusion.py` for exclusion zone geometry)
+- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`; plus `test_features.py` for spatial queries, `test_geo.py` for distance utilities, `test_resolution.py` for resolution business logic, `test_exclusion.py` for exclusion zone geometry, and `test_conventions.py` for distance convention utilities)
 - `scripts/generate_openapi.py` — dumps `app.openapi()` to `openapi/openapi.yaml`
 - `data/` — SQLite database file (gitignored)
 
@@ -130,9 +131,10 @@ Manual testing catches wiring and serialization issues that unit tests miss.
   - **`InventorySlot`** table: pre-populated from the map's `default_inventory` template at game creation. Slots are consumed by setting `consumed_at` (soft-delete). `Game.inventory_slots` relationship (ordered by `slot_index`).
   - **`CategoryUsage`** table: created when a matching/measuring question is asked. Unique constraint on `(game_id, question_type, category, feature_class)`. `Game.category_usages` relationship.
 - **Per-type question parameters**: Question parameters use one-to-one relational tables instead of a JSON column:
-  - `RadarParams` (`radius_m`) — one-to-one via `Question.radar_params`
-  - `ThermometerParams` (`min_travel_m`) — one-to-one via `Question.thermometer_params`
-  - `FeatureQuestionParams` (category, source, seeker/hider resolution) — one-to-one via `Question.feature_params`, shared by matching and measuring
+  - `RadarParams` (`radius: float`) — one-to-one via `Question.radar_params`
+  - `ThermometerParams` (`min_travel: float`) — one-to-one via `Question.thermometer_params`
+  - `FeatureQuestionParams` (category, source, `seeker_distance`/`hider_distance`, seeker/hider resolution) — one-to-one via `Question.feature_params`, shared by matching and measuring
+  - All distance values are stored in **convention units** (meters for metric maps, miles for imperial). Conversion to meters for geo math happens in `logic.py` via `to_meters()`/`from_meters()`.
   - Seeker resolution fields are **non-optional** — if the seeker's feature can't be resolved, the ask endpoint returns 422. Hider resolution fields are populated at answer time.
 - **Question types**: Four types with two inventory models:
   - **Slot-based** (radar, thermometer): consume an `InventorySlot` row. Radar → `answerable` immediately; thermometer → `in_progress` until seeker locks in.

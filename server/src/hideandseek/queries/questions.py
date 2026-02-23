@@ -72,19 +72,19 @@ def create_question(
 
 
 @db_write
-def create_radar_params(session: Session, question_id: uuid.UUID, radius_m: int) -> RadarParams:
+def create_radar_params(session: Session, question_id: uuid.UUID, radius: float) -> RadarParams:
     """Create radar-specific parameters for a question."""
-    params = RadarParams(question_id=question_id, radius_m=radius_m)
+    params = RadarParams(question_id=question_id, radius=radius)
     session.add(params)
     return params
 
 
 @db_write
 def create_thermometer_params(
-    session: Session, question_id: uuid.UUID, min_travel_m: int
+    session: Session, question_id: uuid.UUID, min_travel: float
 ) -> ThermometerParams:
     """Create thermometer-specific parameters for a question."""
-    params = ThermometerParams(question_id=question_id, min_travel_m=min_travel_m)
+    params = ThermometerParams(question_id=question_id, min_travel=min_travel)
     session.add(params)
     return params
 
@@ -99,7 +99,7 @@ def create_feature_params(
     source: str,
     seeker_feature_id: str,
     seeker_feature_name: str,
-    seeker_distance_m: float,
+    seeker_distance: float,
 ) -> FeatureQuestionParams:
     """Create feature-specific parameters for a matching or measuring question."""
     params = FeatureQuestionParams(
@@ -109,7 +109,7 @@ def create_feature_params(
         source=source,
         seeker_feature_id=seeker_feature_id,
         seeker_feature_name=seeker_feature_name,
-        seeker_distance_m=seeker_distance_m,
+        seeker_distance=seeker_distance,
     )
     session.add(params)
     return params
@@ -199,7 +199,7 @@ def create_inventory_slots(
                 game_id=game_id,
                 slot_type=slot_type,
                 slot_index=idx,
-                distance_m=slot_data.get('distance_m'),
+                distance=slot_data.get('distance'),
             )
             session.add(slot)
             slots.append(slot)

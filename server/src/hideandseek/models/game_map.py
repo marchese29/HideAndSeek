@@ -5,7 +5,7 @@ from shapely.geometry import Polygon
 from sqlmodel import Field, Relationship, SQLModel
 
 from hideandseek.models.geo_types import ShapelyGeometry
-from hideandseek.models.types import MapSize
+from hideandseek.models.types import DistanceConvention, MapSize
 
 
 class GameMap(SQLModel, table=True):
@@ -15,6 +15,7 @@ class GameMap(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str
     size: MapSize
+    convention: DistanceConvention = DistanceConvention.metric
     transit_dataset_id: uuid.UUID = Field(foreign_key='transit_dataset.id')
     boundary: Polygon = Field(sa_column=sa.Column(ShapelyGeometry('POLYGON', srid=4326)))
     excluded_stop_ids: list = Field(default_factory=list, sa_type=sa.JSON)

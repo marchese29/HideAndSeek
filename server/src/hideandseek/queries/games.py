@@ -9,9 +9,10 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
+from hideandseek.conventions import get_default_inventory
 from hideandseek.db import db_read, db_write
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import GameStatus
+from hideandseek.models.types import DistanceConvention, GameStatus, MapSize
 from hideandseek.queries.questions import create_inventory_slots
 
 
@@ -35,8 +36,14 @@ def create_game(
     host_client_id: uuid.UUID,
     timing: dict,
     default_inventory: dict,
+    convention: DistanceConvention = DistanceConvention.metric,
+    size: MapSize = MapSize.medium,
 ) -> Game:
-    """Create a game with a generated join code and inventory slots from map template."""
+    """Create a game with a generated join code and inventory slots from map template.
+
+    When default_inventory is empty, falls back to code-level defaults
+    based on the map's convention and size.
+    """
     game = Game(
         map_id=map_id,
         host_client_id=host_client_id,
@@ -46,7 +53,8 @@ def create_game(
     session.add(game)
     session.flush()  # Materialize game.id for FK references
 
-    create_inventory_slots(game.id, default_inventory)
+    inventory = default_inventory if default_inventory else get_default_inventory(convention, size)
+    create_inventory_slots(game.id, inventory)
 
     return game
 

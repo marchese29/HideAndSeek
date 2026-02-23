@@ -20,7 +20,7 @@ class InventorySlot(SQLModel, table=True):
     game_id: uuid.UUID = Field(foreign_key='game.id', index=True)
     slot_type: SlotType
     slot_index: int
-    distance_m: int | None = None
+    distance: float | None = None
     consumed_at: datetime | None = None
 
     game: 'Game' = Relationship(back_populates='inventory_slots')  # noqa: F821

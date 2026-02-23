@@ -740,12 +740,12 @@ components:
           type: integer
           title: Slot Index
           description: 0-based index into the available radar slot list.
-        custom_distance_m:
+        custom_distance:
           anyOf:
-          - type: integer
+          - type: number
           - type: 'null'
-          title: Custom Distance M
-          description: Required when the chosen slot has distance_m=null (custom slot).
+          title: Custom Distance
+          description: Required for custom slots (distance=null). In convention units.
       type: object
       required:
       - location
@@ -761,12 +761,12 @@ components:
           type: integer
           title: Slot Index
           description: 0-based index into the available thermometer slot list.
-        custom_distance_m:
+        custom_distance:
           anyOf:
-          - type: integer
+          - type: number
           - type: 'null'
-          title: Custom Distance M
-          description: Required when the chosen slot has distance_m=null (custom slot).
+          title: Custom Distance
+          description: Required for custom slots (distance=null). In convention units.
       type: object
       required:
       - location
@@ -930,15 +930,15 @@ components:
           type: string
           title: Name
           description: Human-readable name.
-        distance_m:
+        distance:
           type: number
-          title: Distance M
-          description: Distance in meters.
+          title: Distance
+          description: Distance in convention units.
       type: object
       required:
       - feature_id
       - name
-      - distance_m
+      - distance
       title: FeatureResolution
       description: Resolution result for one player's feature lookup.
     GameResponse:
@@ -953,6 +953,10 @@ components:
           title: Map Id
         status:
           $ref: '#/components/schemas/GameStatus'
+        convention:
+          type: string
+          title: Convention
+          description: 'Distance convention: "metric" or "imperial".'
         join_code:
           anyOf:
           - type: string
@@ -995,6 +999,7 @@ components:
       - id
       - map_id
       - status
+      - convention
       - join_code
       - timing
       - inventory
@@ -1779,13 +1784,13 @@ components:
           const: radar
           title: Type
           default: radar
-        radius_m:
-          type: integer
-          title: Radius M
-          description: Radar radius in meters.
+        radius:
+          type: number
+          title: Radius
+          description: Radar radius in convention units.
       type: object
       required:
-      - radius_m
+      - radius
       title: RadarParamsResponse
       description: Parameters for a radar question.
     RouteResponse:
@@ -1840,12 +1845,12 @@ components:
           type: integer
           title: Slot Index
           description: Original ordering index.
-        distance_m:
+        distance:
           anyOf:
-          - type: integer
+          - type: number
           - type: 'null'
-          title: Distance M
-          description: Preset distance, or null for custom.
+          title: Distance
+          description: Preset distance in convention units, or null for custom.
         consumed:
           type: boolean
           title: Consumed
@@ -1854,7 +1859,7 @@ components:
       required:
       - id
       - slot_index
-      - distance_m
+      - distance
       - consumed
       title: SlotResponse
       description: A single inventory slot (radar or thermometer).
@@ -1889,13 +1894,13 @@ components:
           const: thermometer
           title: Type
           default: thermometer
-        min_travel_m:
-          type: integer
-          title: Min Travel M
-          description: Minimum travel distance in meters.
+        min_travel:
+          type: number
+          title: Min Travel
+          description: Minimum travel distance in convention units.
       type: object
       required:
-      - min_travel_m
+      - min_travel
       title: ThermometerParamsResponse
       description: Parameters for a thermometer question.
     ValidationError:

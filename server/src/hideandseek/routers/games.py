@@ -64,6 +64,8 @@ def create_game(
         host_client_id=client_id,
         timing={},  # TODO: copy from map default_timing when the field exists
         default_inventory=game_map.default_inventory,
+        convention=game_map.convention,
+        size=game_map.size,
     )
     return GameResponse.from_model(game)
 

@@ -59,8 +59,8 @@ def client(session: Session) -> Generator[TestClient, None, None]:
 # ── Factory functions ─────────────────────────────────────────────────────────
 
 _DEFAULT_INVENTORY_TEMPLATE: dict[str, Any] = {
-    'radars': [{'distance_m': 3000}, {'distance_m': 5000}, {'distance_m': None}],
-    'thermometers': [{'distance_m': 500}, {'distance_m': None}],
+    'radars': [{'distance': 3000}, {'distance': 5000}, {'distance': None}],
+    'thermometers': [{'distance': 500}, {'distance': None}],
 }
 
 
@@ -134,7 +134,7 @@ def _create_inventory_slots(session: Session, game_id: uuid.UUID, template: dict
                 game_id=game_id,
                 slot_type=slot_type,
                 slot_index=idx,
-                distance_m=slot_data.get('distance_m'),
+                distance=slot_data.get('distance'),
             )
             session.add(slot)
     session.commit()
@@ -145,7 +145,7 @@ def create_inventory_slot(
     game_id: uuid.UUID,
     slot_type: SlotType = SlotType.radar,
     slot_index: int = 0,
-    distance_m: int | None = 3000,
+    distance: float | None = 3000,
     **overrides: Any,
 ) -> InventorySlot:
     """Create a single InventorySlot for testing."""
@@ -153,7 +153,7 @@ def create_inventory_slot(
         'game_id': game_id,
         'slot_type': slot_type,
         'slot_index': slot_index,
-        'distance_m': distance_m,
+        'distance': distance,
     }
     defaults.update(overrides)
     slot = InventorySlot(**defaults)
