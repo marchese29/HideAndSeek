@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from hideandseek.db import create_db_and_tables
 from hideandseek.logging import setup_logging
 from hideandseek.middleware import AccessLogMiddleware
-from hideandseek.routers import games, location, maps, questions
+from hideandseek.routers import endgame, games, location, maps, questions
 
 
 @asynccontextmanager
@@ -31,6 +31,7 @@ app.include_router(maps.router)
 app.include_router(games.router)
 app.include_router(location.router)
 app.include_router(questions.router)
+app.include_router(endgame.router)
 
 
 @app.get('/')

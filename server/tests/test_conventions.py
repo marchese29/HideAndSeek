@@ -7,7 +7,9 @@ import pytest
 from hideandseek.conventions import (
     format_distance_label,
     from_meters,
+    get_default_hiding_zone_radius,
     get_default_inventory,
+    get_effective_hiding_zone_radius,
     to_meters,
 )
 from hideandseek.models.types import DistanceConvention, MapSize
@@ -106,3 +108,44 @@ def test_default_inventory_imperial_large():
 def test_default_inventory_special_raises():
     with pytest.raises(ValueError, match='special'):
         get_default_inventory(DistanceConvention.metric, MapSize.special)
+
+
+# ── get_default_hiding_zone_radius ──────────────────────────────────────
+
+
+def test_hiding_zone_metric_small():
+    assert get_default_hiding_zone_radius(DistanceConvention.metric, MapSize.small) == 500
+
+
+def test_hiding_zone_metric_medium():
+    assert get_default_hiding_zone_radius(DistanceConvention.metric, MapSize.medium) == 500
+
+
+def test_hiding_zone_metric_large():
+    assert get_default_hiding_zone_radius(DistanceConvention.metric, MapSize.large) == 1_000
+
+
+def test_hiding_zone_imperial_small():
+    assert get_default_hiding_zone_radius(DistanceConvention.imperial, MapSize.small) == 0.25
+
+
+def test_hiding_zone_imperial_large():
+    assert get_default_hiding_zone_radius(DistanceConvention.imperial, MapSize.large) == 0.5
+
+
+def test_hiding_zone_special_raises():
+    with pytest.raises(ValueError, match='special'):
+        get_default_hiding_zone_radius(DistanceConvention.metric, MapSize.special)
+
+
+# ── get_effective_hiding_zone_radius ────────────────────────────────────
+
+
+def test_effective_radius_uses_map_override():
+    result = get_effective_hiding_zone_radius(750, DistanceConvention.metric, MapSize.small)
+    assert result == 750
+
+
+def test_effective_radius_falls_back_to_default():
+    result = get_effective_hiding_zone_radius(None, DistanceConvention.metric, MapSize.small)
+    assert result == 500

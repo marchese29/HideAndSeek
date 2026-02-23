@@ -137,6 +137,24 @@ def get_question(session: Session, question_id: uuid.UUID) -> Question | None:
 
 
 @db_read
+def list_answered_questions_after_sequence(
+    session: Session, game_id: uuid.UUID, after_sequence: int
+) -> list[Question]:
+    """Return answered questions with sequence > after_sequence, ordered by sequence."""
+    return list(
+        session.exec(
+            select(Question)
+            .where(
+                Question.game_id == game_id,
+                Question.status == QuestionStatus.answered,
+                Question.sequence > after_sequence,
+            )
+            .order_by(Question.sequence)  # type: ignore[arg-type]
+        ).all()
+    )
+
+
+@db_read
 def list_questions(session: Session, game_id: uuid.UUID) -> list[Question]:
     """Return all questions for a game, chronologically."""
     return list(

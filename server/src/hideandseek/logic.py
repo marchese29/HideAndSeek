@@ -14,8 +14,10 @@ from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from hideandseek.conventions import from_meters, to_meters
+from hideandseek.conventions import from_meters, get_effective_hiding_zone_radius, to_meters
 from hideandseek.exclusion import (
+    EndgameExclusionResult,
+    compute_endgame_exclusions,
     exclude_matching,
     exclude_measuring,
     exclude_radar,
@@ -26,6 +28,7 @@ from hideandseek.models.game import Game
 from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.question import Question
 from hideandseek.models.question_params import FeatureQuestionParams
+from hideandseek.models.transit import Stop
 from hideandseek.models.types import (
     FeatureCategory,
     QuestionStatus,
@@ -40,9 +43,11 @@ from hideandseek.queries.questions import (
     create_thermometer_params,
     get_latest_total_exclusion,
     get_question_count,
+    list_answered_questions_after_sequence,
     record_category_usage,
     update_question,
 )
+from hideandseek.queries.stops import get_candidate_stations as query_candidate_stations
 from hideandseek.resolution import resolve_feature_for_player
 
 # ── Ask ──────────────────────────────────────────────────────────────────
@@ -410,3 +415,36 @@ def _update_hider_resolution(
     params.hider_feature_id = feature_id
     params.hider_feature_name = feature_name
     params.hider_distance = distance
+
+
+# ── Endgame ─────────────────────────────────────────────────────────────
+
+
+def _effective_hiding_zone_radius_m(game: Game) -> float:
+    """Compute effective hiding zone radius in meters for a game."""
+    game_map = game.game_map
+    radius_conv = get_effective_hiding_zone_radius(
+        game_map.hiding_zone_radius, game_map.convention, game_map.size
+    )
+    return to_meters(radius_conv, game_map.convention)
+
+
+def get_endgame_exclusions(
+    game: Game, station: Stop, after_sequence: int
+) -> EndgameExclusionResult:
+    """Compute endgame exclusion view for a station.
+
+    Returns hiding zone geometry and per-question exclusions intersected with it,
+    starting from questions after the given sequence number.
+    """
+    radius_m = _effective_hiding_zone_radius_m(game)
+    questions = list_answered_questions_after_sequence(game.id, after_sequence)
+    return compute_endgame_exclusions(
+        game.game_map.boundary, station.coordinates, radius_m, questions
+    )
+
+
+def get_candidate_stations(game: Game, offset: int, limit: int) -> list[Stop]:
+    """Return playable stops not fully covered by the game's total exclusion."""
+    radius_m = _effective_hiding_zone_radius_m(game)
+    return query_candidate_stations(game, radius_m, offset, limit)

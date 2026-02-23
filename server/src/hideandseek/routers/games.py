@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from hideandseek.celery_app import app as celery_app
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_client_id, get_game
+from hideandseek.logic import get_candidate_stations
 from hideandseek.models.game import Game
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType
 from hideandseek.queries.device_tokens import upsert_device_token
@@ -32,6 +33,7 @@ from hideandseek.schemas.response import (
     GameResponse,
     JoinGameResponse,
     PlayerResponse,
+    StopResponse,
 )
 from hideandseek.tasks.game_timers import transition_hiding_to_seeking
 from hideandseek.tasks.push import send_push
@@ -39,7 +41,7 @@ from hideandseek.tasks.push import send_push
 router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(get_session)])
 
 # States from which a game can be ended.
-_ACTIVE_STATES = {GameStatus.hiding, GameStatus.seeking, GameStatus.endgame}
+_ACTIVE_STATES = {GameStatus.hiding, GameStatus.seeking}
 
 
 @router.post('', response_model=GameResponse, status_code=201)
@@ -187,3 +189,19 @@ def get_effective_map(
     """Effective map with transit data and exclusions applied."""
     data = get_effective_map_data(game)
     return EffectiveMapResponse.from_effective_map_data(data)
+
+
+@router.get('/{game_id}/candidate-stations', response_model=list[StopResponse])
+def list_candidate_stations(
+    offset: int = Query(default=0, ge=0, description='Pagination offset.'),
+    limit: int = Query(default=50, ge=1, le=200, description='Pagination limit.'),
+    game: Game = Depends(get_game),
+) -> list[StopResponse]:
+    """Playable stops whose hiding zone circle is not fully covered by exclusion zones."""
+    if game.status != GameStatus.seeking:
+        raise HTTPException(
+            status_code=409, detail='Candidate stations are only available during seeking.'
+        )
+
+    stops = get_candidate_stations(game, offset, limit)
+    return [StopResponse.from_model(s) for s in stops]

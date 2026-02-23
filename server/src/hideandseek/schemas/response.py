@@ -23,6 +23,7 @@ from hideandseek.models.types import (
 )
 
 if TYPE_CHECKING:
+    from hideandseek.exclusion import EndgameExclusionResult
     from hideandseek.models.game import Game as GameModel
     from hideandseek.models.game import Player as PlayerModel
     from hideandseek.models.game_map import GameMap as GameMapModel
@@ -483,4 +484,44 @@ class QuestionResponse(BaseModel):
             answer=question.answer,
             exclusion=_geom_or_none(question.exclusion),
             total_exclusion=_geom_or_none(question.total_exclusion),
+        )
+
+
+# ── Endgame ──────────────────────────────────────────────────────────────────
+
+
+class EndgameExclusionEntryResponse(BaseModel):
+    """One question's exclusion intersected with the hiding zone."""
+
+    question_id: uuid.UUID
+    sequence: int = Field(description='1-based chronological order within the game.')
+    exclusion: GeoJSONGeometry | None = Field(
+        description='Exclusion zone intersected with the hiding zone circle.'
+    )
+    total_exclusion: GeoJSONGeometry | None = Field(
+        description='Cumulative exclusion across endgame-scoped questions.'
+    )
+
+
+class EndgameExclusionsResponse(BaseModel):
+    """Endgame exclusion view — hiding zone geometry and per-question intersected exclusions."""
+
+    hiding_zone: GeoJSONGeometry = Field(
+        description='Hiding zone circle (clipped to game map boundary).'
+    )
+    entries: list[EndgameExclusionEntryResponse]
+
+    @staticmethod
+    def from_result(result: EndgameExclusionResult) -> EndgameExclusionsResponse:
+        return EndgameExclusionsResponse(
+            hiding_zone=_geojson_adapter.validate_python(mapping(result.hiding_zone)),
+            entries=[
+                EndgameExclusionEntryResponse(
+                    question_id=e.question_id,
+                    sequence=e.sequence,
+                    exclusion=_geom_or_none(e.exclusion),
+                    total_exclusion=_geom_or_none(e.total_exclusion),
+                )
+                for e in result.entries
+            ],
         )

@@ -52,6 +52,13 @@ VALUES
   ('$MAP_ID', '$FEAT_SEEKER'),
   ('$MAP_ID', '$FEAT_HIDER')
 ON CONFLICT DO NOTHING;
+
+-- Seed transit stops for candidate stations / endgame testing
+INSERT INTO stop (id, stable_id, dataset_id, name, coordinates) VALUES
+  ('00000000-0000-0000-0000-000000000020', 'victoria',   '$DS_ID', 'Victoria',   ST_SetSRID(ST_MakePoint(-0.1437, 51.4952), 4326)),
+  ('00000000-0000-0000-0000-000000000021', 'paddington', '$DS_ID', 'Paddington', ST_SetSRID(ST_MakePoint(-0.1756, 51.5154), 4326)),
+  ('00000000-0000-0000-0000-000000000022', 'waterloo',   '$DS_ID', 'Waterloo',   ST_SetSRID(ST_MakePoint(-0.1134, 51.5031), 4326))
+ON CONFLICT DO NOTHING;
 SQL
 echo "Done."
 
@@ -137,6 +144,15 @@ echo "=== POST /questions/{id}/answer (hider answers — expect 'no', ~56km apar
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Client-Id: $HIDER_CLIENT" | pp
 
+STOP_ID="00000000-0000-0000-0000-000000000020"
+
+echo ""
+echo "=== GET /candidate-stations (after 1 radar miss — most stops still viable) ==="
+CANDS=$(curl -sf "$BASE/games/$GAME_ID/candidate-stations" \
+  -H "X-Client-Id: $SEEKER_CLIENT")
+CAND_COUNT=$(echo "$CANDS" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+echo "  Candidates: $CAND_COUNT (2 expected — Waterloo hiding zone covered by 3km radar miss)"
+
 echo ""
 echo "=== POST /questions/thermometer (500m thermometer) ==="
 Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/thermometer" \
@@ -201,6 +217,21 @@ curl -sf "$BASE/games/$GAME_ID/questions" \
 echo ""
 echo "=== GET /games/{id} (inventory after consuming slots + categories) ==="
 curl -sf "$BASE/games/$GAME_ID" | pp
+
+echo ""
+echo "=== GET /endgame-exclusions (Victoria station, after_question=0) ==="
+ENDGAME=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_ID&after_question=0" \
+  -H "X-Client-Id: $SEEKER_CLIENT")
+ENTRY_COUNT=$(echo "$ENDGAME" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
+echo "  Entries: $ENTRY_COUNT (should be 4 — all answered questions)"
+echo "  Hiding zone type: $(echo "$ENDGAME" | jq_val "['hiding_zone']['type']")"
+
+echo ""
+echo "=== GET /endgame-exclusions (after_question=2, only questions 3+4) ==="
+ENDGAME2=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_ID&after_question=2" \
+  -H "X-Client-Id: $SEEKER_CLIENT")
+ENTRY_COUNT2=$(echo "$ENDGAME2" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
+echo "  Entries: $ENTRY_COUNT2 (should be 2)"
 
 echo ""
 echo "=== POST /games/{id}/end ==="

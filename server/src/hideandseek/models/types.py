@@ -31,7 +31,6 @@ class GameStatus(StrEnum):
     lobby = 'lobby'
     hiding = 'hiding'
     seeking = 'seeking'
-    endgame = 'endgame'
     finished = 'finished'
 
 

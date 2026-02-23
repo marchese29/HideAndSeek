@@ -60,6 +60,49 @@ _THERMO_IMPERIAL = {
 }
 
 
+# ── Hiding zone radius defaults ──────────────────────────────────────────
+
+_HIDING_ZONE_METRIC = {
+    MapSize.small: 500,
+    MapSize.medium: 500,
+    MapSize.large: 1_000,
+}
+
+_HIDING_ZONE_IMPERIAL = {
+    MapSize.small: 0.25,
+    MapSize.medium: 0.25,
+    MapSize.large: 0.5,
+}
+
+
+def get_default_hiding_zone_radius(convention: DistanceConvention, size: MapSize) -> float:
+    """Return the default hiding zone radius in convention units.
+
+    Raises ValueError for special-size maps (they must provide an override).
+    """
+    if size == MapSize.special:
+        raise ValueError('special-size maps must provide a hiding_zone_radius override.')
+
+    if convention == DistanceConvention.imperial:
+        return _HIDING_ZONE_IMPERIAL[size]
+    return _HIDING_ZONE_METRIC[size]
+
+
+def get_effective_hiding_zone_radius(
+    map_radius: float | None, convention: DistanceConvention, size: MapSize
+) -> float:
+    """Return the effective hiding zone radius in convention units.
+
+    Falls back to code-level default when map_radius is None.
+    """
+    if map_radius is not None:
+        return map_radius
+    return get_default_hiding_zone_radius(convention, size)
+
+
+# ── Default inventory constants ──────────────────────────────────────────────
+
+
 def get_default_inventory(convention: DistanceConvention, size: MapSize) -> dict:
     """Return the default inventory template for a convention and map size.
 

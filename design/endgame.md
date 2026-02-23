@@ -1,9 +1,15 @@
 # Endgame Design
 
-> Status: **Draft**
+> Status: **Implementation**
 > Last updated: 2026-02-22
 
 How the game transitions from the long game to the endgame, and how the endgame plays out.
+
+## Implementation Cycles
+
+1. **Endgame re-drawing endpoints** — exclusion view + candidate stations (read-only query endpoints)
+2. **Hiding station codification** — auto-select station at hiding→seeking, role-aware visibility
+3. **Seeker proximity notifications** — track proximity state, fire push on boundary crossings
 
 ---
 

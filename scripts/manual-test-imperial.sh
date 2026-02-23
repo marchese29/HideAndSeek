@@ -76,6 +76,8 @@ VALUES
   ('$MAP_ID', '$FEAT_SEEKER'),
   ('$MAP_ID', '$FEAT_HIDER')
 ON CONFLICT DO NOTHING;
+
+-- Reuse stops from metric test (seeded by manual-test.sh)
 SQL
 echo "Done."
 
@@ -162,6 +164,15 @@ echo "$A" | pp
 ANSWER=$(echo "$A" | jq_val "['answer']")
 assert_eq "radar answer" "$ANSWER" "yes"
 
+STOP_ID="00000000-0000-0000-0000-000000000020"
+
+echo ""
+echo "=== GET /candidate-stations (after 1 radar hit — Victoria/Paddington excluded) ==="
+CANDS=$(curl -sf "$BASE/games/$GAME_ID/candidate-stations" \
+  -H "X-Client-Id: $SEEKER_CLIENT")
+CAND_COUNT=$(echo "$CANDS" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+echo "  Candidates: $CAND_COUNT (1 expected — Waterloo inside 1mi hit circle)"
+
 echo ""
 echo "=== POST /questions/thermometer (0.5 mi thermometer) ==="
 Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/thermometer" \
@@ -242,6 +253,21 @@ A=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
 echo "$A" | pp
 ANSWER=$(echo "$A" | jq_val "['answer']")
 echo "  Answer: $ANSWER"
+
+echo ""
+echo "=== GET /endgame-exclusions (Victoria station, after_question=0) ==="
+ENDGAME=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_ID&after_question=0" \
+  -H "X-Client-Id: $SEEKER_CLIENT")
+ENTRY_COUNT=$(echo "$ENDGAME" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
+echo "  Entries: $ENTRY_COUNT (should be 4 — all answered questions)"
+echo "  Hiding zone type: $(echo "$ENDGAME" | jq_val "['hiding_zone']['type']")"
+
+echo ""
+echo "=== GET /endgame-exclusions (after_question=2, only questions 3+4) ==="
+ENDGAME2=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_ID&after_question=2" \
+  -H "X-Client-Id: $SEEKER_CLIENT")
+ENTRY_COUNT2=$(echo "$ENDGAME2" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
+echo "  Entries: $ENTRY_COUNT2 (should be 2)"
 
 echo ""
 echo "=== GET /games/{id} (final state — verify convention persists) ==="

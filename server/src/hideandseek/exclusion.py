@@ -10,12 +10,16 @@ on the geometry's centroid, then projected back to WGS84.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from pyproj import Transformer
 from shapely import MultiPoint, Point, voronoi_polygons
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform, unary_union
+
+from hideandseek.models.question import Question
 
 
 def _buffer(geom: BaseGeometry, radius_m: float) -> BaseGeometry:
@@ -133,3 +137,74 @@ def exclude_thermometer(
       the half-plane closer to the start position, so exclude the end half.
     """
     return exclude_matching(game_map, seeker_end, [seeker_start], same=seeker_closer)
+
+
+# ── Endgame exclusions ─────────────────────────────────────────────────────
+
+
+@dataclass
+class EndgameExclusionEntry:
+    """One question's exclusion intersected with the hiding zone circle."""
+
+    question_id: uuid.UUID
+    sequence: int
+    exclusion: BaseGeometry | None
+    total_exclusion: BaseGeometry | None
+
+
+@dataclass
+class EndgameExclusionResult:
+    """Endgame exclusion view: hiding zone circle + per-question intersected exclusions."""
+
+    hiding_zone: BaseGeometry
+    entries: list[EndgameExclusionEntry]
+
+
+def compute_endgame_exclusions(
+    game_map: BaseGeometry,
+    station: Point,
+    radius_m: float,
+    questions: Sequence[Question],
+) -> EndgameExclusionResult:
+    """Compute endgame exclusions by intersecting each question's exclusion with the hiding zone.
+
+    Builds a hiding zone circle around the station, clips it to the game map boundary,
+    intersects each question's stored exclusion with it, and builds a fresh cumulative
+    total_exclusion from the intersected results only (long-game exclusions do not carry over).
+    """
+    hiding_zone = _buffer(station, radius_m).intersection(game_map)
+    cumulative: BaseGeometry | None = None
+    entries: list[EndgameExclusionEntry] = []
+
+    for q in questions:
+        if q.exclusion is None:
+            entries.append(
+                EndgameExclusionEntry(
+                    question_id=q.id,
+                    sequence=q.sequence,
+                    exclusion=None,
+                    total_exclusion=cumulative,
+                )
+            )
+            continue
+
+        intersected = hiding_zone.intersection(q.exclusion)
+        if intersected.is_empty:
+            intersected = None
+
+        if intersected is not None:
+            if cumulative is None:
+                cumulative = intersected
+            else:
+                cumulative = unary_union([cumulative, intersected])
+
+        entries.append(
+            EndgameExclusionEntry(
+                question_id=q.id,
+                sequence=q.sequence,
+                exclusion=intersected,
+                total_exclusion=cumulative,
+            )
+        )
+
+    return EndgameExclusionResult(hiding_zone=hiding_zone, entries=entries)

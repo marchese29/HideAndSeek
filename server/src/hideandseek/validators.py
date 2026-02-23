@@ -16,6 +16,7 @@ from shapely.geometry import Point
 from hideandseek.models.game import Game
 from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.question import Question
+from hideandseek.models.transit import Stop
 from hideandseek.models.types import (
     FeatureCategory,
     QuestionStatus,
@@ -28,6 +29,7 @@ from hideandseek.queries.questions import (
     get_question,
     is_category_used,
 )
+from hideandseek.queries.stops import get_stop_by_id
 from hideandseek.resolution import (
     CLASSED_CATEGORIES,
     MATCHING_CATEGORIES,
@@ -113,3 +115,18 @@ def validate_answer_request(
         raise HTTPException(status_code=409, detail='No hider location available.')
 
     return question, latest.coordinates
+
+
+# ── Endgame validation ──────────────────────────────────────────────────
+
+
+def validate_endgame_station(station_id: uuid.UUID, game: Game) -> Stop:
+    """Validate a station for endgame exclusion computation. Returns the stop."""
+    stop = get_stop_by_id(station_id)
+    if not stop:
+        raise HTTPException(status_code=404, detail='Station not found.')
+    if stop.dataset_id != game.game_map.transit_dataset_id:
+        raise HTTPException(
+            status_code=422, detail="Station does not belong to this game's transit dataset."
+        )
+    return stop

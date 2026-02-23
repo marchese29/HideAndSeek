@@ -300,6 +300,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/candidate-stations:
+    get:
+      tags:
+      - games
+      summary: List Candidate Stations
+      description: Playable stops whose hiding zone circle is not fully covered by
+        exclusion zones.
+      operationId: list_candidate_stations_games__game_id__candidate_stations_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Pagination offset.
+          default: 0
+          title: Offset
+        description: Pagination offset.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          description: Pagination limit.
+          default: 50
+          title: Limit
+        description: Pagination limit.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StopResponse'
+                title: Response List Candidate Stations Games  Game Id  Candidate
+                  Stations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/location:
     post:
       tags:
@@ -661,6 +715,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/endgame-exclusions:
+    get:
+      tags:
+      - endgame
+      summary: Endgame Exclusions
+      description: 'Endgame exclusion view: per-question exclusions intersected with
+        a hiding zone circle.'
+      operationId: endgame_exclusions_games__game_id__endgame_exclusions_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: station_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stop ID to center the hiding zone on.
+          title: Station Id
+        description: Stop ID to center the hiding zone on.
+      - name: after_question
+        in: query
+        required: false
+        schema:
+          type: integer
+          description: Only include questions with sequence > this value.
+          default: 0
+          title: After Question
+        description: Only include questions with sequence > this value.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndgameExclusionsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       summary: Root
@@ -858,6 +959,105 @@ components:
 
 
         Single source of truth for what the client should render.'
+    EndgameExclusionEntryResponse:
+      properties:
+        question_id:
+          type: string
+          format: uuid
+          title: Question Id
+        sequence:
+          type: integer
+          title: Sequence
+          description: 1-based chronological order within the game.
+        exclusion:
+          anyOf:
+          - oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+            discriminator:
+              propertyName: type
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+          - type: 'null'
+          title: Exclusion
+          description: Exclusion zone intersected with the hiding zone circle.
+        total_exclusion:
+          anyOf:
+          - oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+            discriminator:
+              propertyName: type
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+          - type: 'null'
+          title: Total Exclusion
+          description: Cumulative exclusion across endgame-scoped questions.
+      type: object
+      required:
+      - question_id
+      - sequence
+      - exclusion
+      - total_exclusion
+      title: EndgameExclusionEntryResponse
+      description: One question's exclusion intersected with the hiding zone.
+    EndgameExclusionsResponse:
+      properties:
+        hiding_zone:
+          oneOf:
+          - $ref: '#/components/schemas/Point'
+          - $ref: '#/components/schemas/MultiPoint'
+          - $ref: '#/components/schemas/LineString'
+          - $ref: '#/components/schemas/MultiLineString'
+          - $ref: '#/components/schemas/Polygon'
+          - $ref: '#/components/schemas/MultiPolygon'
+          - $ref: '#/components/schemas/GeometryCollection'
+          title: Hiding Zone
+          description: Hiding zone circle (clipped to game map boundary).
+          discriminator:
+            propertyName: type
+            mapping:
+              GeometryCollection: '#/components/schemas/GeometryCollection'
+              LineString: '#/components/schemas/LineString'
+              MultiLineString: '#/components/schemas/MultiLineString'
+              MultiPoint: '#/components/schemas/MultiPoint'
+              MultiPolygon: '#/components/schemas/MultiPolygon'
+              Point: '#/components/schemas/Point'
+              Polygon: '#/components/schemas/Polygon'
+        entries:
+          items:
+            $ref: '#/components/schemas/EndgameExclusionEntryResponse'
+          type: array
+          title: Entries
+      type: object
+      required:
+      - hiding_zone
+      - entries
+      title: EndgameExclusionsResponse
+      description: "Endgame exclusion view \u2014 hiding zone geometry and per-question\
+        \ intersected exclusions."
     FeatureCategory:
       type: string
       enum:
@@ -1013,7 +1213,6 @@ components:
       - lobby
       - hiding
       - seeking
-      - endgame
       - finished
       title: GameStatus
     GeometryCollection:
