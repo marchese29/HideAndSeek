@@ -50,62 +50,35 @@ Manual testing catches wiring and serialization issues that unit tests miss.
 
 ## Project Structure
 
-- `src/hideandseek/main.py` — FastAPI app entrypoint with lifespan (sets up logging, creates DB)
-- `src/hideandseek/logging.py` — Centralized structlog configuration (`setup_logging()`). Configures two logger namespaces: `hideandseek.access` (request/response) and root (general app → stderr). Three-tier `ENV`: `local` (default, file+stderr, console), `development` (stderr only, console), `production` (stderr only, JSON).
-- `src/hideandseek/middleware.py` — Raw ASGI `AccessLogMiddleware` for structured request/response logging. Logs method, path, headers (sensitive values redacted), request body (truncated at 1KB), status, duration, response size. Generates `request_id` UUID per request (bound to structlog contextvars, returned in `X-Request-ID` response header). Skips `/health`.
-- `src/hideandseek/db.py` — Database engine (`DATABASE_URL` env var, defaults to SQLite), `create_db_and_tables()`, `get_session()` (commit-at-boundary + ContextVar), `session_scope()` (sync context manager for Celery tasks), `current_session()`, `@db_read`/`@db_write` decorators
-- `Dockerfile` — Multi-stage build using `uv` image (Python 3.12, bookworm-slim)
-- `src/hideandseek/utils.py` — Shared utilities (`find_server_root()` — walks up to `pyproject.toml`)
-- `src/hideandseek/geo.py` — Pure geographic math: `distance(point_a, point_b)` (geodesic distance in meters between shapely Points via pyproj), `distance_to_feature(player, geometry)` (distance in meters from a point to the nearest point on any geometry using shapely `nearest_points` + geodesic)
-- `src/hideandseek/conventions.py` — Distance convention utilities. `to_meters(value, convention)` / `from_meters(meters, convention)` for metric/imperial conversion, `format_distance_label()` for push notification labels, `get_default_inventory(convention, size)` for code-level inventory defaults, `get_default_hiding_zone_radius(convention, size)` for code-level hiding zone radius defaults.
-- `src/hideandseek/exclusion.py` — Exclusion zone geometry for each question type. `exclude_radar` (circle include/exclude), `exclude_thermometer` (half-plane via Voronoi bisector), `exclude_matching` (Voronoi partitioning of POIs), `exclude_measuring` (buffer around POIs). Uses AEQD projection for metric operations. Called from `logic.py` answer functions. Also `compute_endgame_exclusions` — builds hiding zone circle, intersects each question's stored exclusion with it, and rebuilds cumulative `total_exclusion`.
-- `src/hideandseek/config.py` — `PushConfig` dataclass and `load_push_config()` from env vars
-- `src/hideandseek/push.py` — `PushService` class wrapping `aioapns` (no-ops when unconfigured)
-- `src/hideandseek/celery_app.py` — Celery app instance, config from `celery_config`, autodiscovers `hideandseek.tasks`
-- `src/hideandseek/celery_config.py` — Celery configuration (broker URL, eager mode, serialization)
-- `src/hideandseek/validators.py` — Request validation for questions. `validate_slot_request` returns the `InventorySlot` to consume. `validate_category_request` checks category availability. `validate_answer_request` returns `(Question, Point)`. `validate_endgame_station` returns a `Stop` after verifying it exists and belongs to the game's dataset. All raise `HTTPException` on invalid requests. Called from routers before business logic.
-- `src/hideandseek/logic.py` — Question lifecycle orchestration (ask and answer). Called by routers after validation. Ask functions handle inventory mutation, question creation, and feature resolution. Answer functions own the full lifecycle: compute answer, generate exclusion zone via `exclusion.py`, accumulate `total_exclusion`, and persist via `update_question`. This is the **conversion boundary** — `to_meters()` converts stored convention-unit values to meters before geo math, and `from_meters()` converts resolved distances back to convention units for storage. Endgame functions: `get_endgame_exclusions()` (hiding zone + intersected per-question exclusions), `get_candidate_stations()` (stops not fully covered by exclusion), `compute_hider_centroid()` (average hider location for station auto-selection). Hiding zone radius fallback chain: `game.hiding_zone_radius_override` → `game_map.hiding_zone_radius` → code-level default. No HTTP concerns (no `HTTPException`, no push).
-- `src/hideandseek/resolution.py` — Business logic for matching/measuring feature resolution. Category classification sets (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`), `get_available_categories()`, `resolve_feature_for_player()` (picks containment vs nearest strategy).
-- `src/hideandseek/tasks/` — Celery task modules
-  - `game_timers.py` — `transition_hiding_to_seeking` (auto-selects hider station via `compute_hider_centroid` + `get_nearest_playable_stop` before transitioning), `auto_answer_question` (game timer tasks). Uses `session_scope()` for DB access.
-  - `push.py` — `send_push` (push delivery task with retry). Uses `session_scope()` for DB access.
-- `src/hideandseek/models/` — SQLModel table models and types
-  - `types.py` — StrEnums (`DistanceConvention`, `GameStatus`, `PlayerRole`, `PushEventType`, `FeatureCategory`, `SlotType`, `QuestionType`, `QuestionStatus`, etc.)
-  - `geo_types.py` — `ShapelyGeometry(Geometry)` column type for transparent shapely↔WKB conversion
-  - `transit.py` — `TransitDataset`, `Stop`, `Route`, `RouteStop`
-  - `game_map.py` — `GameMap` (includes `convention: DistanceConvention` for metric/imperial, `feature_classes` JSON column for matching/measuring question support, `default_inventory` JSON template for slot creation, `hiding_zone_radius: float | None` optional override in convention units)
-  - `map_feature.py` — `MapFeature` (map-defined geographic features with `ShapelyGeometry` column, composite unique on `(category, stable_id)`), `GameMapFeature` (join table linking features to maps, composite PK)
-  - `game.py` — `Game` (relationships: `inventory_slots`, `category_usages`, `players`, `hider_station`; fields: `hider_station_id` FK to Stop, `hiding_zone_radius_override` for mid-game card effects), `Player`
-  - `inventory.py` — `InventorySlot` (radar/thermometer slot with `distance: float | None` in convention units, `consumed_at` soft-delete), `CategoryUsage` (tracks used matching/measuring categories per game, unique on `(game_id, question_type, category, feature_class)`)
-  - `location.py` — `LocationUpdate`
-  - `question.py` — `Question` (relationships: `radar_params`, `thermometer_params`, `feature_params` — one-to-one with param tables; `exclusion` and `total_exclusion` geometry columns for exclusion zones)
-  - `question_params.py` — `RadarParams` (`radius: float`), `ThermometerParams` (`min_travel: float`), `FeatureQuestionParams` (category, source, `seeker_distance`/`hider_distance` in convention units, seeker/hider feature resolution fields)
-  - `device_token.py` — `DeviceToken` (maps `client_id` → APNS token)
-  - `__init__.py` — Re-exports all models (import this to register tables on metadata)
-- `src/hideandseek/schemas/` — Request/response Pydantic schemas (separate from DB models)
-  - `request.py` — Request body schemas (`CreateGameRequest`, `JoinGameRequest`, `AskRadarRequest`, `AskThermometerRequest`, `AskMatchingRequest`, `AskMeasuringRequest`, etc.)
-  - `response.py` — Response schemas with `from_model()` static methods for DB→API transformation. `GameResponse.from_model()` accepts `caller_role` to control role-aware visibility (e.g., `hider_station_id` is hidden from seekers).
-  - `common.py` — Shared utilities (pagination params)
-- `src/hideandseek/dependencies.py` — Shared FastAPI dependencies (`get_client_id`, `get_game`, `get_player_in_game`, `get_optional_client_id`, `get_optional_player_in_game`)
-- `src/hideandseek/queries/` — Database query/mutation functions, split by domain
-  - `device_tokens.py` — `upsert_device_token`, `get_device_tokens_for_game`, `delete_device_token`
-  - `maps.py` — `list_maps`, `get_map`
-  - `games.py` — `generate_join_code`, `create_game` (creates `InventorySlot` rows from map's `default_inventory` template), `find_game_by_join_code`, `add_player`, `get_player`, `update_player`, `update_game_status`, `get_game_by_id`, `set_hider_station`
-  - `effective_map.py` — `get_effective_map_data`, `RouteWithStops`, `EffectiveMapData` dataclasses
-  - `features.py` — `resolve_nearest_feature` (nearest by `ST_Distance`), `resolve_containing_feature` (point-in-polygon via `ST_Contains`), `get_features_by_category` (all features of a category/class on a map), `get_map_feature_categories` (distinct category/class pairs on a map). All join through `GameMapFeature` for map scoping.
-  - `location.py` — `create_location_update`, `get_visible_players`, `get_location_history`, `get_latest_location_for_player`, `VisiblePlayerData` dataclass
-  - `questions.py` — `has_unanswered_question`, `get_question_count`, `create_question`, `get_question`, `get_latest_total_exclusion`, `list_questions`, `list_answered_questions_after_sequence`, `update_question`, `create_radar_params`, `create_thermometer_params`, `create_feature_params`, `consume_slot`, `record_category_usage`, `get_category_usages`, `is_category_used`
-  - `stops.py` — `get_stop_by_id`, `get_candidate_stations` (PostGIS-only — uses `ST_Buffer` on geography for metric hiding zone circles and `ST_Covers` for coverage checks), `get_nearest_playable_stop` (PostGIS-only — nearest eligible stop by `ST_Distance`)
-- `src/hideandseek/routers/` — API route modules
-  - `maps.py` — `GET /maps`, `GET /maps/{map_id}`
-  - `games.py` — `POST /games`, `POST /games/join`, `GET /games/{game_id}`, `PATCH .../players/{player_id}`, `POST .../start`, `POST .../end`, `GET .../map`, `GET .../candidate-stations` (PostGIS-only — playable stops not fully covered by exclusion)
-  - `location.py` — `POST .../location`, `GET .../location-history`
-  - `questions.py` — `POST .../questions/radar`, `POST .../questions/thermometer`, `POST .../questions/matching`, `POST .../questions/measuring`, `POST .../questions/thermometer/{id}/lock-in`, `POST .../questions/{id}/answer`, `GET .../questions`
-  - `endgame.py` — `GET .../endgame-exclusions?station_id=&after_question=` (per-question exclusions intersected with hiding zone circle)
-- `tests/conftest.py` — In-memory SQLite fixtures (`session`, `client`) and factory functions
-- `tests/` — pytest tests (one file per router: `test_maps.py`, `test_games.py`, `test_location.py`, `test_questions.py`, `test_push.py`, `test_game_timers.py`, `test_endgame.py`; plus `test_features.py` for spatial queries, `test_geo.py` for distance utilities, `test_resolution.py` for resolution business logic, `test_exclusion.py` for exclusion zone geometry, and `test_conventions.py` for distance convention utilities)
-- `scripts/generate_openapi.py` — dumps `app.openapi()` to `openapi/openapi.yaml`
-- `data/` — SQLite database file (gitignored)
+```
+src/hideandseek/
+  main.py, db.py, dependencies.py       # App entrypoint, DB engine + session, FastAPI deps
+  logging.py, middleware.py              # structlog config, ASGI access log middleware
+  validators.py, logic.py, resolution.py # Question lifecycle: validate → orchestrate → resolve
+  geo.py, conventions.py, exclusion.py   # Distance math, metric/imperial, exclusion zones
+  config.py, push.py, utils.py          # Push config, APNS service, shared utils
+  celery_app.py, celery_config.py       # Celery instance + broker config
+  models/                               # SQLModel table models (types, geo_types, transit,
+                                        #   game_map, map_feature, game, inventory, location,
+                                        #   question, question_params, device_token)
+  schemas/                              # Pydantic request/response schemas + common utils
+  queries/                              # DB query functions by domain (games, maps, questions,
+                                        #   location, features, stops, effective_map, device_tokens)
+  routers/                              # API routes (games, maps, location, questions, endgame)
+  tasks/                                # Celery tasks (game_timers, push)
+tests/                                  # pytest (one file per router + features, geo, resolution,
+                                        #   exclusion, conventions)
+scripts/generate_openapi.py             # OpenAPI spec regeneration
+data/                                   # SQLite DB file (gitignored)
+```
+
+**Key callouts** (things that aren't obvious from file names):
+- `logic.py` is the **conversion boundary** — `to_meters()` before geo math, `from_meters()` after. Also owns endgame functions (`get_endgame_exclusions`, `get_candidate_stations`, `compute_hider_centroid`).
+- `exclusion.py` is called from `logic.py`, not from routers. Also has `compute_endgame_exclusions` for hiding zone intersection.
+- `resolution.py` owns category classification sets and feature resolution strategy (containment vs nearest).
+- `models/__init__.py` re-exports all models — import it to register tables on metadata.
+- `celery_app.py` uses an explicit `include` list for task modules (not autodiscover — new task modules must be added manually).
+- `queries/stops.py` has PostGIS-only functions (`get_candidate_stations`, `get_nearest_playable_stop`) that don't work with SQLite.
 
 ## Architecture Patterns
 
