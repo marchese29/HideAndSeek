@@ -8,12 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from hideandseek.celery_app import app as celery_app
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_client_id, get_game, get_optional_player_in_game
+from hideandseek.dependencies import get_client_id, get_game, get_player_in_game
 from hideandseek.logic import get_candidate_stations
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType
 from hideandseek.queries.device_tokens import upsert_device_token
 from hideandseek.queries.effective_map import get_effective_map_data
+from hideandseek.queries.features import get_map_feature_categories
 from hideandseek.queries.games import (
     add_player,
     find_game_by_join_code,
@@ -31,6 +32,7 @@ from hideandseek.schemas.request import CreateGameRequest, JoinGameRequest, Play
 from hideandseek.schemas.response import (
     EffectiveMapResponse,
     GameResponse,
+    HiderStationResponse,
     JoinGameResponse,
     PlayerResponse,
     StopResponse,
@@ -42,6 +44,12 @@ router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(get_se
 
 # States from which a game can be ended.
 _ACTIVE_STATES = {GameStatus.hiding, GameStatus.seeking}
+
+
+def _game_categories(game: Game) -> list[str]:
+    """Distinct category names available on a game's map."""
+    cats = get_map_feature_categories(game_map_id=game.map_id)
+    return sorted({str(c) for c, _ in cats})
 
 
 @router.post('', response_model=GameResponse, status_code=201)
@@ -69,7 +77,7 @@ def create_game(
         convention=game_map.convention,
         size=game_map.size,
     )
-    return GameResponse.from_model(game)
+    return GameResponse.from_model(game, categories=_game_categories(game))
 
 
 @router.post('/join', response_model=JoinGameResponse, status_code=201)
@@ -96,17 +104,18 @@ def join_game(
         name=body.name,
         color=body.color,
     )
-    return JoinGameResponse(game=GameResponse.from_model(game), player_id=player.id)
+    return JoinGameResponse(
+        game=GameResponse.from_model(game, categories=_game_categories(game)),
+        player_id=player.id,
+    )
 
 
 @router.get('/{game_id}', response_model=GameResponse)
 def get_game_state(
     game: Game = Depends(get_game),
-    player: Player | None = Depends(get_optional_player_in_game),
 ) -> GameResponse:
     """Fetch current game state."""
-    caller_role = player.role if player else None
-    return GameResponse.from_model(game, caller_role=caller_role)
+    return GameResponse.from_model(game, categories=_game_categories(game))
 
 
 @router.patch(
@@ -162,13 +171,12 @@ def start_game(
         alert='Game on! The hiding phase has begun.',
     )
 
-    return GameResponse.from_model(game)
+    return GameResponse.from_model(game, categories=_game_categories(game))
 
 
 @router.post('/{game_id}/end', response_model=GameResponse)
 def end_game(
     game: Game = Depends(get_game),
-    player: Player | None = Depends(get_optional_player_in_game),
 ) -> GameResponse:
     """Transition the game to finished."""
     if game.status not in _ACTIVE_STATES:
@@ -182,8 +190,24 @@ def end_game(
         celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
 
     game = update_game_status(game, GameStatus.finished, clear_join_code=True)
-    caller_role = player.role if player else None
-    return GameResponse.from_model(game, caller_role=caller_role)
+    return GameResponse.from_model(game, categories=_game_categories(game))
+
+
+@router.get('/{game_id}/hider-station', response_model=HiderStationResponse)
+def get_hider_station(
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> HiderStationResponse:
+    """The hider's assigned station during seeking."""
+    if player.role != PlayerRole.hider:
+        raise HTTPException(status_code=403, detail='Only hiders can view the hider station.')
+    if game.status != GameStatus.seeking:
+        raise HTTPException(
+            status_code=409, detail='Hider station is only available during seeking.'
+        )
+    if game.hider_station_id is None:
+        raise HTTPException(status_code=404, detail='Hider station not yet assigned.')
+    return HiderStationResponse(hider_station_id=game.hider_station_id)
 
 
 @router.get('/{game_id}/map', response_model=EffectiveMapResponse)
@@ -200,8 +224,11 @@ def list_candidate_stations(
     offset: int = Query(default=0, ge=0, description='Pagination offset.'),
     limit: int = Query(default=50, ge=1, le=200, description='Pagination limit.'),
     game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
 ) -> list[StopResponse]:
     """Playable stops whose hiding zone circle is not fully covered by exclusion zones."""
+    if player.role != PlayerRole.seeker:
+        raise HTTPException(status_code=403, detail='Only seekers can view candidate stations.')
     if game.status != GameStatus.seeking:
         raise HTTPException(
             status_code=409, detail='Candidate stations are only available during seeking.'

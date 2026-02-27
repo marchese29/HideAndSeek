@@ -9,6 +9,7 @@
 #   - Radar answer uses mile→meter conversion (1 mi ≈ 1609 m)
 #   - Measuring distances are reported in miles
 #   - Push labels use imperial formatting (e.g. "1 mi")
+#   - New role-gated endpoints work correctly
 #
 # Prerequisites:
 #   docker compose up --build   (or local server on :8000)
@@ -97,11 +98,15 @@ echo "  Join code: $JOIN_CODE"
 CONVENTION=$(echo "$GAME" | jq_val "['convention']")
 assert_eq "convention" "$CONVENTION" "imperial"
 
-# Verify slot distances are in miles
+# Verify static slot distances are in miles
 RADAR_0_DIST=$(echo "$GAME" | jq_val "['inventory']['radar_slots'][0]['distance']")
 assert_eq "radar slot 0 distance" "$RADAR_0_DIST" "1.0"
 THERMO_0_DIST=$(echo "$GAME" | jq_val "['inventory']['thermometer_slots'][0]['distance']")
 assert_eq "thermometer slot 0 distance" "$THERMO_0_DIST" "0.5"
+
+# Verify no hider_station_id on shared endpoint
+HAS_STATION=$(echo "$GAME" | python3 -c "import sys,json; print('hider_station_id' in json.load(sys.stdin))")
+assert_eq "no hider_station_id" "$HAS_STATION" "False"
 
 echo ""
 echo "=== POST /games/join (seeker + hider) ==="
@@ -132,16 +137,15 @@ docker compose exec -T postgres psql -U hideandseek -q -c \
 echo "  Done."
 
 echo ""
-echo "=== GET /games/{id} as hider (hider_station_id visible) ==="
-HIDER_VIEW=$(curl -sf "$BASE/games/$GAME_ID" -H "X-Client-Id: $HIDER_CLIENT")
-HIDER_STATION=$(echo "$HIDER_VIEW" | jq_val "['hider_station_id']")
-assert_eq "hider_station_id (hider view)" "$HIDER_STATION" "$STOP_VICTORIA"
+echo "=== GET /games/{id}/hider-station as hider (station visible) ==="
+HIDER_STATION_RESP=$(curl -sf "$BASE/games/$GAME_ID/hider-station" -H "X-Client-Id: $HIDER_CLIENT")
+HIDER_STATION=$(echo "$HIDER_STATION_RESP" | jq_val "['hider_station_id']")
+assert_eq "hider_station_id" "$HIDER_STATION" "$STOP_VICTORIA"
 
 echo ""
-echo "=== GET /games/{id} as seeker (hider_station_id hidden) ==="
-SEEKER_VIEW=$(curl -sf "$BASE/games/$GAME_ID" -H "X-Client-Id: $SEEKER_CLIENT")
-SEEKER_STATION=$(echo "$SEEKER_VIEW" | jq_val "['hider_station_id']")
-assert_eq "hider_station_id (seeker view)" "$SEEKER_STATION" "None"
+echo "=== GET /games/{id}/hider-station as seeker (should 403) ==="
+SEEKER_STATION_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/hider-station" -H "X-Client-Id: $SEEKER_CLIENT")
+assert_eq "seeker hider-station status" "$SEEKER_STATION_STATUS" "403"
 
 echo ""
 echo "=== Report locations ==="
@@ -178,7 +182,7 @@ ANSWER=$(echo "$A" | jq_val "['answer']")
 assert_eq "radar answer" "$ANSWER" "yes"
 
 echo ""
-echo "=== GET /candidate-stations (after 1 radar hit — Victoria/Paddington excluded) ==="
+echo "=== GET /candidate-stations as seeker ==="
 CANDS=$(curl -sf "$BASE/games/$GAME_ID/candidate-stations" \
   -H "X-Client-Id: $SEEKER_CLIENT")
 CAND_COUNT=$(echo "$CANDS" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
@@ -266,7 +270,19 @@ ANSWER=$(echo "$A" | jq_val "['answer']")
 echo "  Answer: $ANSWER"
 
 echo ""
-echo "=== GET /endgame-exclusions (Victoria station, after_question=0) ==="
+echo "=== GET /questions (summary only — verify no detail fields) ==="
+Q_LIST=$(curl -sf "$BASE/games/$GAME_ID/questions" -H "X-Client-Id: $SEEKER_CLIENT")
+HAS_PARAMS=$(echo "$Q_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); print('parameters' in d[0])")
+assert_eq "no parameters on summary" "$HAS_PARAMS" "False"
+
+echo ""
+echo "=== GET /exclusions (4 exclusions for seeker) ==="
+EXCL=$(curl -sf "$BASE/games/$GAME_ID/exclusions" -H "X-Client-Id: $SEEKER_CLIENT")
+EXCL_COUNT=$(echo "$EXCL" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['exclusions']))")
+assert_eq "exclusion entries" "$EXCL_COUNT" "4"
+
+echo ""
+echo "=== GET /endgame-exclusions as seeker (Victoria station, after_question=0) ==="
 ENDGAME=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=0" \
   -H "X-Client-Id: $SEEKER_CLIENT")
 ENTRY_COUNT=$(echo "$ENDGAME" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")

@@ -97,43 +97,31 @@ class PlayerResponse(BaseModel):
 # ── Inventory ─────────────────────────────────────────────────────────────────
 
 
-class SlotResponse(BaseModel):
-    """A single inventory slot (radar or thermometer)."""
+class StaticSlotResponse(BaseModel):
+    """A slot in the static inventory template."""
 
-    id: uuid.UUID
-    slot_index: int = Field(description='Original ordering index.')
     distance: float | None = Field(
         description='Preset distance in convention units, or null for custom.'
     )
-    consumed: bool = Field(description='Whether this slot has been used.')
 
 
-class CategoryUsageResponse(BaseModel):
-    """A used matching or measuring category."""
+class StaticInventoryResponse(BaseModel):
+    """Static inventory template — what tools are available in this game.
 
-    category: str
-    feature_class: int | None = None
-    consumed_at: datetime
+    No IDs, no consumed flags. The client derives what's been spent from the
+    question summary list.
+    """
 
-
-class InventoryResponse(BaseModel):
-    """Structured question inventory for a game."""
-
-    radar_slots: list[SlotResponse] = Field(description='Radar question slots.')
-    thermometer_slots: list[SlotResponse] = Field(description='Thermometer question slots.')
-    matching_used: list[CategoryUsageResponse] = Field(
-        description='Matching categories already used.'
-    )
-    measuring_used: list[CategoryUsageResponse] = Field(
-        description='Measuring categories already used.'
-    )
+    radar_slots: list[StaticSlotResponse] = Field(description='Radar question slots.')
+    thermometer_slots: list[StaticSlotResponse] = Field(description='Thermometer question slots.')
+    categories: list[str] = Field(description='Available question categories.')
 
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 
 
 class GameResponse(BaseModel):
-    """Full game state, including players and inventory."""
+    """Full game state, including players and static inventory template."""
 
     id: uuid.UUID
     map_id: uuid.UUID
@@ -141,7 +129,9 @@ class GameResponse(BaseModel):
     convention: str = Field(description='Distance convention: "metric" or "imperial".')
     join_code: str | None = Field(description='4-character code for joining. Null after game ends.')
     timing: dict = Field(description='TimingRules: hiding_time_min, rest_periods, etc.')
-    inventory: InventoryResponse = Field(description='Question inventory (slots + category usage).')
+    inventory: StaticInventoryResponse = Field(
+        description='Static inventory template (slots + categories).'
+    )
     players: list[PlayerResponse]
     created_at: datetime
     hiding_started_at: datetime | None = Field(
@@ -150,53 +140,19 @@ class GameResponse(BaseModel):
     seeking_started_at: datetime | None = Field(
         default=None, description='When the seeking phase began.'
     )
-    hider_station_id: uuid.UUID | None = Field(
-        default=None,
-        description='Stop ID of the hider station. Hidden from seekers.',
-    )
 
     @staticmethod
-    def from_model(game: GameModel, *, caller_role: PlayerRole | None = None) -> GameResponse:
+    def from_model(game: GameModel, *, categories: list[str]) -> GameResponse:
         radar_slots = [
-            SlotResponse(
-                id=s.id,
-                slot_index=s.slot_index,
-                distance=s.distance,
-                consumed=s.consumed_at is not None,
-            )
+            StaticSlotResponse(distance=s.distance)
             for s in game.inventory_slots
             if s.slot_type == SlotType.radar
         ]
         thermometer_slots = [
-            SlotResponse(
-                id=s.id,
-                slot_index=s.slot_index,
-                distance=s.distance,
-                consumed=s.consumed_at is not None,
-            )
+            StaticSlotResponse(distance=s.distance)
             for s in game.inventory_slots
             if s.slot_type == SlotType.thermometer
         ]
-        matching_used = [
-            CategoryUsageResponse(
-                category=str(u.category),
-                feature_class=u.feature_class,
-                consumed_at=u.consumed_at,
-            )
-            for u in game.category_usages
-            if u.question_type == QuestionType.matching
-        ]
-        measuring_used = [
-            CategoryUsageResponse(
-                category=str(u.category),
-                feature_class=u.feature_class,
-                consumed_at=u.consumed_at,
-            )
-            for u in game.category_usages
-            if u.question_type == QuestionType.measuring
-        ]
-
-        hider_station_id = None if caller_role == PlayerRole.seeker else game.hider_station_id
 
         return GameResponse(
             id=game.id,
@@ -205,17 +161,15 @@ class GameResponse(BaseModel):
             convention=game.game_map.convention,
             join_code=game.join_code,
             timing=game.timing,
-            inventory=InventoryResponse(
+            inventory=StaticInventoryResponse(
                 radar_slots=radar_slots,
                 thermometer_slots=thermometer_slots,
-                matching_used=matching_used,
-                measuring_used=measuring_used,
+                categories=categories,
             ),
             players=[PlayerResponse.from_model(p) for p in game.players],
             created_at=game.created_at,
             hiding_started_at=game.hiding_started_at,
             seeking_started_at=game.seeking_started_at,
-            hider_station_id=hider_station_id,
         )
 
 
@@ -395,14 +349,87 @@ QuestionParamsResponse = RadarParamsResponse | ThermometerParamsResponse | Featu
 _geojson_adapter: TypeAdapter[GeoJSONGeometry] = TypeAdapter(GeoJSONGeometry)
 
 
-def _geom_or_none(geom: object) -> GeoJSONGeometry | None:
+def geom_or_none(geom: object) -> GeoJSONGeometry | None:
     if geom is None:
         return None
     return _geojson_adapter.validate_python(mapping(geom))  # type: ignore[arg-type]
 
 
-class QuestionResponse(BaseModel):
-    """A question in the game — state machine: asked -> in_progress -> answerable -> answered."""
+def _build_question_params(question: QuestionModel) -> QuestionParamsResponse:
+    """Build typed parameters from the question's param relationships."""
+    if question.question_type == QuestionType.radar:
+        rp = question.radar_params
+        assert rp is not None
+        return RadarParamsResponse(radius=rp.radius)
+    elif question.question_type == QuestionType.thermometer:
+        tp = question.thermometer_params
+        assert tp is not None
+        return ThermometerParamsResponse(min_travel=tp.min_travel)
+    else:
+        fp = question.feature_params
+        assert fp is not None
+        seeker_res = FeatureResolution(
+            feature_id=fp.seeker_feature_id,
+            name=fp.seeker_feature_name,
+            distance=fp.seeker_distance,
+        )
+        hider_res = None
+        if fp.hider_feature_id is not None:
+            hider_res = FeatureResolution(
+                feature_id=fp.hider_feature_id,
+                name=fp.hider_feature_name or '',
+                distance=fp.hider_distance or 0.0,
+            )
+        return FeatureParamsResponse(
+            type=question.question_type,  # type: ignore[arg-type]
+            category=str(fp.category),
+            feature_class=fp.feature_class,
+            source=fp.source,
+            seeker_resolution=seeker_res,
+            hider_resolution=hider_res,
+        )
+
+
+class QuestionSummaryResponse(BaseModel):
+    """Lightweight question summary — whitelist of safe fields for shared polling.
+
+    No parameters, no locations, no geometry. Both roles use this to detect
+    new activity. New fields added to the question model do not appear here
+    until consciously included.
+    """
+
+    id: uuid.UUID
+    sequence: int = Field(description='1-based chronological order within the game.')
+    question_type: QuestionType
+    status: QuestionStatus
+    asked_by: uuid.UUID = Field(description='Player ID of the seeker who asked.')
+    asked_at: datetime
+    answerable_at: datetime | None = Field(
+        default=None, description='When the question became answerable.'
+    )
+    answered_at: datetime | None
+    answer: str | None = Field(description='yes/no for radar, closer/farther for thermometer, etc.')
+
+    @staticmethod
+    def from_model(question: QuestionModel) -> QuestionSummaryResponse:
+        return QuestionSummaryResponse(
+            id=question.id,
+            sequence=question.sequence,
+            question_type=question.question_type,
+            status=question.status,
+            asked_by=question.asked_by,
+            asked_at=question.asked_at,
+            answerable_at=question.answerable_at,
+            answered_at=question.answered_at,
+            answer=question.answer,
+        )
+
+
+class QuestionDetailResponse(BaseModel):
+    """Full question detail for hiders — everything except exclusion geometry.
+
+    Used by the hider detail endpoint and write endpoints (ask/answer/lock-in).
+    """
 
     id: uuid.UUID
     game_id: uuid.UUID
@@ -419,79 +446,67 @@ class QuestionResponse(BaseModel):
         description='GeoJSON Point — seeker position at lock-in (thermometer only).'
     )
     answerable_at: datetime | None = Field(
-        default=None, description='When the question became answerable. Clients compute deadline.'
+        default=None, description='When the question became answerable.'
     )
     answered_at: datetime | None
     hider_location: GeoJSONPoint | None = Field(
-        description='GeoJSON Point — hider position at answer time. Hidden from seekers.'
+        description='GeoJSON Point — hider position at answer time.'
     )
     answer: str | None = Field(description='yes/no for radar, closer/farther for thermometer.')
-    exclusion: GeoJSONGeometry | None = Field(description='GeoJSON geometry — the exclusion zone.')
-    total_exclusion: GeoJSONGeometry | None = Field(
-        description='GeoJSON geometry — cumulative exclusion across all answered questions.'
-    )
 
     @staticmethod
-    def from_model(
-        question: QuestionModel, *, hide_hider_location: bool = False
-    ) -> QuestionResponse:
+    def from_model(question: QuestionModel) -> QuestionDetailResponse:
         def _point_or_none(val: object) -> GeoJSONPoint | None:
             if val is None:
                 return None
             return GeoJSONPoint(**mapping(val))  # type: ignore[arg-type]
 
-        # Build typed parameters from the relationship
-        params: QuestionParamsResponse
-        if question.question_type == QuestionType.radar:
-            rp = question.radar_params
-            assert rp is not None
-            params = RadarParamsResponse(radius=rp.radius)
-        elif question.question_type == QuestionType.thermometer:
-            tp = question.thermometer_params
-            assert tp is not None
-            params = ThermometerParamsResponse(min_travel=tp.min_travel)
-        else:
-            fp = question.feature_params
-            assert fp is not None
-            seeker_res = FeatureResolution(
-                feature_id=fp.seeker_feature_id,
-                name=fp.seeker_feature_name,
-                distance=fp.seeker_distance,
-            )
-            hider_res = None
-            if fp.hider_feature_id is not None:
-                hider_res = FeatureResolution(
-                    feature_id=fp.hider_feature_id,
-                    name=fp.hider_feature_name or '',
-                    distance=fp.hider_distance or 0.0,
-                )
-            params = FeatureParamsResponse(
-                type=question.question_type,  # type: ignore[arg-type]
-                category=str(fp.category),
-                feature_class=fp.feature_class,
-                source=fp.source,
-                seeker_resolution=seeker_res,
-                hider_resolution=hider_res,
-            )
-
-        return QuestionResponse(
+        return QuestionDetailResponse(
             id=question.id,
             game_id=question.game_id,
             sequence=question.sequence,
             question_type=question.question_type,
             status=question.status,
-            parameters=params,
+            parameters=_build_question_params(question),
             asked_by=question.asked_by,
             asked_at=question.asked_at,
             seeker_location_start=GeoJSONPoint(**mapping(question.seeker_location_start)),
             seeker_location_end=_point_or_none(question.seeker_location_end),
             answerable_at=question.answerable_at,
             answered_at=question.answered_at,
-            hider_location=None if hide_hider_location else _point_or_none(question.hider_location),
+            hider_location=_point_or_none(question.hider_location),
             answer=question.answer,
-            exclusion=_geom_or_none(question.exclusion),
-            total_exclusion=_geom_or_none(question.total_exclusion),
         )
+
+
+# ── Hider Station ────────────────────────────────────────────────────────
+
+
+class HiderStationResponse(BaseModel):
+    """The hider's assigned station during seeking."""
+
+    hider_station_id: uuid.UUID
+
+
+# ── Exclusions ───────────────────────────────────────────────────────────
+
+
+class QuestionExclusionEntry(BaseModel):
+    """Per-question exclusion geometry for seekers."""
+
+    question_id: uuid.UUID
+    sequence: int = Field(description='1-based chronological order within the game.')
+    question_type: QuestionType
+    exclusion: GeoJSONGeometry | None = Field(description='GeoJSON geometry — the exclusion zone.')
+
+
+class ExclusionsResponse(BaseModel):
+    """Seeker tactical view — per-question exclusion geometry and cumulative total."""
+
+    exclusions: list[QuestionExclusionEntry]
+    total_exclusion: GeoJSONGeometry | None = Field(
+        description='Cumulative exclusion across all answered questions.'
+    )
 
 
 # ── Endgame ──────────────────────────────────────────────────────────────────
@@ -526,8 +541,8 @@ class EndgameExclusionsResponse(BaseModel):
                 EndgameExclusionEntryResponse(
                     question_id=e.question_id,
                     sequence=e.sequence,
-                    exclusion=_geom_or_none(e.exclusion),
-                    total_exclusion=_geom_or_none(e.total_exclusion),
+                    exclusion=geom_or_none(e.exclusion),
+                    total_exclusion=geom_or_none(e.total_exclusion),
                 )
                 for e in result.entries
             ],

@@ -7,10 +7,10 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_game
+from hideandseek.dependencies import get_game, get_player_in_game
 from hideandseek.logic import get_endgame_exclusions
-from hideandseek.models.game import Game
-from hideandseek.models.types import GameStatus
+from hideandseek.models.game import Game, Player
+from hideandseek.models.types import GameStatus, PlayerRole
 from hideandseek.schemas.response import EndgameExclusionsResponse
 from hideandseek.validators import validate_endgame_station
 
@@ -24,8 +24,11 @@ def endgame_exclusions(
         default=0, description='Only include questions with sequence > this value.'
     ),
     game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
 ) -> EndgameExclusionsResponse:
     """Endgame exclusion view: per-question exclusions intersected with a hiding zone circle."""
+    if player.role != PlayerRole.seeker:
+        raise HTTPException(status_code=403, detail='Only seekers can view endgame exclusions.')
     if game.status != GameStatus.seeking:
         raise HTTPException(
             status_code=409, detail='Endgame view is only available during seeking.'

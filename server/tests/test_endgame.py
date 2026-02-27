@@ -126,13 +126,13 @@ def test_endgame_exclusions_endpoint_seeking(session: Session, client: TestClien
     ds = create_transit_dataset(session)
     gm = create_game_map(session, transit_dataset_id=ds.id)
     game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
-    create_player(session, game.id, role=PlayerRole.seeker)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
     stop = _create_stop(session, ds.id)
 
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 0},
-        headers={'X-Client-Id': str(uuid.uuid4())},
+        headers={'X-Client-Id': str(seeker.client_id)},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -169,7 +169,7 @@ def test_endgame_exclusions_with_answered_questions(session: Session, client: Te
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 0},
-        headers={'X-Client-Id': str(uuid.uuid4())},
+        headers={'X-Client-Id': str(seeker.client_id)},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -205,7 +205,7 @@ def test_endgame_exclusions_after_question_filters(session: Session, client: Tes
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 1},
-        headers={'X-Client-Id': str(uuid.uuid4())},
+        headers={'X-Client-Id': str(seeker.client_id)},
     )
     assert resp.status_code == 200
     assert len(resp.json()['entries']) == 1
@@ -217,11 +217,12 @@ def test_endgame_exclusions_409_if_not_seeking(session: Session, client: TestCli
     ds = create_transit_dataset(session)
     gm = create_game_map(session, transit_dataset_id=ds.id)
     game = create_game(session, map_id=gm.id, status=GameStatus.lobby)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
 
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(uuid.uuid4()), 'after_question': 0},
-        headers={'X-Client-Id': str(uuid.uuid4())},
+        headers={'X-Client-Id': str(seeker.client_id)},
     )
     assert resp.status_code == 409
 
@@ -230,11 +231,12 @@ def test_endgame_exclusions_404_invalid_station(session: Session, client: TestCl
     """GET /endgame-exclusions returns 404 for a non-existent station."""
     gm = create_game_map(session)
     game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
 
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(uuid.uuid4()), 'after_question': 0},
-        headers={'X-Client-Id': str(uuid.uuid4())},
+        headers={'X-Client-Id': str(seeker.client_id)},
     )
     assert resp.status_code == 404
 
@@ -245,6 +247,7 @@ def test_endgame_exclusions_422_wrong_dataset(session: Session, client: TestClie
     ds2 = create_transit_dataset(session, name='Dataset 2')
     gm = create_game_map(session, transit_dataset_id=ds1.id)
     game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
 
     # Stop belongs to ds2, not ds1
     stop = Stop(
@@ -260,9 +263,25 @@ def test_endgame_exclusions_422_wrong_dataset(session: Session, client: TestClie
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 0},
-        headers={'X-Client-Id': str(uuid.uuid4())},
+        headers={'X-Client-Id': str(seeker.client_id)},
     )
     assert resp.status_code == 422
+
+
+def test_endgame_exclusions_hider_403(session: Session, client: TestClient) -> None:
+    """GET /endgame-exclusions returns 403 for hiders."""
+    ds = create_transit_dataset(session)
+    gm = create_game_map(session, transit_dataset_id=ds.id)
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, role=PlayerRole.hider)
+    stop = _create_stop(session, ds.id)
+
+    resp = client.get(
+        f'/games/{game.id}/endgame-exclusions',
+        params={'station_id': str(stop.id), 'after_question': 0},
+        headers={'X-Client-Id': str(hider.client_id)},
+    )
+    assert resp.status_code == 403
 
 
 # ── Candidate stations endpoint ────────────────────────────────────────
@@ -272,12 +291,26 @@ def test_candidate_stations_409_if_not_seeking(session: Session, client: TestCli
     """GET /candidate-stations returns 409 if game is not in seeking status."""
     gm = create_game_map(session)
     game = create_game(session, map_id=gm.id, status=GameStatus.lobby)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
 
     resp = client.get(
         f'/games/{game.id}/candidate-stations',
-        headers={'X-Client-Id': str(uuid.uuid4())},
+        headers={'X-Client-Id': str(seeker.client_id)},
     )
     assert resp.status_code == 409
+
+
+def test_candidate_stations_hider_403(session: Session, client: TestClient) -> None:
+    """GET /candidate-stations returns 403 for hiders."""
+    gm = create_game_map(session)
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, role=PlayerRole.hider)
+
+    resp = client.get(
+        f'/games/{game.id}/candidate-stations',
+        headers={'X-Client-Id': str(hider.client_id)},
+    )
+    assert resp.status_code == 403
 
 
 @pytest.mark.skipif(

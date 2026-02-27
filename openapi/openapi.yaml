@@ -272,6 +272,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/hider-station:
+    get:
+      tags:
+      - games
+      summary: Get Hider Station
+      description: The hider's assigned station during seeking.
+      operationId: get_hider_station_games__game_id__hider_station_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HiderStationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/map:
     get:
       tags:
@@ -337,6 +372,13 @@ paths:
           default: 50
           title: Limit
         description: Pagination limit.
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
       responses:
         '200':
           description: Successful Response
@@ -461,7 +503,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionResponse'
+                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -502,7 +544,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionResponse'
+                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -543,7 +585,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionResponse'
+                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -584,7 +626,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionResponse'
+                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -626,7 +668,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionResponse'
+                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -669,7 +711,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionResponse'
+                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -681,8 +723,7 @@ paths:
       tags:
       - questions
       summary: List Game Questions
-      description: Chronological list of all questions. Hider location hidden from
-        seekers.
+      description: "Chronological list of all questions \u2014 whitelist summary only."
       operationId: list_game_questions_games__game_id__questions_get
       parameters:
       - name: game_id
@@ -707,8 +748,85 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/QuestionResponse'
+                  $ref: '#/components/schemas/QuestionSummaryResponse'
                 title: Response List Game Questions Games  Game Id  Questions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}:
+    get:
+      tags:
+      - questions
+      summary: Get Question Detail
+      description: "Full question detail \u2014 hider only."
+      operationId: get_question_detail_games__game_id__questions__question_id__get
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/exclusions:
+    get:
+      tags:
+      - questions
+      summary: Get Exclusions
+      description: "Seeker tactical map \u2014 per-question exclusion geometry."
+      operationId: get_exclusions_games__game_id__exclusions_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExclusionsResponse'
         '422':
           description: Validation Error
           content:
@@ -749,6 +867,13 @@ paths:
           default: 0
           title: After Question
         description: Only include questions with sequence > this value.
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
       responses:
         '200':
           description: Successful Response
@@ -874,26 +999,6 @@ components:
       - slot_index
       title: AskThermometerRequest
       description: Ask a thermometer question, spending a thermometer inventory slot.
-    CategoryUsageResponse:
-      properties:
-        category:
-          type: string
-          title: Category
-        feature_class:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Feature Class
-        consumed_at:
-          type: string
-          format: date-time
-          title: Consumed At
-      type: object
-      required:
-      - category
-      - consumed_at
-      title: CategoryUsageResponse
-      description: A used matching or measuring category.
     CreateGameRequest:
       properties:
         map_id:
@@ -1058,6 +1163,43 @@ components:
       title: EndgameExclusionsResponse
       description: "Endgame exclusion view \u2014 hiding zone geometry and per-question\
         \ intersected exclusions."
+    ExclusionsResponse:
+      properties:
+        exclusions:
+          items:
+            $ref: '#/components/schemas/QuestionExclusionEntry'
+          type: array
+          title: Exclusions
+        total_exclusion:
+          anyOf:
+          - oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+            discriminator:
+              propertyName: type
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+          - type: 'null'
+          title: Total Exclusion
+          description: Cumulative exclusion across all answered questions.
+      type: object
+      required:
+      - exclusions
+      - total_exclusion
+      title: ExclusionsResponse
+      description: "Seeker tactical view \u2014 per-question exclusion geometry and\
+        \ cumulative total."
     FeatureCategory:
       type: string
       enum:
@@ -1169,8 +1311,8 @@ components:
           title: Timing
           description: 'TimingRules: hiding_time_min, rest_periods, etc.'
         inventory:
-          $ref: '#/components/schemas/InventoryResponse'
-          description: Question inventory (slots + category usage).
+          $ref: '#/components/schemas/StaticInventoryResponse'
+          description: Static inventory template (slots + categories).
         players:
           items:
             $ref: '#/components/schemas/PlayerResponse'
@@ -1194,13 +1336,6 @@ components:
           - type: 'null'
           title: Seeking Started At
           description: When the seeking phase began.
-        hider_station_id:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          title: Hider Station Id
-          description: Stop ID of the hider station. Hidden from seekers.
       type: object
       required:
       - id
@@ -1213,7 +1348,7 @@ components:
       - players
       - created_at
       title: GameResponse
-      description: Full game state, including players and inventory.
+      description: Full game state, including players and static inventory template.
     GameStatus:
       type: string
       enum:
@@ -1287,40 +1422,17 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
-    InventoryResponse:
+    HiderStationResponse:
       properties:
-        radar_slots:
-          items:
-            $ref: '#/components/schemas/SlotResponse'
-          type: array
-          title: Radar Slots
-          description: Radar question slots.
-        thermometer_slots:
-          items:
-            $ref: '#/components/schemas/SlotResponse'
-          type: array
-          title: Thermometer Slots
-          description: Thermometer question slots.
-        matching_used:
-          items:
-            $ref: '#/components/schemas/CategoryUsageResponse'
-          type: array
-          title: Matching Used
-          description: Matching categories already used.
-        measuring_used:
-          items:
-            $ref: '#/components/schemas/CategoryUsageResponse'
-          type: array
-          title: Measuring Used
-          description: Measuring categories already used.
+        hider_station_id:
+          type: string
+          format: uuid
+          title: Hider Station Id
       type: object
       required:
-      - radar_slots
-      - thermometer_slots
-      - matching_used
-      - measuring_used
-      title: InventoryResponse
-      description: Structured question inventory for a game.
+      - hider_station_id
+      title: HiderStationResponse
+      description: The hider's assigned station during seeking.
     JoinGameRequest:
       properties:
         join_code:
@@ -1832,7 +1944,7 @@ components:
       type: array
       maxItems: 3
       minItems: 3
-    QuestionResponse:
+    QuestionDetailResponse:
       properties:
         id:
           type: string
@@ -1881,7 +1993,7 @@ components:
             format: date-time
           - type: 'null'
           title: Answerable At
-          description: When the question became answerable. Clients compute deadline.
+          description: When the question became answerable.
         answered_at:
           anyOf:
           - type: string
@@ -1892,14 +2004,43 @@ components:
           anyOf:
           - $ref: '#/components/schemas/Point'
           - type: 'null'
-          description: "GeoJSON Point \u2014 hider position at answer time. Hidden\
-            \ from seekers."
+          description: "GeoJSON Point \u2014 hider position at answer time."
         answer:
           anyOf:
           - type: string
           - type: 'null'
           title: Answer
           description: yes/no for radar, closer/farther for thermometer.
+      type: object
+      required:
+      - id
+      - game_id
+      - sequence
+      - question_type
+      - status
+      - parameters
+      - asked_by
+      - asked_at
+      - seeker_location_start
+      - seeker_location_end
+      - answered_at
+      - hider_location
+      - answer
+      title: QuestionDetailResponse
+      description: "Full question detail for hiders \u2014 everything except exclusion\
+        \ geometry.\n\nUsed by the hider detail endpoint and write endpoints (ask/answer/lock-in)."
+    QuestionExclusionEntry:
+      properties:
+        question_id:
+          type: string
+          format: uuid
+          title: Question Id
+        sequence:
+          type: integer
+          title: Sequence
+          description: 1-based chronological order within the game.
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
         exclusion:
           anyOf:
           - oneOf:
@@ -1923,50 +2064,14 @@ components:
           - type: 'null'
           title: Exclusion
           description: "GeoJSON geometry \u2014 the exclusion zone."
-        total_exclusion:
-          anyOf:
-          - oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-            discriminator:
-              propertyName: type
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-          - type: 'null'
-          title: Total Exclusion
-          description: "GeoJSON geometry \u2014 cumulative exclusion across all answered\
-            \ questions."
       type: object
       required:
-      - id
-      - game_id
+      - question_id
       - sequence
       - question_type
-      - status
-      - parameters
-      - asked_by
-      - asked_at
-      - seeker_location_start
-      - seeker_location_end
-      - answered_at
-      - hider_location
-      - answer
       - exclusion
-      - total_exclusion
-      title: QuestionResponse
-      description: "A question in the game \u2014 state machine: asked -> in_progress\
-        \ -> answerable -> answered."
+      title: QuestionExclusionEntry
+      description: Per-question exclusion geometry for seekers.
     QuestionStatus:
       type: string
       enum:
@@ -1975,6 +2080,63 @@ components:
       - answerable
       - answered
       title: QuestionStatus
+    QuestionSummaryResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        sequence:
+          type: integer
+          title: Sequence
+          description: 1-based chronological order within the game.
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        asked_by:
+          type: string
+          format: uuid
+          title: Asked By
+          description: Player ID of the seeker who asked.
+        asked_at:
+          type: string
+          format: date-time
+          title: Asked At
+        answerable_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answerable At
+          description: When the question became answerable.
+        answered_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answered At
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer
+          description: yes/no for radar, closer/farther for thermometer, etc.
+      type: object
+      required:
+      - id
+      - sequence
+      - question_type
+      - status
+      - asked_by
+      - asked_at
+      - answered_at
+      - answer
+      title: QuestionSummaryResponse
+      description: "Lightweight question summary \u2014 whitelist of safe fields for\
+        \ shared polling.\n\nNo parameters, no locations, no geometry. Both roles\
+        \ use this to detect\nnew activity. New fields added to the question model\
+        \ do not appear here\nuntil consciously included."
     QuestionType:
       type: string
       enum:
@@ -2041,34 +2203,48 @@ components:
       - stop_ids
       title: RouteResponse
       description: A transit route on the effective game map, with ordered stop IDs.
-    SlotResponse:
+    StaticInventoryResponse:
       properties:
-        id:
-          type: string
-          format: uuid
-          title: Id
-        slot_index:
-          type: integer
-          title: Slot Index
-          description: Original ordering index.
+        radar_slots:
+          items:
+            $ref: '#/components/schemas/StaticSlotResponse'
+          type: array
+          title: Radar Slots
+          description: Radar question slots.
+        thermometer_slots:
+          items:
+            $ref: '#/components/schemas/StaticSlotResponse'
+          type: array
+          title: Thermometer Slots
+          description: Thermometer question slots.
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+          description: Available question categories.
+      type: object
+      required:
+      - radar_slots
+      - thermometer_slots
+      - categories
+      title: StaticInventoryResponse
+      description: "Static inventory template \u2014 what tools are available in this\
+        \ game.\n\nNo IDs, no consumed flags. The client derives what's been spent\
+        \ from the\nquestion summary list."
+    StaticSlotResponse:
+      properties:
         distance:
           anyOf:
           - type: number
           - type: 'null'
           title: Distance
           description: Preset distance in convention units, or null for custom.
-        consumed:
-          type: boolean
-          title: Consumed
-          description: Whether this slot has been used.
       type: object
       required:
-      - id
-      - slot_index
       - distance
-      - consumed
-      title: SlotResponse
-      description: A single inventory slot (radar or thermometer).
+      title: StaticSlotResponse
+      description: A slot in the static inventory template.
     StopResponse:
       properties:
         id:

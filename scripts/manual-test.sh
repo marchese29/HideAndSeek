@@ -21,6 +21,14 @@ HIDER_CLIENT="33333333-3333-3333-3333-333333333333"
 
 pp() { python3 -m json.tool; }
 jq_val() { python3 -c "import sys,json; print(json.load(sys.stdin)$1)"; }
+assert_eq() {
+  local label="$1" actual="$2" expected="$3"
+  if [ "$actual" != "$expected" ]; then
+    echo "  FAIL: $label — expected '$expected', got '$actual'" >&2
+    exit 1
+  fi
+  echo "  OK: $label = $actual"
+}
 
 echo "=== Seeding transit dataset + game map ==="
 docker compose exec -T postgres psql -U hideandseek -q <<SQL
@@ -82,6 +90,18 @@ JOIN_CODE=$(echo "$GAME" | jq_val "['join_code']")
 echo "  Game ID:   $GAME_ID"
 echo "  Join code: $JOIN_CODE"
 
+# Verify static inventory (no IDs, no consumed flags)
+echo ""
+echo "=== Verify static inventory ==="
+RADAR_0=$(echo "$GAME" | jq_val "['inventory']['radar_slots'][0]")
+echo "  radar_slots[0]: $RADAR_0"
+# Should have categories list
+CATS=$(echo "$GAME" | jq_val "['inventory']['categories']")
+echo "  categories: $CATS"
+# Should NOT have hider_station_id
+HAS_STATION=$(echo "$GAME" | python3 -c "import sys,json; print('hider_station_id' in json.load(sys.stdin))")
+assert_eq "no hider_station_id on shared endpoint" "$HAS_STATION" "False"
+
 echo ""
 echo "=== POST /games/join (seeker) ==="
 SEEKER_RESP=$(curl -sf -X POST "$BASE/games/join" \
@@ -119,16 +139,21 @@ docker compose exec -T postgres psql -U hideandseek -q -c \
   "UPDATE game SET status='seeking', seeking_started_at=NOW(), hider_station_id='$STOP_VICTORIA' WHERE id='$GAME_ID';"
 
 echo ""
-echo "=== GET /games/{id} as hider (hider_station_id should be visible) ==="
-HIDER_VIEW=$(curl -sf "$BASE/games/$GAME_ID" -H "X-Client-Id: $HIDER_CLIENT")
-HIDER_STATION=$(echo "$HIDER_VIEW" | jq_val "['hider_station_id']")
-echo "  hider_station_id (hider view): $HIDER_STATION"
+echo "=== GET /games/{id} (no hider_station_id on shared endpoint) ==="
+SHARED_VIEW=$(curl -sf "$BASE/games/$GAME_ID")
+HAS_STATION=$(echo "$SHARED_VIEW" | python3 -c "import sys,json; print('hider_station_id' in json.load(sys.stdin))")
+assert_eq "no hider_station_id" "$HAS_STATION" "False"
 
 echo ""
-echo "=== GET /games/{id} as seeker (hider_station_id should be null) ==="
-SEEKER_VIEW=$(curl -sf "$BASE/games/$GAME_ID" -H "X-Client-Id: $SEEKER_CLIENT")
-SEEKER_STATION=$(echo "$SEEKER_VIEW" | jq_val "['hider_station_id']")
-echo "  hider_station_id (seeker view): $SEEKER_STATION"
+echo "=== GET /games/{id}/hider-station as hider (should see station) ==="
+HIDER_STATION_RESP=$(curl -sf "$BASE/games/$GAME_ID/hider-station" -H "X-Client-Id: $HIDER_CLIENT")
+HIDER_STATION=$(echo "$HIDER_STATION_RESP" | jq_val "['hider_station_id']")
+assert_eq "hider_station_id" "$HIDER_STATION" "$STOP_VICTORIA"
+
+echo ""
+echo "=== GET /games/{id}/hider-station as seeker (should 403) ==="
+SEEKER_STATION_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/hider-station" -H "X-Client-Id: $SEEKER_CLIENT")
+assert_eq "seeker hider-station status" "$SEEKER_STATION_STATUS" "403"
 
 echo ""
 echo "=== POST /location (seeker at -0.1, 51.5) ==="
@@ -152,6 +177,20 @@ Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/radar" \
   -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"slot_index":0}')
 echo "$Q" | pp
 Q_ID=$(echo "$Q" | jq_val "['id']")
+# Detail response should not have exclusion fields
+HAS_EXCL=$(echo "$Q" | python3 -c "import sys,json; print('exclusion' in json.load(sys.stdin))")
+assert_eq "no exclusion on detail response" "$HAS_EXCL" "False"
+
+echo ""
+echo "=== GET /questions/{id} as hider (question detail) ==="
+Q_DETAIL=$(curl -sf "$BASE/games/$GAME_ID/questions/$Q_ID" -H "X-Client-Id: $HIDER_CLIENT")
+echo "$Q_DETAIL" | pp
+assert_eq "detail has parameters" "$(echo "$Q_DETAIL" | python3 -c "import sys,json; print('parameters' in json.load(sys.stdin))")" "True"
+
+echo ""
+echo "=== GET /questions/{id} as seeker (should 403) ==="
+Q_DETAIL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/questions/$Q_ID" -H "X-Client-Id: $SEEKER_CLIENT")
+assert_eq "seeker question detail status" "$Q_DETAIL_STATUS" "403"
 
 echo ""
 echo "=== POST /questions/{id}/answer (hider answers — expect 'no', ~56km apart) ==="
@@ -159,11 +198,27 @@ curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Client-Id: $HIDER_CLIENT" | pp
 
 echo ""
-echo "=== GET /candidate-stations (after 1 radar miss — most stops still viable) ==="
+echo "=== GET /exclusions as seeker (should have 1 entry) ==="
+EXCL=$(curl -sf "$BASE/games/$GAME_ID/exclusions" -H "X-Client-Id: $SEEKER_CLIENT")
+EXCL_COUNT=$(echo "$EXCL" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['exclusions']))")
+assert_eq "exclusion entries" "$EXCL_COUNT" "1"
+
+echo ""
+echo "=== GET /exclusions as hider (should 403) ==="
+EXCL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/exclusions" -H "X-Client-Id: $HIDER_CLIENT")
+assert_eq "hider exclusions status" "$EXCL_STATUS" "403"
+
+echo ""
+echo "=== GET /candidate-stations as seeker ==="
 CANDS=$(curl -sf "$BASE/games/$GAME_ID/candidate-stations" \
   -H "X-Client-Id: $SEEKER_CLIENT")
 CAND_COUNT=$(echo "$CANDS" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
 echo "  Candidates: $CAND_COUNT (2 expected — Waterloo hiding zone covered by 3km radar miss)"
+
+echo ""
+echo "=== GET /candidate-stations as hider (should 403) ==="
+CAND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/candidate-stations" -H "X-Client-Id: $HIDER_CLIENT")
+assert_eq "hider candidate-stations status" "$CAND_STATUS" "403"
 
 echo ""
 echo "=== POST /questions/thermometer (500m thermometer) ==="
@@ -222,21 +277,33 @@ curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Client-Id: $HIDER_CLIENT" | pp
 
 echo ""
-echo "=== GET /questions (all 4 questions) ==="
-curl -sf "$BASE/games/$GAME_ID/questions" \
-  -H "X-Client-Id: $SEEKER_CLIENT" | pp
+echo "=== GET /questions (summary only — no params, no locations, no geometry) ==="
+Q_LIST=$(curl -sf "$BASE/games/$GAME_ID/questions" \
+  -H "X-Client-Id: $SEEKER_CLIENT")
+echo "$Q_LIST" | pp
+HAS_PARAMS=$(echo "$Q_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); print('parameters' in d[0])")
+assert_eq "no parameters on summary" "$HAS_PARAMS" "False"
+HAS_HIDER_LOC=$(echo "$Q_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); print('hider_location' in d[0])")
+assert_eq "no hider_location on summary" "$HAS_HIDER_LOC" "False"
 
 echo ""
-echo "=== GET /games/{id} (inventory after consuming slots + categories) ==="
-curl -sf "$BASE/games/$GAME_ID" | pp
+echo "=== GET /exclusions (all 4 exclusions for seeker) ==="
+EXCL=$(curl -sf "$BASE/games/$GAME_ID/exclusions" -H "X-Client-Id: $SEEKER_CLIENT")
+EXCL_COUNT=$(echo "$EXCL" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['exclusions']))")
+assert_eq "exclusion entries" "$EXCL_COUNT" "4"
 
 echo ""
-echo "=== GET /endgame-exclusions (Victoria station, after_question=0) ==="
+echo "=== GET /endgame-exclusions as seeker (Victoria station, after_question=0) ==="
 ENDGAME=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=0" \
   -H "X-Client-Id: $SEEKER_CLIENT")
 ENTRY_COUNT=$(echo "$ENDGAME" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
 echo "  Entries: $ENTRY_COUNT (should be 4 — all answered questions)"
 echo "  Hiding zone type: $(echo "$ENDGAME" | jq_val "['hiding_zone']['type']")"
+
+echo ""
+echo "=== GET /endgame-exclusions as hider (should 403) ==="
+ENDGAME_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=0" -H "X-Client-Id: $HIDER_CLIENT")
+assert_eq "hider endgame-exclusions status" "$ENDGAME_STATUS" "403"
 
 echo ""
 echo "=== GET /endgame-exclusions (after_question=2, only questions 3+4) ==="

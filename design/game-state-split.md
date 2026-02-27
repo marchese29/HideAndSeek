@@ -1,6 +1,6 @@
 # Game State Endpoint Redesign
 
-> Status: **Draft**
+> Status: **Implementation**
 > Last updated: 2026-02-26
 
 Redesign of game-scoped endpoints to split by role and game phase instead of returning one monolithic response with role-based field filtering.

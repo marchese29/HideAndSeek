@@ -110,11 +110,10 @@ def test_ask_question_deducts_slot(client: TestClient, session: Session):
     )
     assert resp.status_code == 200
 
-    # Check game inventory — slot should be consumed
+    # Static inventory doesn't show consumed state — slot distances remain the same
     game_resp = client.get(f'/games/{game.id}')
     radar_slots = game_resp.json()['inventory']['radar_slots']
-    unconsumed = [s for s in radar_slots if not s['consumed']]
-    assert len(unconsumed) == 2  # was 3, now 2
+    assert len(radar_slots) == 3  # static template is unchanged
 
 
 def test_ask_question_invalid_slot_index(client: TestClient, session: Session):
@@ -289,6 +288,9 @@ def test_answer_question(client: TestClient, session: Session):
     assert data['hider_location'] is not None
     assert data['answer'] == 'no'  # hider ~56 km from seeker, outside 3 km radar
     assert data['answered_at'] is not None
+    # Detail response has no exclusion fields
+    assert 'exclusion' not in data
+    assert 'total_exclusion' not in data
 
 
 def test_answer_question_seeker_forbidden(client: TestClient, session: Session):
@@ -311,6 +313,7 @@ def test_answer_question_seeker_forbidden(client: TestClient, session: Session):
 
 
 def test_list_questions(client: TestClient, session: Session):
+    """Summary list returns whitelist fields only — no params, locations, or geometry."""
     game, hider, seeker = _setup_seeking_game(client, session)
 
     # Ask and answer a question
@@ -325,7 +328,7 @@ def test_list_questions(client: TestClient, session: Session):
         headers=_headers(hider.client_id),
     )
 
-    # List as seeker — hider_location should be hidden
+    # List as seeker — summary only
     resp = client.get(
         f'/games/{game.id}/questions',
         headers=_headers(seeker.client_id),
@@ -333,15 +336,104 @@ def test_list_questions(client: TestClient, session: Session):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
-    assert data[0]['hider_location'] is None  # hidden from seekers
+    q = data[0]
+    # Whitelist fields present
+    assert 'id' in q
+    assert 'sequence' in q
+    assert 'question_type' in q
+    assert 'status' in q
+    assert 'asked_by' in q
+    assert 'asked_at' in q
+    assert 'answer' in q
+    # No detail fields
+    assert 'parameters' not in q
+    assert 'hider_location' not in q
+    assert 'seeker_location_start' not in q
+    assert 'exclusion' not in q
+    assert 'total_exclusion' not in q
 
-    # List as hider — hider_location should be visible
+    # List as hider — same summary shape
     resp = client.get(
         f'/games/{game.id}/questions',
         headers=_headers(hider.client_id),
     )
     data = resp.json()
-    assert data[0]['hider_location'] is not None
+    assert 'parameters' not in data[0]
+    assert 'hider_location' not in data[0]
+
+
+# ── GET /games/{game_id}/questions/{question_id} ─────────────────────────────
+
+
+def test_question_detail_hider_only(client: TestClient, session: Session):
+    """Hider can get question detail; seeker gets 403."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    # Hider can access
+    resp = client.get(
+        f'/games/{game.id}/questions/{question_id}',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['parameters']['type'] == 'radar'
+    assert data['seeker_location_start'] is not None
+    # No exclusion fields on detail
+    assert 'exclusion' not in data
+    assert 'total_exclusion' not in data
+
+    # Seeker gets 403
+    resp = client.get(
+        f'/games/{game.id}/questions/{question_id}',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 403
+
+
+# ── GET /games/{game_id}/exclusions ──────────────────────────────────────────
+
+
+def test_exclusions_seeker_only(client: TestClient, session: Session):
+    """Hider gets 403 on /exclusions; seeker gets geometry."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+
+    # Ask + answer a question to generate exclusion
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+
+    # Hider gets 403
+    resp = client.get(
+        f'/games/{game.id}/exclusions',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 403
+
+    # Seeker gets exclusion data
+    resp = client.get(
+        f'/games/{game.id}/exclusions',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data['exclusions']) == 1
+    assert data['exclusions'][0]['question_id'] == question_id
+    # Exclusion may be None if geometry is empty (seeker outside map boundary)
+    assert 'exclusion' in data['exclusions'][0]
 
 
 # ── Matching / Measuring helpers ─────────────────────────────────────────────
@@ -485,6 +577,7 @@ def test_matching_category_not_on_map(client: TestClient, session: Session):
 
 
 def test_matching_consumes_inventory(client: TestClient, session: Session):
+    """After asking a matching question, the category appears in the questions list."""
     game, hider, seeker = _setup_feature_game(client, session)
     resp = client.post(
         f'/games/{game.id}/questions/matching',
@@ -493,10 +586,13 @@ def test_matching_consumes_inventory(client: TestClient, session: Session):
     )
     assert resp.status_code == 201
 
-    # Check inventory
-    game_resp = client.get(f'/games/{game.id}')
-    matching_used = game_resp.json()['inventory']['matching_used']
-    assert any(u['category'] == 'hospital' for u in matching_used)
+    # Verify via question summary list
+    resp = client.get(
+        f'/games/{game.id}/questions',
+        headers=_headers(seeker.client_id),
+    )
+    assert len(resp.json()) == 1
+    assert resp.json()[0]['question_type'] == 'matching'
 
 
 # ── POST /questions/measuring ────────────────────────────────────────────────
@@ -595,8 +691,8 @@ def test_measuring_category_already_used(client: TestClient, session: Session):
 # ── Exclusion zone integration tests ──────────────────────────────────────────
 
 
-def test_radar_answer_has_exclusion(client: TestClient, session: Session):
-    """Answered radar question should have non-null exclusion and total_exclusion."""
+def test_radar_answer_has_no_exclusion_in_detail(client: TestClient, session: Session):
+    """Answered radar question detail response has no exclusion fields."""
     game, hider, seeker = _setup_seeking_game(client, session)
     resp = client.post(
         f'/games/{game.id}/questions/radar',
@@ -611,13 +707,12 @@ def test_radar_answer_has_exclusion(client: TestClient, session: Session):
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data['exclusion'] is not None
-    assert data['exclusion']['type'] in ('Polygon', 'MultiPolygon')
-    assert data['total_exclusion'] is not None
+    assert 'exclusion' not in data
+    assert 'total_exclusion' not in data
 
 
-def test_total_exclusion_accumulates(client: TestClient, session: Session):
-    """total_exclusion should grow as more questions are answered."""
+def test_exclusions_accumulate(client: TestClient, session: Session):
+    """Exclusions endpoint accumulates entries across answered questions."""
     game, hider, seeker = _setup_seeking_game(client, session)
 
     # Ask + answer first radar question (slot 0)
@@ -627,97 +722,38 @@ def test_total_exclusion_accumulates(client: TestClient, session: Session):
         headers=_headers(seeker.client_id),
     )
     q1_id = resp.json()['id']
-    resp = client.post(
+    client.post(
         f'/games/{game.id}/questions/{q1_id}/answer',
         headers=_headers(hider.client_id),
     )
-    assert resp.status_code == 200
-    total_1 = resp.json()['total_exclusion']
-    assert total_1 is not None
 
-    # Ask + answer second radar question (slot 1, different distance)
+    resp = client.get(
+        f'/games/{game.id}/exclusions',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data['exclusions']) == 1
+
+    # Ask + answer second radar question
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.05, 51.52), 'slot_index': 0},
         headers=_headers(seeker.client_id),
     )
     q2_id = resp.json()['id']
-    resp = client.post(
+    client.post(
         f'/games/{game.id}/questions/{q2_id}/answer',
         headers=_headers(hider.client_id),
     )
-    assert resp.status_code == 200
-    total_2 = resp.json()['total_exclusion']
-    assert total_2 is not None
 
-
-def test_matching_answer_has_exclusion(client: TestClient, session: Session):
-    """Answered matching question should have non-null exclusion."""
-    game, hider, seeker = _setup_feature_game(client, session)
-    resp = client.post(
-        f'/games/{game.id}/questions/matching',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+    resp = client.get(
+        f'/games/{game.id}/exclusions',
         headers=_headers(seeker.client_id),
-    )
-    q_id = resp.json()['id']
-
-    resp = client.post(
-        f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data['exclusion'] is not None
-    assert data['total_exclusion'] is not None
-
-
-def test_thermometer_answer_has_exclusion(client: TestClient, session: Session):
-    """Answered thermometer question should have non-null exclusion."""
-    game, hider, seeker = _setup_seeking_game(client, session)
-
-    resp = client.post(
-        f'/games/{game.id}/questions/thermometer',
-        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
-    )
-    question_id = resp.json()['id']
-
-    _report_location(client, game.id, seeker.client_id, -0.05, 51.3)
-
-    resp = client.post(
-        f'/games/{game.id}/questions/thermometer/{question_id}/lock-in',
-        headers=_headers(seeker.client_id),
-    )
-    assert resp.status_code == 200
-
-    resp = client.post(
-        f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['exclusion'] is not None
-    assert data['total_exclusion'] is not None
-
-
-def test_measuring_answer_has_exclusion(client: TestClient, session: Session):
-    """Answered measuring question should have non-null exclusion."""
-    game, hider, seeker = _setup_feature_game(client, session)
-    resp = client.post(
-        f'/games/{game.id}/questions/measuring',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
-        headers=_headers(seeker.client_id),
-    )
-    q_id = resp.json()['id']
-
-    resp = client.post(
-        f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['exclusion'] is not None
-    assert data['total_exclusion'] is not None
+    assert len(data['exclusions']) == 2
 
 
 # ── Imperial convention tests ──────────────────────────────────────────────

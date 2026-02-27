@@ -45,7 +45,13 @@ from hideandseek.schemas.request import (
     AskRadarRequest,
     AskThermometerRequest,
 )
-from hideandseek.schemas.response import QuestionResponse
+from hideandseek.schemas.response import (
+    ExclusionsResponse,
+    QuestionDetailResponse,
+    QuestionExclusionEntry,
+    QuestionSummaryResponse,
+    geom_or_none,
+)
 from hideandseek.tasks.game_timers import auto_answer_question
 from hideandseek.tasks.push import send_push
 from hideandseek.validators import (
@@ -93,12 +99,12 @@ def _record_seeker_location(location: GeoJSONPoint, player: Player, game: Game) 
 # ── Ask endpoints (per-type) ─────────────────────────────────────────────
 
 
-@router.post('/questions/radar', response_model=QuestionResponse, status_code=201)
+@router.post('/questions/radar', response_model=QuestionDetailResponse, status_code=201)
 def ask_radar_question(
     body: AskRadarRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionResponse:
+) -> QuestionDetailResponse:
     """Ask a radar question, spending a radar inventory slot."""
     _validate_can_ask(game, player)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -120,15 +126,15 @@ def ask_radar_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return QuestionResponse.from_model(question)
+    return QuestionDetailResponse.from_model(question)
 
 
-@router.post('/questions/thermometer', response_model=QuestionResponse, status_code=201)
+@router.post('/questions/thermometer', response_model=QuestionDetailResponse, status_code=201)
 def ask_thermometer_question(
     body: AskThermometerRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionResponse:
+) -> QuestionDetailResponse:
     """Ask a thermometer question, spending a thermometer inventory slot."""
     _validate_can_ask(game, player)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -149,15 +155,15 @@ def ask_thermometer_question(
         question_status=QuestionStatus.in_progress,
     )
 
-    return QuestionResponse.from_model(question)
+    return QuestionDetailResponse.from_model(question)
 
 
-@router.post('/questions/matching', response_model=QuestionResponse, status_code=201)
+@router.post('/questions/matching', response_model=QuestionDetailResponse, status_code=201)
 def ask_matching_question(
     body: AskMatchingRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionResponse:
+) -> QuestionDetailResponse:
     """Ask a matching question about a feature category."""
     _validate_can_ask(game, player)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -184,15 +190,15 @@ def ask_matching_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return QuestionResponse.from_model(question)
+    return QuestionDetailResponse.from_model(question)
 
 
-@router.post('/questions/measuring', response_model=QuestionResponse, status_code=201)
+@router.post('/questions/measuring', response_model=QuestionDetailResponse, status_code=201)
 def ask_measuring_question(
     body: AskMeasuringRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionResponse:
+) -> QuestionDetailResponse:
     """Ask a measuring question about a feature category."""
     _validate_can_ask(game, player)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -221,7 +227,7 @@ def ask_measuring_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return QuestionResponse.from_model(question)
+    return QuestionDetailResponse.from_model(question)
 
 
 # ── Lock-in and answer ───────────────────────────────────────────────────
@@ -229,13 +235,13 @@ def ask_measuring_question(
 
 @router.post(
     '/questions/thermometer/{question_id}/lock-in',
-    response_model=QuestionResponse,
+    response_model=QuestionDetailResponse,
 )
 def lock_in_question(
     question_id: uuid.UUID,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionResponse:
+) -> QuestionDetailResponse:
     """Lock in the seeker's end position for a thermometer question."""
     question = get_question(question_id)
     if not question or question.game_id != game.id:
@@ -269,18 +275,18 @@ def lock_in_question(
         question_id=str(question.id),
     )
 
-    return QuestionResponse.from_model(question)
+    return QuestionDetailResponse.from_model(question)
 
 
 @router.post(
     '/questions/{question_id}/answer',
-    response_model=QuestionResponse,
+    response_model=QuestionDetailResponse,
 )
 def answer_question(
     question_id: uuid.UUID,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionResponse:
+) -> QuestionDetailResponse:
     """Hider answers a question — snapshot location, compute answer and exclusion."""
     question, hider_location = validate_answer_request(question_id, game, player.id, player.role)
 
@@ -314,15 +320,57 @@ def answer_question(
         answer=question.answer,
     )
 
-    return QuestionResponse.from_model(question)
+    return QuestionDetailResponse.from_model(question)
 
 
-@router.get('/questions', response_model=list[QuestionResponse])
+# ── List + detail + exclusions ────────────────────────────────────────────
+
+
+@router.get('/questions', response_model=list[QuestionSummaryResponse])
 def list_game_questions(
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> list[QuestionResponse]:
-    """Chronological list of all questions. Hider location hidden from seekers."""
+) -> list[QuestionSummaryResponse]:
+    """Chronological list of all questions — whitelist summary only."""
     questions = list_questions(game.id)
-    hide_hider = player.role == PlayerRole.seeker
-    return [QuestionResponse.from_model(q, hide_hider_location=hide_hider) for q in questions]
+    return [QuestionSummaryResponse.from_model(q) for q in questions]
+
+
+@router.get('/questions/{question_id}', response_model=QuestionDetailResponse)
+def get_question_detail(
+    question_id: uuid.UUID,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> QuestionDetailResponse:
+    """Full question detail — hider only."""
+    if player.role != PlayerRole.hider:
+        raise HTTPException(status_code=403, detail='Only hiders can view question detail.')
+    question = get_question(question_id)
+    if not question or question.game_id != game.id:
+        raise HTTPException(status_code=404, detail='Question not found.')
+    return QuestionDetailResponse.from_model(question)
+
+
+@router.get('/exclusions', response_model=ExclusionsResponse)
+def get_exclusions(
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> ExclusionsResponse:
+    """Seeker tactical map — per-question exclusion geometry."""
+    if player.role != PlayerRole.seeker:
+        raise HTTPException(status_code=403, detail='Only seekers can view exclusions.')
+    questions = list_questions(game.id)
+    entries = [
+        QuestionExclusionEntry(
+            question_id=q.id,
+            sequence=q.sequence,
+            question_type=q.question_type,
+            exclusion=geom_or_none(q.exclusion),
+        )
+        for q in questions
+        if q.status == QuestionStatus.answered
+    ]
+    # total_exclusion from the last answered question
+    answered = [q for q in questions if q.status == QuestionStatus.answered]
+    total = geom_or_none(answered[-1].total_exclusion) if answered else None
+    return ExclusionsResponse(exclusions=entries, total_exclusion=total)
