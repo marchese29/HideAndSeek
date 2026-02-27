@@ -10,6 +10,7 @@ from sqlmodel import select
 
 from hideandseek.db import current_session
 from hideandseek.models.game import Game, Player
+from hideandseek.models.types import PlayerRole
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -51,6 +52,24 @@ def get_player_in_game(
     if not player:
         logger.warning('player_not_in_game', client_id=str(client_id), game_id=str(game.id))
         raise HTTPException(status_code=403, detail='You are not a player in this game.')
+    return player
+
+
+def get_hider_in_game(
+    player: Player = Depends(get_player_in_game),
+) -> Player:
+    """Resolve the calling player and verify they are the hider, or 403."""
+    if player.role != PlayerRole.hider:
+        raise HTTPException(status_code=403, detail='Only hiders can access this endpoint.')
+    return player
+
+
+def get_seeker_in_game(
+    player: Player = Depends(get_player_in_game),
+) -> Player:
+    """Resolve the calling player and verify they are a seeker, or 403."""
+    if player.role != PlayerRole.seeker:
+        raise HTTPException(status_code=403, detail='Only seekers can access this endpoint.')
     return player
 
 

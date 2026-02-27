@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from hideandseek.celery_app import app as celery_app
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_client_id, get_game, get_player_in_game
+from hideandseek.dependencies import get_client_id, get_game, get_hider_in_game, get_seeker_in_game
 from hideandseek.logic import get_candidate_stations
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType
@@ -196,11 +196,9 @@ def end_game(
 @router.get('/{game_id}/hider-station', response_model=HiderStationResponse)
 def get_hider_station(
     game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
+    _player: Player = Depends(get_hider_in_game),
 ) -> HiderStationResponse:
     """The hider's assigned station during seeking."""
-    if player.role != PlayerRole.hider:
-        raise HTTPException(status_code=403, detail='Only hiders can view the hider station.')
     if game.status != GameStatus.seeking:
         raise HTTPException(
             status_code=409, detail='Hider station is only available during seeking.'
@@ -224,11 +222,9 @@ def list_candidate_stations(
     offset: int = Query(default=0, ge=0, description='Pagination offset.'),
     limit: int = Query(default=50, ge=1, le=200, description='Pagination limit.'),
     game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
+    _player: Player = Depends(get_seeker_in_game),
 ) -> list[StopResponse]:
     """Playable stops whose hiding zone circle is not fully covered by exclusion zones."""
-    if player.role != PlayerRole.seeker:
-        raise HTTPException(status_code=403, detail='Only seekers can view candidate stations.')
     if game.status != GameStatus.seeking:
         raise HTTPException(
             status_code=409, detail='Candidate stations are only available during seeking.'

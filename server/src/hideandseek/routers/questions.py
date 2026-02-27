@@ -12,7 +12,12 @@ from shapely.geometry import Point as ShapelyPoint
 from hideandseek.celery_app import app as celery_app
 from hideandseek.conventions import format_distance_label
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_game, get_player_in_game
+from hideandseek.dependencies import (
+    get_game,
+    get_hider_in_game,
+    get_player_in_game,
+    get_seeker_in_game,
+)
 from hideandseek.logic import (
     answer_matching,
     answer_measuring,
@@ -26,7 +31,6 @@ from hideandseek.logic import (
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import (
     GameStatus,
-    PlayerRole,
     PushEventType,
     QuestionStatus,
     QuestionType,
@@ -74,12 +78,10 @@ def _schedule_auto_answer(game: Game, question_id: uuid.UUID) -> None:
     )
 
 
-def _validate_can_ask(game: Game, player: Player) -> None:
-    """Common pre-ask validation: game must be seeking, player must be seeker, no unanswered q."""
+def _validate_can_ask(game: Game) -> None:
+    """Common pre-ask validation: game must be seeking, no unanswered question."""
     if game.status != GameStatus.seeking:
         raise HTTPException(status_code=409, detail='Questions can only be asked during seeking.')
-    if player.role != PlayerRole.seeker:
-        raise HTTPException(status_code=403, detail='Only seekers can ask questions.')
     if has_unanswered_question(game.id):
         raise HTTPException(status_code=409, detail='There is already an unanswered question.')
 
@@ -103,10 +105,10 @@ def _record_seeker_location(location: GeoJSONPoint, player: Player, game: Game) 
 def ask_radar_question(
     body: AskRadarRequest,
     game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
+    player: Player = Depends(get_seeker_in_game),
 ) -> QuestionDetailResponse:
     """Ask a radar question, spending a radar inventory slot."""
-    _validate_can_ask(game, player)
+    _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
 
     slot = validate_slot_request(body.slot_index, body.custom_distance, game, SlotType.radar)
@@ -133,10 +135,10 @@ def ask_radar_question(
 def ask_thermometer_question(
     body: AskThermometerRequest,
     game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
+    player: Player = Depends(get_seeker_in_game),
 ) -> QuestionDetailResponse:
     """Ask a thermometer question, spending a thermometer inventory slot."""
-    _validate_can_ask(game, player)
+    _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
 
     slot = validate_slot_request(body.slot_index, body.custom_distance, game, SlotType.thermometer)
@@ -162,10 +164,10 @@ def ask_thermometer_question(
 def ask_matching_question(
     body: AskMatchingRequest,
     game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
+    player: Player = Depends(get_seeker_in_game),
 ) -> QuestionDetailResponse:
     """Ask a matching question about a feature category."""
-    _validate_can_ask(game, player)
+    _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
 
     validate_category_request(body.category, body.feature_class, game, QuestionType.matching)
@@ -197,10 +199,10 @@ def ask_matching_question(
 def ask_measuring_question(
     body: AskMeasuringRequest,
     game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
+    player: Player = Depends(get_seeker_in_game),
 ) -> QuestionDetailResponse:
     """Ask a measuring question about a feature category."""
-    _validate_can_ask(game, player)
+    _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
 
     validate_category_request(body.category, body.feature_class, game, QuestionType.measuring)
@@ -340,11 +342,9 @@ def list_game_questions(
 def get_question_detail(
     question_id: uuid.UUID,
     game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
+    _player: Player = Depends(get_hider_in_game),
 ) -> QuestionDetailResponse:
     """Full question detail — hider only."""
-    if player.role != PlayerRole.hider:
-        raise HTTPException(status_code=403, detail='Only hiders can view question detail.')
     question = get_question(question_id)
     if not question or question.game_id != game.id:
         raise HTTPException(status_code=404, detail='Question not found.')
@@ -354,11 +354,9 @@ def get_question_detail(
 @router.get('/exclusions', response_model=ExclusionsResponse)
 def get_exclusions(
     game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
+    _player: Player = Depends(get_seeker_in_game),
 ) -> ExclusionsResponse:
     """Seeker tactical map — per-question exclusion geometry."""
-    if player.role != PlayerRole.seeker:
-        raise HTTPException(status_code=403, detail='Only seekers can view exclusions.')
     questions = list_questions(game.id)
     entries = [
         QuestionExclusionEntry(
