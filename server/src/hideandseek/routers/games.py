@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from hideandseek.celery_app import app as celery_app
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_client_id, get_game
+from hideandseek.dependencies import get_client_id, get_game, get_optional_player_in_game
 from hideandseek.logic import get_candidate_stations
-from hideandseek.models.game import Game
+from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType
 from hideandseek.queries.device_tokens import upsert_device_token
 from hideandseek.queries.effective_map import get_effective_map_data
@@ -102,9 +102,11 @@ def join_game(
 @router.get('/{game_id}', response_model=GameResponse)
 def get_game_state(
     game: Game = Depends(get_game),
+    player: Player | None = Depends(get_optional_player_in_game),
 ) -> GameResponse:
     """Fetch current game state."""
-    return GameResponse.from_model(game)
+    caller_role = player.role if player else None
+    return GameResponse.from_model(game, caller_role=caller_role)
 
 
 @router.patch(
@@ -166,6 +168,7 @@ def start_game(
 @router.post('/{game_id}/end', response_model=GameResponse)
 def end_game(
     game: Game = Depends(get_game),
+    player: Player | None = Depends(get_optional_player_in_game),
 ) -> GameResponse:
     """Transition the game to finished."""
     if game.status not in _ACTIVE_STATES:
@@ -179,7 +182,8 @@ def end_game(
         celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
 
     game = update_game_status(game, GameStatus.finished, clear_join_code=True)
-    return GameResponse.from_model(game)
+    caller_role = player.role if player else None
+    return GameResponse.from_model(game, caller_role=caller_role)
 
 
 @router.get('/{game_id}/map', response_model=EffectiveMapResponse)

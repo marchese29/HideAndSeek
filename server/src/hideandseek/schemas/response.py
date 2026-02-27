@@ -150,9 +150,13 @@ class GameResponse(BaseModel):
     seeking_started_at: datetime | None = Field(
         default=None, description='When the seeking phase began.'
     )
+    hider_station_id: uuid.UUID | None = Field(
+        default=None,
+        description='Stop ID of the hider station. Hidden from seekers.',
+    )
 
     @staticmethod
-    def from_model(game: GameModel) -> GameResponse:
+    def from_model(game: GameModel, *, caller_role: PlayerRole | None = None) -> GameResponse:
         radar_slots = [
             SlotResponse(
                 id=s.id,
@@ -192,6 +196,8 @@ class GameResponse(BaseModel):
             if u.question_type == QuestionType.measuring
         ]
 
+        hider_station_id = None if caller_role == PlayerRole.seeker else game.hider_station_id
+
         return GameResponse(
             id=game.id,
             map_id=game.map_id,
@@ -209,6 +215,7 @@ class GameResponse(BaseModel):
             created_at=game.created_at,
             hiding_started_at=game.hiding_started_at,
             seeking_started_at=game.seeking_started_at,
+            hider_station_id=hider_station_id,
         )
 
 

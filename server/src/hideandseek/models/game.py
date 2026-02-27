@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Optional
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
@@ -19,8 +20,11 @@ class Game(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     hiding_started_at: datetime | None = None
     seeking_started_at: datetime | None = None
+    hider_station_id: uuid.UUID | None = Field(default=None, foreign_key='stop.id')
+    hiding_zone_radius_override: float | None = None
 
     game_map: 'GameMap' = Relationship(back_populates='games')  # noqa: F821
+    hider_station: Optional['Stop'] = Relationship()  # noqa: F821
     players: list['Player'] = Relationship(back_populates='game')
     questions: list['Question'] = Relationship(back_populates='game')  # noqa: F821
     inventory_slots: list['InventorySlot'] = Relationship(  # noqa: F821
@@ -52,6 +56,7 @@ from hideandseek.models.game_map import GameMap  # noqa: E402
 from hideandseek.models.inventory import CategoryUsage, InventorySlot  # noqa: E402
 from hideandseek.models.location import LocationUpdate  # noqa: E402
 from hideandseek.models.question import Question  # noqa: E402
+from hideandseek.models.transit import Stop  # noqa: E402
 
 __all__ = [
     'CategoryUsage',
@@ -61,4 +66,5 @@ __all__ = [
     'LocationUpdate',
     'Player',
     'Question',
+    'Stop',
 ]

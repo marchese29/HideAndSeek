@@ -8,13 +8,13 @@ No HTTP concerns (no HTTPException, no push).
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from shapely.geometry import Point
+from shapely.geometry import MultiPoint, Point
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from hideandseek.conventions import from_meters, get_effective_hiding_zone_radius, to_meters
+from hideandseek.conventions import from_meters, get_default_hiding_zone_radius, to_meters
 from hideandseek.exclusion import (
     EndgameExclusionResult,
     compute_endgame_exclusions,
@@ -31,10 +31,12 @@ from hideandseek.models.question_params import FeatureQuestionParams
 from hideandseek.models.transit import Stop
 from hideandseek.models.types import (
     FeatureCategory,
+    PlayerRole,
     QuestionStatus,
     QuestionType,
 )
 from hideandseek.queries.features import get_features_by_category
+from hideandseek.queries.location import get_latest_location_for_player
 from hideandseek.queries.questions import (
     consume_slot,
     create_feature_params,
@@ -421,12 +423,17 @@ def _update_hider_resolution(
 
 
 def _effective_hiding_zone_radius_m(game: Game) -> float:
-    """Compute effective hiding zone radius in meters for a game."""
-    game_map = game.game_map
-    radius_conv = get_effective_hiding_zone_radius(
-        game_map.hiding_zone_radius, game_map.convention, game_map.size
+    """Compute effective hiding zone radius in meters for a game.
+
+    Fallback chain: game-level override → map-level override → code-level default.
+    """
+    gm = game.game_map
+    radius_conv = (
+        game.hiding_zone_radius_override
+        or gm.hiding_zone_radius
+        or get_default_hiding_zone_radius(gm.convention, gm.size)
     )
-    return to_meters(radius_conv, game_map.convention)
+    return to_meters(radius_conv, gm.convention)
 
 
 def get_endgame_exclusions(
@@ -448,3 +455,33 @@ def get_candidate_stations(game: Game, offset: int, limit: int) -> list[Stop]:
     """Return playable stops not fully covered by the game's total exclusion."""
     radius_m = _effective_hiding_zone_radius_m(game)
     return query_candidate_stations(game, radius_m, offset, limit)
+
+
+_HIDER_LOCATION_FRESHNESS = timedelta(minutes=1)
+
+
+def compute_hider_centroid(game: Game) -> Point | None:
+    """Compute the centroid of hiders with recent location updates.
+
+    Finds the latest hider location update across all hiders, then averages
+    the positions of all hiders whose latest update is within 1 minute of it.
+    Returns None if no hider has a location update.
+    """
+    hiders = [p for p in game.players if p.role == PlayerRole.hider]
+    if not hiders:
+        return None
+
+    locations = []
+    for hider in hiders:
+        latest = get_latest_location_for_player(hider.id, game.id)
+        if latest:
+            locations.append(latest)
+
+    if not locations:
+        return None
+
+    newest = max(loc.timestamp for loc in locations)
+    cutoff = newest - _HIDER_LOCATION_FRESHNESS
+
+    fresh = [loc.coordinates for loc in locations if loc.timestamp >= cutoff]
+    return MultiPoint(fresh).centroid

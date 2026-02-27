@@ -115,3 +115,10 @@ def update_game_status(
         game.join_code = None
     session.add(game)
     return game
+
+
+@db_write
+def set_hider_station(session: Session, game: Game, station_id: uuid.UUID) -> None:
+    """Set the hider's codified station on the game."""
+    game.hider_station_id = station_id
+    session.add(game)

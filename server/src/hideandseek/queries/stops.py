@@ -7,6 +7,7 @@ import uuid
 import sqlalchemy as sa
 from geoalchemy2 import Geography, Geometry
 from shapely import wkb
+from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 from sqlmodel import Session, col, select
 
@@ -78,3 +79,40 @@ def get_candidate_stations(
     )
 
     return list(session.exec(stmt).all())
+
+
+@db_read
+def get_nearest_playable_stop(session: Session, game: Game, location: Point) -> Stop | None:
+    """Return the nearest playable stop to a location.
+
+    Filters by: dataset membership, inside game map boundary, not excluded.
+    Orders by distance to location (ascending). Requires PostGIS (uses ST_Distance).
+    """
+    game_map = game.game_map
+    excluded_stop_ids = game_map.excluded_stop_ids
+
+    boundary_wkb = sa.func.ST_GeomFromWKB(
+        wkb.dumps(game_map.boundary, include_srid=False),
+        4326,
+    )
+    location_wkb = sa.func.ST_GeomFromWKB(
+        wkb.dumps(location, include_srid=False),
+        4326,
+    )
+
+    conditions = [
+        Stop.dataset_id == game_map.transit_dataset_id,
+        sa.func.ST_Contains(boundary_wkb, Stop.coordinates),
+    ]
+
+    if excluded_stop_ids:
+        conditions.append(~col(Stop.id).in_([str(sid) for sid in excluded_stop_ids]))
+
+    stmt = (
+        select(Stop)
+        .where(*conditions)
+        .order_by(sa.func.ST_Distance(Stop.coordinates, location_wkb))  # type: ignore[arg-type]
+        .limit(1)
+    )
+
+    return session.exec(stmt).first()

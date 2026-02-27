@@ -88,18 +88,6 @@ def get_default_hiding_zone_radius(convention: DistanceConvention, size: MapSize
     return _HIDING_ZONE_METRIC[size]
 
 
-def get_effective_hiding_zone_radius(
-    map_radius: float | None, convention: DistanceConvention, size: MapSize
-) -> float:
-    """Return the effective hiding zone radius in convention units.
-
-    Falls back to code-level default when map_radius is None.
-    """
-    if map_radius is not None:
-        return map_radius
-    return get_default_hiding_zone_radius(convention, size)
-
-
 # ── Default inventory constants ──────────────────────────────────────────────
 
 

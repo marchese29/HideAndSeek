@@ -8,7 +8,13 @@ import structlog
 
 from hideandseek.celery_app import app
 from hideandseek.db import session_scope
-from hideandseek.logic import answer_matching, answer_measuring, answer_radar, answer_thermometer
+from hideandseek.logic import (
+    answer_matching,
+    answer_measuring,
+    answer_radar,
+    answer_thermometer,
+    compute_hider_centroid,
+)
 from hideandseek.models.types import (
     GameStatus,
     PlayerRole,
@@ -16,9 +22,10 @@ from hideandseek.models.types import (
     QuestionStatus,
     QuestionType,
 )
-from hideandseek.queries.games import get_game_by_id, update_game_status
+from hideandseek.queries.games import get_game_by_id, set_hider_station, update_game_status
 from hideandseek.queries.location import get_latest_location_for_player
 from hideandseek.queries.questions import get_question, update_question
+from hideandseek.queries.stops import get_nearest_playable_stop
 from hideandseek.tasks.push import send_push
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -38,6 +45,18 @@ def transition_hiding_to_seeking(game_id: str) -> None:
         if game.status != GameStatus.hiding:
             logger.info('transition_skipped', game_id=game_id, status=game.status)
             return
+
+        # Auto-select the hider's nearest playable stop
+        centroid = compute_hider_centroid(game)
+        if centroid:
+            stop = get_nearest_playable_stop(game, centroid)
+            if stop:
+                set_hider_station(game, stop.id)
+                logger.info('hider_station_set', game_id=game_id, stop_id=str(stop.id))
+            else:
+                logger.warning('no_playable_stop_found', game_id=game_id)
+        else:
+            logger.warning('no_hider_location', game_id=game_id)
 
         update_game_status(game, GameStatus.seeking)
         logger.info('transition_hiding_to_seeking', game_id=game_id)

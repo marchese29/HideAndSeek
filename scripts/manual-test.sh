@@ -111,10 +111,24 @@ echo ""
 echo "=== POST /games/{id}/start ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/start" | jq_val "['status']"
 
+STOP_VICTORIA="00000000-0000-0000-0000-000000000020"
+
 echo ""
 echo "=== Forcing transition to seeking (skip hiding timer) ==="
 docker compose exec -T postgres psql -U hideandseek -q -c \
-  "UPDATE game SET status='seeking', seeking_started_at=NOW() WHERE id='$GAME_ID';"
+  "UPDATE game SET status='seeking', seeking_started_at=NOW(), hider_station_id='$STOP_VICTORIA' WHERE id='$GAME_ID';"
+
+echo ""
+echo "=== GET /games/{id} as hider (hider_station_id should be visible) ==="
+HIDER_VIEW=$(curl -sf "$BASE/games/$GAME_ID" -H "X-Client-Id: $HIDER_CLIENT")
+HIDER_STATION=$(echo "$HIDER_VIEW" | jq_val "['hider_station_id']")
+echo "  hider_station_id (hider view): $HIDER_STATION"
+
+echo ""
+echo "=== GET /games/{id} as seeker (hider_station_id should be null) ==="
+SEEKER_VIEW=$(curl -sf "$BASE/games/$GAME_ID" -H "X-Client-Id: $SEEKER_CLIENT")
+SEEKER_STATION=$(echo "$SEEKER_VIEW" | jq_val "['hider_station_id']")
+echo "  hider_station_id (seeker view): $SEEKER_STATION"
 
 echo ""
 echo "=== POST /location (seeker at -0.1, 51.5) ==="
@@ -143,8 +157,6 @@ echo ""
 echo "=== POST /questions/{id}/answer (hider answers — expect 'no', ~56km apart) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Client-Id: $HIDER_CLIENT" | pp
-
-STOP_ID="00000000-0000-0000-0000-000000000020"
 
 echo ""
 echo "=== GET /candidate-stations (after 1 radar miss — most stops still viable) ==="
@@ -220,7 +232,7 @@ curl -sf "$BASE/games/$GAME_ID" | pp
 
 echo ""
 echo "=== GET /endgame-exclusions (Victoria station, after_question=0) ==="
-ENDGAME=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_ID&after_question=0" \
+ENDGAME=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=0" \
   -H "X-Client-Id: $SEEKER_CLIENT")
 ENTRY_COUNT=$(echo "$ENDGAME" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
 echo "  Entries: $ENTRY_COUNT (should be 4 — all answered questions)"
@@ -228,7 +240,7 @@ echo "  Hiding zone type: $(echo "$ENDGAME" | jq_val "['hiding_zone']['type']")"
 
 echo ""
 echo "=== GET /endgame-exclusions (after_question=2, only questions 3+4) ==="
-ENDGAME2=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_ID&after_question=2" \
+ENDGAME2=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=2" \
   -H "X-Client-Id: $SEEKER_CLIENT")
 ENTRY_COUNT2=$(echo "$ENDGAME2" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
 echo "  Entries: $ENTRY_COUNT2 (should be 2)"

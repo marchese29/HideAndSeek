@@ -113,6 +113,125 @@ def test_get_game_not_found(client: TestClient):
     assert resp.status_code == 404
 
 
+def test_set_hider_station(session: Session):
+    from hideandseek.models.transit import Stop
+    from hideandseek.queries.games import set_hider_station
+
+    game = create_game(session, status=GameStatus.seeking)
+
+    from hideandseek.models.game_map import GameMap
+
+    game_map = session.get(GameMap, game.map_id)
+    assert game_map is not None
+
+    stop = Stop(
+        stable_id='stop-set-test',
+        dataset_id=game_map.transit_dataset_id,
+        name='Test Station',
+        coordinates=Point(0.5, 0.5),
+    )
+    session.add(stop)
+    session.commit()
+    session.refresh(stop)
+
+    set_hider_station(game, stop.id)
+    session.refresh(game)
+    assert game.hider_station_id == stop.id
+
+
+def test_hider_station_visible_to_hider(client: TestClient, session: Session):
+    from hideandseek.models.transit import Stop
+
+    game = create_game(session, status=GameStatus.seeking)
+    hider = create_player(session, game.id, role=PlayerRole.hider)
+
+    gm = session.get(type(game), game.id)
+    assert gm is not None
+    from hideandseek.models.game_map import GameMap
+
+    game_map = session.get(GameMap, game.map_id)
+    assert game_map is not None
+
+    stop = Stop(
+        stable_id='stop-hider-test',
+        dataset_id=game_map.transit_dataset_id,
+        name='Test Station',
+        coordinates=Point(0.5, 0.5),
+    )
+    session.add(stop)
+    session.commit()
+    session.refresh(stop)
+
+    game.hider_station_id = stop.id
+    session.add(game)
+    session.commit()
+
+    resp = client.get(f'/games/{game.id}', headers=_headers(hider.client_id))
+    assert resp.status_code == 200
+    assert resp.json()['hider_station_id'] == str(stop.id)
+
+
+def test_hider_station_hidden_from_seeker(client: TestClient, session: Session):
+    from hideandseek.models.transit import Stop
+
+    game = create_game(session, status=GameStatus.seeking)
+    create_player(session, game.id, role=PlayerRole.hider)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
+
+    from hideandseek.models.game_map import GameMap
+
+    game_map = session.get(GameMap, game.map_id)
+    assert game_map is not None
+
+    stop = Stop(
+        stable_id='stop-seeker-test',
+        dataset_id=game_map.transit_dataset_id,
+        name='Test Station',
+        coordinates=Point(0.5, 0.5),
+    )
+    session.add(stop)
+    session.commit()
+    session.refresh(stop)
+
+    game.hider_station_id = stop.id
+    session.add(game)
+    session.commit()
+
+    resp = client.get(f'/games/{game.id}', headers=_headers(seeker.client_id))
+    assert resp.status_code == 200
+    assert resp.json()['hider_station_id'] is None
+
+
+def test_hider_station_visible_without_client_id(client: TestClient, session: Session):
+    from hideandseek.models.transit import Stop
+
+    game = create_game(session, status=GameStatus.seeking)
+
+    from hideandseek.models.game_map import GameMap
+
+    game_map = session.get(GameMap, game.map_id)
+    assert game_map is not None
+
+    stop = Stop(
+        stable_id='stop-noheader-test',
+        dataset_id=game_map.transit_dataset_id,
+        name='Test Station',
+        coordinates=Point(0.5, 0.5),
+    )
+    session.add(stop)
+    session.commit()
+    session.refresh(stop)
+
+    game.hider_station_id = stop.id
+    session.add(game)
+    session.commit()
+
+    # No X-Client-Id header — should still see hider_station_id
+    resp = client.get(f'/games/{game.id}')
+    assert resp.status_code == 200
+    assert resp.json()['hider_station_id'] == str(stop.id)
+
+
 # ── PATCH /games/{game_id}/players/{player_id} ──────────────────────────────
 
 

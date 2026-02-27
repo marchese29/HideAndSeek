@@ -1194,6 +1194,13 @@ components:
           - type: 'null'
           title: Seeking Started At
           description: When the seeking phase began.
+        hider_station_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Hider Station Id
+          description: Stop ID of the hider station. Hidden from seekers.
       type: object
       required:
       - id

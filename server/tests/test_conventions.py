@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from sqlmodel import Session
 
 from hideandseek.conventions import (
     format_distance_label,
     from_meters,
     get_default_hiding_zone_radius,
     get_default_inventory,
-    get_effective_hiding_zone_radius,
     to_meters,
 )
 from hideandseek.models.types import DistanceConvention, MapSize
@@ -138,14 +138,39 @@ def test_hiding_zone_special_raises():
         get_default_hiding_zone_radius(DistanceConvention.metric, MapSize.special)
 
 
-# ── get_effective_hiding_zone_radius ────────────────────────────────────
+# ── _effective_hiding_zone_radius_m fallback chain ─────────────────────
 
 
-def test_effective_radius_uses_map_override():
-    result = get_effective_hiding_zone_radius(750, DistanceConvention.metric, MapSize.small)
+def test_effective_radius_game_override_takes_precedence(session: Session):
+    """Game-level hiding_zone_radius_override beats map-level and code-level defaults."""
+    from hideandseek.logic import _effective_hiding_zone_radius_m
+    from tests.conftest import create_game, create_game_map
+
+    gm = create_game_map(session, hiding_zone_radius=750)
+    game = create_game(session, map_id=gm.id, hiding_zone_radius_override=999)
+    result = _effective_hiding_zone_radius_m(game)
+    # 999 meters (metric convention, so no conversion)
+    assert result == 999
+
+
+def test_effective_radius_map_override_used_without_game_override(session: Session):
+    """Map-level hiding_zone_radius used when game-level override is None."""
+    from hideandseek.logic import _effective_hiding_zone_radius_m
+    from tests.conftest import create_game, create_game_map
+
+    gm = create_game_map(session, hiding_zone_radius=750)
+    game = create_game(session, map_id=gm.id)
+    result = _effective_hiding_zone_radius_m(game)
     assert result == 750
 
 
-def test_effective_radius_falls_back_to_default():
-    result = get_effective_hiding_zone_radius(None, DistanceConvention.metric, MapSize.small)
+def test_effective_radius_falls_back_to_code_default(session: Session):
+    """Code-level default used when both overrides are None."""
+    from hideandseek.logic import _effective_hiding_zone_radius_m
+    from tests.conftest import create_game, create_game_map
+
+    gm = create_game_map(session)  # hiding_zone_radius defaults to None
+    game = create_game(session, map_id=gm.id)
+    result = _effective_hiding_zone_radius_m(game)
+    # Default for metric medium is 500m
     assert result == 500

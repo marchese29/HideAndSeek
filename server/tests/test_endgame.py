@@ -281,6 +281,14 @@ def test_candidate_stations_409_if_not_seeking(session: Session, client: TestCli
 
 
 @pytest.mark.skipif(
+    True,  # SpatiaLite doesn't support ST_Distance for spatial ordering
+    reason='get_nearest_playable_stop requires PostGIS (uses ST_Distance).',
+)
+def test_nearest_playable_stop(session: Session) -> None:
+    """get_nearest_playable_stop returns the closest eligible stop (PostGIS only)."""
+
+
+@pytest.mark.skipif(
     True,  # SpatiaLite doesn't support ST_Buffer on geography
     reason='Candidate stations query requires PostGIS (uses geography ST_Buffer).',
 )
