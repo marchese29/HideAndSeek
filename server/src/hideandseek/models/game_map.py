@@ -18,8 +18,6 @@ class GameMap(SQLModel, table=True):
     convention: DistanceConvention = DistanceConvention.metric
     transit_dataset_id: uuid.UUID = Field(foreign_key='transit_dataset.id')
     boundary: Polygon = Field(sa_column=sa.Column(ShapelyGeometry('POLYGON', srid=4326)))
-    excluded_stop_ids: list = Field(default_factory=list, sa_type=sa.JSON)
-    excluded_route_ids: list = Field(default_factory=list, sa_type=sa.JSON)
     districts: list = Field(default_factory=list, sa_type=sa.JSON)
     district_classes: list = Field(default_factory=list, sa_type=sa.JSON)
     feature_classes: list = Field(default_factory=list, sa_type=sa.JSON)

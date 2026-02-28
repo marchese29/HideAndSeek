@@ -76,6 +76,8 @@ def create_game(
         default_inventory=game_map.default_inventory,
         convention=game_map.convention,
         size=game_map.size,
+        excluded_stop_ids=body.excluded_stop_ids,
+        excluded_route_ids=body.excluded_route_ids,
     )
     return GameResponse.from_model(game, categories=_game_categories(game))
 

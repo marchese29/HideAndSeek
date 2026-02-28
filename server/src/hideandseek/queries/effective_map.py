@@ -36,8 +36,8 @@ def get_effective_map_data(session: Session, game: Game) -> EffectiveMapData:
     game_map = session.get(GameMap, game.map_id)
     assert game_map is not None
 
-    excluded_stop_set = set(str(sid) for sid in game_map.excluded_stop_ids)
-    excluded_route_set = set(str(rid) for rid in game_map.excluded_route_ids)
+    excluded_stop_set = set(str(sid) for sid in game.excluded_stop_ids)
+    excluded_route_set = set(str(rid) for rid in game.excluded_route_ids)
 
     # Load stops, excluding excluded ones
     all_stops = list(

@@ -54,12 +54,12 @@ Imported from GTFS but stored in our own format. A `TransitDataset` is an immuta
 
 ## Game Maps
 
-A `GameMap` defines a playable board. It references a `TransitDataset` and layers customization on top: a boundary polygon, stop/route exclusions, district definitions, and default question inventory.
+A `GameMap` defines a playable board. It references a `TransitDataset` and layers customization on top: a boundary polygon, district definitions, and default question inventory. Stop/route exclusions are per-game (on the `Game` table).
 
 The filtering pipeline for playable stations:
 
 ```
-Full TransitDataset → spatial filter (boundary) → exclude stops/routes → playable stations
+Full TransitDataset → spatial filter (boundary) → exclude stops/routes (from Game) → playable stations
 ```
 
 ### GameMap
@@ -71,8 +71,6 @@ Full TransitDataset → spatial filter (boundary) → exclude stops/routes → p
 | size               | enum               | small / medium / large / special                 |
 | transit_dataset_id | UUID               | FK → TransitDataset                             |
 | boundary           | GeoJSON Polygon    | Playable area                                   |
-| excluded_stop_ids  | [str]              | Stops removed from play                         |
-| excluded_route_ids | [str]              | Routes removed from play                        |
 | districts          | [District]         | For district-type questions                     |
 | district_classes   | [DistrictClass]    | Labels for each tier level                      |
 | default_inventory  | QuestionInventory  | Default question pool for games on this map     |
@@ -104,9 +102,11 @@ Districts are hierarchical. The `class` field is an integer tier — smaller num
 
 | Field      | Type              | Notes                                           |
 |------------|-------------------|-------------------------------------------------|
-| id         | UUID              | PK                                              |
-| map_id     | UUID              | FK → GameMap                                    |
-| status     | enum              | lobby / active / finished                       |
+| id                 | UUID              | PK                                              |
+| map_id             | UUID              | FK → GameMap                                    |
+| excluded_stop_ids  | [str]             | Stops excluded from play (per-game)             |
+| excluded_route_ids | [str]             | Routes excluded from play (per-game)            |
+| status             | enum              | lobby / active / finished                       |
 | join_code  | str               | Short code for players to join                  |
 | timing     | TimingRules       | Timing configuration                            |
 | inventory  | QuestionInventory | Available questions (copied from map, editable) |

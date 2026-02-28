@@ -53,12 +53,11 @@ VALUES ('$DS_ID', 'London Transit', 'London', NOW())
 ON CONFLICT DO NOTHING;
 
 INSERT INTO game_map (id, name, size, convention, transit_dataset_id, boundary,
-                      excluded_stop_ids, excluded_route_ids, districts,
-                      district_classes, feature_classes, default_inventory)
+                      districts, district_classes, feature_classes, default_inventory)
 VALUES (
   '$MAP_ID', 'Imperial London', 'medium', 'imperial', '$DS_ID',
   ST_GeomFromText('POLYGON((-0.2 51.4, 0.1 51.4, 0.1 51.6, -0.2 51.6, -0.2 51.4))', 4326),
-  '[]', '[]', '[]', '[]', '{}',
+  '[]', '[]', '{}',
   '{"radars":[{"distance":1},{"distance":5},{"distance":null}],
     "thermometers":[{"distance":0.5},{"distance":null}]}'
 ) ON CONFLICT DO NOTHING;

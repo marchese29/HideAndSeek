@@ -1006,6 +1006,20 @@ components:
           format: uuid
           title: Map Id
           description: ID of the map to play on.
+        excluded_stop_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Excluded Stop Ids
+          description: Stop IDs to exclude from play for this game.
+        excluded_route_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Excluded Route Ids
+          description: Route IDs to exclude from play for this game.
         device_token:
           anyOf:
           - type: string

@@ -17,6 +17,14 @@ class CreateGameRequest(BaseModel):
     """Create a new game on a map."""
 
     map_id: uuid.UUID = Field(description='ID of the map to play on.')
+    excluded_stop_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description='Stop IDs to exclude from play for this game.',
+    )
+    excluded_route_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description='Route IDs to exclude from play for this game.',
+    )
     device_token: str | None = Field(
         default=None,
         description='Hex-encoded APNS device token. Optional for game creation.',

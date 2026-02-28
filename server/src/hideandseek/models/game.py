@@ -21,6 +21,8 @@ class Game(SQLModel, table=True):
     hiding_started_at: datetime | None = None
     seeking_started_at: datetime | None = None
     hider_station_id: uuid.UUID | None = Field(default=None, foreign_key='stop.id')
+    excluded_stop_ids: list = Field(default_factory=list, sa_type=sa.JSON)
+    excluded_route_ids: list = Field(default_factory=list, sa_type=sa.JSON)
     hiding_zone_radius_override: float | None = None
 
     game_map: 'GameMap' = Relationship(back_populates='games')  # noqa: F821

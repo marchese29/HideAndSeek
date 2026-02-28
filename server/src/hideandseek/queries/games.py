@@ -38,6 +38,8 @@ def create_game(
     default_inventory: dict,
     convention: DistanceConvention = DistanceConvention.metric,
     size: MapSize = MapSize.medium,
+    excluded_stop_ids: list[uuid.UUID] | None = None,
+    excluded_route_ids: list[uuid.UUID] | None = None,
 ) -> Game:
     """Create a game with a generated join code and inventory slots from map template.
 
@@ -49,6 +51,8 @@ def create_game(
         host_client_id=host_client_id,
         join_code=generate_join_code(),
         timing=timing,
+        excluded_stop_ids=[str(sid) for sid in excluded_stop_ids] if excluded_stop_ids else [],
+        excluded_route_ids=[str(rid) for rid in excluded_route_ids] if excluded_route_ids else [],
     )
     session.add(game)
     session.flush()  # Materialize game.id for FK references

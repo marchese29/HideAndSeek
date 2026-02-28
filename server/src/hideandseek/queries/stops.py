@@ -38,7 +38,7 @@ def get_candidate_stations(
     """
     game_map = game.game_map
     dataset_id = game_map.transit_dataset_id
-    excluded_stop_ids = game_map.excluded_stop_ids
+    excluded_stop_ids = game.excluded_stop_ids
 
     total_exclusion: BaseGeometry | None = get_latest_total_exclusion(game.id)
 
@@ -89,7 +89,7 @@ def get_nearest_playable_stop(session: Session, game: Game, location: Point) -> 
     Orders by distance to location (ascending). Requires PostGIS (uses ST_Distance).
     """
     game_map = game.game_map
-    excluded_stop_ids = game_map.excluded_stop_ids
+    excluded_stop_ids = game.excluded_stop_ids
 
     boundary_wkb = sa.func.ST_GeomFromWKB(
         wkb.dumps(game_map.boundary, include_srid=False),
