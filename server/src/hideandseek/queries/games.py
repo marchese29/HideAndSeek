@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 from hideandseek.conventions import get_default_inventory
 from hideandseek.db import db_read, db_write
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import DistanceConvention, GameStatus, MapSize
+from hideandseek.models.types import DistanceConvention, GameStatus, MapSize, PlayerRole
 from hideandseek.queries.questions import create_inventory_slots
 
 
@@ -83,9 +83,10 @@ def add_player(
     client_id: uuid.UUID,
     name: str,
     color: str,
+    role: PlayerRole | None = None,
 ) -> Player:
     """Create a player in a game via relationship append."""
-    player = Player(client_id=client_id, game_id=game.id, name=name, color=color)
+    player = Player(client_id=client_id, game_id=game.id, name=name, color=color, role=role)
     game.players.append(player)
     return player
 

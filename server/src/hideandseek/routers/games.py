@@ -28,11 +28,13 @@ from hideandseek.queries.games import (
     update_player as query_update_player,
 )
 from hideandseek.queries.maps import get_map
+from hideandseek.queries.questions import get_inventory_slots
 from hideandseek.schemas.request import CreateGameRequest, JoinGameRequest, PlayerUpdate
 from hideandseek.schemas.response import (
     EffectiveMapResponse,
     GameResponse,
     HiderStationResponse,
+    InventoryResponse,
     JoinGameResponse,
     PlayerResponse,
     StopResponse,
@@ -105,6 +107,7 @@ def join_game(
         client_id=client_id,
         name=body.name,
         color=body.color,
+        role=body.role,
     )
     return JoinGameResponse(
         game=GameResponse.from_model(game, categories=_game_categories(game)),
@@ -118,6 +121,15 @@ def get_game_state(
 ) -> GameResponse:
     """Fetch current game state."""
     return GameResponse.from_model(game, categories=_game_categories(game))
+
+
+@router.get('/{game_id}/inventory', response_model=InventoryResponse)
+def get_inventory(
+    game: Game = Depends(get_game),
+) -> InventoryResponse:
+    """Current question inventory — slots with consumed state and available categories."""
+    slots = get_inventory_slots(game.id)
+    return InventoryResponse.from_slots(slots, categories=_game_categories(game))
 
 
 @router.patch(

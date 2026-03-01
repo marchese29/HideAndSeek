@@ -111,21 +111,31 @@ def test_get_game_state(client: TestClient, session: Session):
     assert 'hider_station_id' not in data
 
 
-def test_get_game_static_inventory(client: TestClient, session: Session):
-    """GameResponse inventory is a static template — no IDs, no consumed flags."""
+def test_get_game_inventory(client: TestClient, session: Session):
+    """GameResponse inventory includes slot_index, distance, and consumed state."""
     game = create_game(session)
     resp = client.get(f'/games/{game.id}')
     assert resp.status_code == 200
     inv = resp.json()['inventory']
-    # Static slots have only distance
     assert len(inv['radar_slots']) == 3
-    assert inv['radar_slots'][0] == {'distance': 3000.0}
-    assert inv['radar_slots'][2] == {'distance': None}
+    assert inv['radar_slots'][0] == {'slot_index': 0, 'distance': 3000.0, 'consumed': False}
+    assert inv['radar_slots'][2] == {'slot_index': 2, 'distance': None, 'consumed': False}
     assert len(inv['thermometer_slots']) == 2
-    # No IDs, no consumed flags
+    # No internal IDs exposed
     assert 'id' not in inv['radar_slots'][0]
-    assert 'consumed' not in inv['radar_slots'][0]
     # Categories list
+    assert isinstance(inv['categories'], list)
+
+
+def test_get_inventory_endpoint(client: TestClient, session: Session):
+    """Dedicated inventory endpoint returns slots with consumed state."""
+    game = create_game(session)
+    resp = client.get(f'/games/{game.id}/inventory')
+    assert resp.status_code == 200
+    inv = resp.json()
+    assert len(inv['radar_slots']) == 3
+    assert inv['radar_slots'][0] == {'slot_index': 0, 'distance': 3000.0, 'consumed': False}
+    assert len(inv['thermometer_slots']) == 2
     assert isinstance(inv['categories'], list)
 
 

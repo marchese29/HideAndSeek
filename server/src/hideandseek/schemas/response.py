@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from hideandseek.models.game import Game as GameModel
     from hideandseek.models.game import Player as PlayerModel
     from hideandseek.models.game_map import GameMap as GameMapModel
+    from hideandseek.models.inventory import InventorySlot as InventorySlotModel
     from hideandseek.models.location import LocationUpdate as LocationUpdateModel
     from hideandseek.models.question import Question as QuestionModel
     from hideandseek.models.transit import Route as RouteModel
@@ -97,31 +99,53 @@ class PlayerResponse(BaseModel):
 # ── Inventory ─────────────────────────────────────────────────────────────────
 
 
-class StaticSlotResponse(BaseModel):
-    """A slot in the static inventory template."""
+class SlotResponse(BaseModel):
+    """A slot in the question inventory."""
 
+    slot_index: int = Field(description='Original template position (stable across the game).')
     distance: float | None = Field(
         description='Preset distance in convention units, or null for custom.'
     )
+    consumed: bool = Field(description='Whether this slot has been used.')
 
 
-class StaticInventoryResponse(BaseModel):
-    """Static inventory template — what tools are available in this game.
+class InventoryResponse(BaseModel):
+    """Question inventory — slots with consumed state and available categories."""
 
-    No IDs, no consumed flags. The client derives what's been spent from the
-    question summary list.
-    """
-
-    radar_slots: list[StaticSlotResponse] = Field(description='Radar question slots.')
-    thermometer_slots: list[StaticSlotResponse] = Field(description='Thermometer question slots.')
+    radar_slots: list[SlotResponse] = Field(description='Radar question slots.')
+    thermometer_slots: list[SlotResponse] = Field(description='Thermometer question slots.')
     categories: list[str] = Field(description='Available question categories.')
+
+    @staticmethod
+    def from_slots(
+        slots: Sequence[InventorySlotModel], *, categories: list[str]
+    ) -> InventoryResponse:
+        radar_slots = [
+            SlotResponse(
+                slot_index=s.slot_index, distance=s.distance, consumed=s.consumed_at is not None
+            )
+            for s in slots
+            if s.slot_type == SlotType.radar
+        ]
+        thermometer_slots = [
+            SlotResponse(
+                slot_index=s.slot_index, distance=s.distance, consumed=s.consumed_at is not None
+            )
+            for s in slots
+            if s.slot_type == SlotType.thermometer
+        ]
+        return InventoryResponse(
+            radar_slots=radar_slots,
+            thermometer_slots=thermometer_slots,
+            categories=categories,
+        )
 
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 
 
 class GameResponse(BaseModel):
-    """Full game state, including players and static inventory template."""
+    """Full game state, including players and question inventory."""
 
     id: uuid.UUID
     map_id: uuid.UUID
@@ -129,8 +153,8 @@ class GameResponse(BaseModel):
     convention: str = Field(description='Distance convention: "metric" or "imperial".')
     join_code: str | None = Field(description='4-character code for joining. Null after game ends.')
     timing: dict = Field(description='TimingRules: hiding_time_min, rest_periods, etc.')
-    inventory: StaticInventoryResponse = Field(
-        description='Static inventory template (slots + categories).'
+    inventory: InventoryResponse = Field(
+        description='Question inventory (slots with consumed state + categories).'
     )
     players: list[PlayerResponse]
     created_at: datetime
@@ -143,17 +167,6 @@ class GameResponse(BaseModel):
 
     @staticmethod
     def from_model(game: GameModel, *, categories: list[str]) -> GameResponse:
-        radar_slots = [
-            StaticSlotResponse(distance=s.distance)
-            for s in game.inventory_slots
-            if s.slot_type == SlotType.radar
-        ]
-        thermometer_slots = [
-            StaticSlotResponse(distance=s.distance)
-            for s in game.inventory_slots
-            if s.slot_type == SlotType.thermometer
-        ]
-
         return GameResponse(
             id=game.id,
             map_id=game.map_id,
@@ -161,11 +174,7 @@ class GameResponse(BaseModel):
             convention=game.game_map.convention,
             join_code=game.join_code,
             timing=game.timing,
-            inventory=StaticInventoryResponse(
-                radar_slots=radar_slots,
-                thermometer_slots=thermometer_slots,
-                categories=categories,
-            ),
+            inventory=InventoryResponse.from_slots(game.inventory_slots, categories=categories),
             players=[PlayerResponse.from_model(p) for p in game.players],
             created_at=game.created_at,
             hiding_started_at=game.hiding_started_at,

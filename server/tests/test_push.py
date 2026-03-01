@@ -114,11 +114,9 @@ def test_delete_nonexistent_token(session: Session):
 async def test_push_service_noop_mode():
     """PushService with no config logs but doesn't error."""
     push = PushService(config=None)
-    # Create a fake device token
-    dt = DeviceToken(client_id=uuid.uuid4(), token='aabbccdd')
     # Should succeed silently in no-op mode
     await push.send_to_tokens(
-        [dt],
+        ['aabbccdd'],
         uuid.uuid4(),
         PushEventType.game_started,
         alert='Test alert',
@@ -154,12 +152,11 @@ async def test_push_service_builds_standard_payload():
     push = PushService(config=None)
     push._client = FakeAPNs()  # type: ignore[assignment]
 
-    dt = DeviceToken(client_id=uuid.uuid4(), token='aabbccdd')
     game_id = uuid.uuid4()
     question_id = uuid.uuid4()
 
     await push.send_to_tokens(
-        [dt],
+        ['aabbccdd'],
         game_id,
         PushEventType.question_asked,
         alert='A 3 km radar question has been asked.',
@@ -202,10 +199,8 @@ async def test_push_service_builds_silent_payload():
     push = PushService(config=None)
     push._client = FakeAPNs()  # type: ignore[assignment]
 
-    dt = DeviceToken(client_id=uuid.uuid4(), token='aabbccdd')
-
     await push.send_to_tokens(
-        [dt],
+        ['aabbccdd'],
         uuid.uuid4(),
         PushEventType.phase_changed,
         silent=True,

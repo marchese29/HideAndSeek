@@ -735,10 +735,10 @@ def test_exclusions_accumulate(client: TestClient, session: Session):
     data = resp.json()
     assert len(data['exclusions']) == 1
 
-    # Ask + answer second radar question
+    # Ask + answer second radar question (slot 1 — slot 0 already consumed)
     resp = client.post(
         f'/games/{game.id}/questions/radar',
-        json={'location': _point(-0.05, 51.52), 'slot_index': 0},
+        json={'location': _point(-0.05, 51.52), 'slot_index': 1},
         headers=_headers(seeker.client_id),
     )
     q2_id = resp.json()['id']

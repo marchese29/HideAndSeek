@@ -41,6 +41,9 @@ class JoinGameRequest(BaseModel):
     join_code: str = Field(description='4-character code shared by the host.')
     name: str = Field(description='Display name for this player.')
     color: str = Field(description='Hex color for this player, e.g. "#FF5733".')
+    role: PlayerRole | None = Field(
+        default=None, description='Optional role to assign on join (hider or seeker).'
+    )
     device_token: str = Field(
         description='Hex-encoded APNS device token. Required — push is central to gameplay.',
     )
@@ -78,7 +81,7 @@ class AskRadarRequest(BaseModel):
     """Ask a radar question, spending a radar inventory slot."""
 
     location: Point = Field(description='Current seeker position as a GeoJSON Point.')
-    slot_index: int = Field(description='0-based index into the available radar slot list.')
+    slot_index: int = Field(description='0-based index into the original inventory template.')
     custom_distance: float | None = Field(
         default=None,
         description='Required for custom slots (distance=null). In convention units.',
@@ -89,7 +92,7 @@ class AskThermometerRequest(BaseModel):
     """Ask a thermometer question, spending a thermometer inventory slot."""
 
     location: Point = Field(description='Current seeker position as a GeoJSON Point.')
-    slot_index: int = Field(description='0-based index into the available thermometer slot list.')
+    slot_index: int = Field(description='0-based index into the original inventory template.')
     custom_distance: float | None = Field(
         default=None,
         description='Required for custom slots (distance=null). In convention units.',

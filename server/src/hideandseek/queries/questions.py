@@ -179,21 +179,29 @@ def update_question(session: Session, question: Question, updates: dict) -> Ques
 
 
 @db_read
-def get_available_slots(
-    session: Session, game_id: uuid.UUID, slot_type: SlotType
-) -> list[InventorySlot]:
-    """Return unconsumed slots of the given type, ordered by slot_index."""
+def get_inventory_slots(session: Session, game_id: uuid.UUID) -> list[InventorySlot]:
+    """Return all inventory slots for a game, ordered by slot_index."""
     return list(
         session.exec(
             select(InventorySlot)
-            .where(
-                InventorySlot.game_id == game_id,
-                InventorySlot.slot_type == slot_type,
-                InventorySlot.consumed_at.is_(None),  # type: ignore[union-attr]
-            )
+            .where(InventorySlot.game_id == game_id)
             .order_by(InventorySlot.slot_index)  # type: ignore[arg-type]
         ).all()
     )
+
+
+@db_read
+def get_slot_by_index(
+    session: Session, game_id: uuid.UUID, slot_type: SlotType, slot_index: int
+) -> InventorySlot | None:
+    """Return a specific slot by its original template index (regardless of consumed state)."""
+    return session.exec(
+        select(InventorySlot).where(
+            InventorySlot.game_id == game_id,
+            InventorySlot.slot_type == slot_type,
+            InventorySlot.slot_index == slot_index,
+        )
+    ).one_or_none()
 
 
 @db_write

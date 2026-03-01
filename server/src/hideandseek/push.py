@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from aioapns import APNs, NotificationRequest
 
 from hideandseek.config import PushConfig
 from hideandseek.models.types import PushEventType
-
-if TYPE_CHECKING:
-    from hideandseek.models.device_token import DeviceToken
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -37,7 +34,7 @@ class PushService:
 
     async def send_to_tokens(
         self,
-        tokens: list[DeviceToken],
+        tokens: list[str],
         game_id: uuid.UUID,
         event_type: PushEventType,
         *,
@@ -49,10 +46,10 @@ class PushService:
         parameters: dict[str, Any] | None = None,
         answer: str | None = None,
     ) -> None:
-        """Send push notifications to resolved device tokens.
+        """Send push notifications to device tokens.
 
         Args:
-            tokens: Pre-resolved DeviceToken objects.
+            tokens: Plain device token strings (extracted from DB before session close).
             game_id: The game this notification is about.
             event_type: Event identifier (e.g. "game_started", "question_asked").
             alert: Human-readable alert body. Omitted for silent pushes.
@@ -98,18 +95,18 @@ class PushService:
                 aps['sound'] = 'default'
             message = {'aps': aps, 'data': data}
 
-        for dt in tokens:
+        for token in tokens:
             if not self._client:
                 logger.info(
                     'push_noop',
                     event_type=event_type,
                     game_id=str(game_id),
-                    token=f'{dt.token[:8]}...{dt.token[-4:]}',
+                    token=f'{token[:8]}...{token[-4:]}',
                 )
                 continue
 
             request = NotificationRequest(
-                device_token=dt.token,
+                device_token=token,
                 message=message,
             )
             try:
@@ -117,17 +114,14 @@ class PushService:
                 if not response.is_successful:
                     logger.warning(
                         'apns_error',
-                        token=f'{dt.token[:8]}...{dt.token[-4:]}',
+                        token=f'{token[:8]}...{token[-4:]}',
                         status=response.status,
                         description=response.description,
                     )
-                    # Stale token cleanup is handled by the caller if needed —
-                    # we log here so issues are visible but don't delete tokens
-                    # in a fire-and-forget context without a session.
             except Exception:
                 logger.exception(
                     'push_send_failed',
-                    token=f'{dt.token[:8]}...{dt.token[-4:]}',
+                    token=f'{token[:8]}...{token[-4:]}',
                 )
 
     async def close(self) -> None:

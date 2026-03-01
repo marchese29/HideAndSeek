@@ -104,6 +104,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Inventory
+         * @description Current question inventory — slots with consumed state and available categories.
+         */
+        get: operations["get_inventory_games__game_id__inventory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/players/{player_id}": {
         parameters: {
             query?: never;
@@ -541,7 +561,7 @@ export interface components {
             location: components["schemas"]["Point"];
             /**
              * Slot Index
-             * @description 0-based index into the available radar slot list.
+             * @description 0-based index into the original inventory template.
              */
             slot_index: number;
             /**
@@ -559,7 +579,7 @@ export interface components {
             location: components["schemas"]["Point"];
             /**
              * Slot Index
-             * @description 0-based index into the available thermometer slot list.
+             * @description 0-based index into the original inventory template.
              */
             slot_index: number;
             /**
@@ -732,7 +752,7 @@ export interface components {
         };
         /**
          * GameResponse
-         * @description Full game state, including players and static inventory template.
+         * @description Full game state, including players and question inventory.
          */
         GameResponse: {
             /**
@@ -763,8 +783,8 @@ export interface components {
             timing: {
                 [key: string]: unknown;
             };
-            /** @description Static inventory template (slots + categories). */
-            inventory: components["schemas"]["StaticInventoryResponse"];
+            /** @description Question inventory (slots with consumed state + categories). */
+            inventory: components["schemas"]["InventoryResponse"];
             /** Players */
             players: components["schemas"]["PlayerResponse"][];
             /**
@@ -832,6 +852,27 @@ export interface components {
             hider_station_id: string;
         };
         /**
+         * InventoryResponse
+         * @description Question inventory — slots with consumed state and available categories.
+         */
+        InventoryResponse: {
+            /**
+             * Radar Slots
+             * @description Radar question slots.
+             */
+            radar_slots: components["schemas"]["SlotResponse"][];
+            /**
+             * Thermometer Slots
+             * @description Thermometer question slots.
+             */
+            thermometer_slots: components["schemas"]["SlotResponse"][];
+            /**
+             * Categories
+             * @description Available question categories.
+             */
+            categories: string[];
+        };
+        /**
          * JoinGameRequest
          * @description Join an existing game by its join code.
          */
@@ -851,6 +892,8 @@ export interface components {
              * @description Hex color for this player, e.g. "#FF5733".
              */
             color: string;
+            /** @description Optional role to assign on join (hider or seeker). */
+            role?: components["schemas"]["PlayerRole"] | null;
             /**
              * Device Token
              * @description Hex-encoded APNS device token. Required — push is central to gameplay.
@@ -1383,39 +1426,25 @@ export interface components {
             stop_ids: string[];
         };
         /**
-         * StaticInventoryResponse
-         * @description Static inventory template — what tools are available in this game.
-         *
-         *     No IDs, no consumed flags. The client derives what's been spent from the
-         *     question summary list.
+         * SlotResponse
+         * @description A slot in the question inventory.
          */
-        StaticInventoryResponse: {
+        SlotResponse: {
             /**
-             * Radar Slots
-             * @description Radar question slots.
+             * Slot Index
+             * @description Original template position (stable across the game).
              */
-            radar_slots: components["schemas"]["StaticSlotResponse"][];
-            /**
-             * Thermometer Slots
-             * @description Thermometer question slots.
-             */
-            thermometer_slots: components["schemas"]["StaticSlotResponse"][];
-            /**
-             * Categories
-             * @description Available question categories.
-             */
-            categories: string[];
-        };
-        /**
-         * StaticSlotResponse
-         * @description A slot in the static inventory template.
-         */
-        StaticSlotResponse: {
+            slot_index: number;
             /**
              * Distance
              * @description Preset distance in convention units, or null for custom.
              */
             distance: number | null;
+            /**
+             * Consumed
+             * @description Whether this slot has been used.
+             */
+            consumed: boolean;
         };
         /**
          * StopResponse
@@ -1652,6 +1681,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_inventory_games__game_id__inventory_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryResponse"];
                 };
             };
             /** @description Validation Error */

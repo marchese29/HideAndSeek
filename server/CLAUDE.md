@@ -79,18 +79,12 @@ curl -s -X POST localhost:8000/games \
 # → note game_id and join_code
 
 # 2. Join as hider and seeker
-#    BUG: role is accepted but ignored (HideAndSeek-33f) — fix roles in DB after joining
 curl -s -X POST localhost:8000/games/join \
   -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
   -d '{"join_code": "XXXX", "role": "hider", "name": "Alice", "color": "#E74C3C", "device_token": "fake-hider"}'
 curl -s -X POST localhost:8000/games/join \
   -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
   -d '{"join_code": "XXXX", "role": "seeker", "name": "Bob", "color": "#3498DB", "device_token": "fake-seeker"}'
-
-# Workaround: set roles directly until HideAndSeek-33f is fixed
-docker exec hideandseek-postgres-1 psql -U hideandseek -c \
-  "UPDATE player SET role = 'hider' WHERE client_id = '$HIDER';
-   UPDATE player SET role = 'seeker' WHERE client_id = '$SEEKER';"
 
 # 3. Optionally tweak timing for fast testing
 docker exec hideandseek-postgres-1 psql -U hideandseek -c \
@@ -118,8 +112,7 @@ curl -s -X POST localhost:8000/games/<game_id>/location \
 ### Radar question
 
 ```bash
-# Ask (seeker). slot_index is into the REMAINING unconsumed slots, not the original
-# template — this is a known bug (HideAndSeek-dq0).
+# Ask (seeker). slot_index refers to the original inventory template position (stable).
 # Inventory: [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0] (imperial/medium)
 curl -s -X POST localhost:8000/games/<game_id>/questions/radar \
   -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
@@ -259,7 +252,8 @@ data/                                   # SQLite DB file (gitignored)
   - **Hider-only** (403 for seekers): `GET /games/{id}/hider-station` (assigned station UUID), `GET /games/{id}/questions/{qid}` (full question detail minus exclusion geometry).
   - **Seeker-only** (403 for hiders): `GET /games/{id}/exclusions` (per-question exclusion geometry + cumulative total), `GET /games/{id}/endgame-exclusions`, `GET /games/{id}/candidate-stations`.
   - **Write endpoints** (ask/answer/lock-in): return `QuestionDetailResponse` (full detail minus exclusions).
-  - Response schemas: `QuestionSummaryResponse` (shared list), `QuestionDetailResponse` (hider detail + write endpoints), `HiderStationResponse`, `ExclusionsResponse`, `StaticInventoryResponse` (replaces old `InventoryResponse`).
+  - Response schemas: `QuestionSummaryResponse` (shared list), `QuestionDetailResponse` (hider detail + write endpoints), `HiderStationResponse`, `ExclusionsResponse`, `InventoryResponse` (slots with consumed state + categories).
+  - `GET /games/{id}/inventory`: lightweight inventory check — returns `InventoryResponse` without loading the full game map. Slots include `slot_index` (original template position), `distance`, and `consumed` boolean.
 - **Relational inventory model**: Game inventory uses proper relational tables instead of JSON:
   - **`InventorySlot`** table: pre-populated from the map's `default_inventory` template at game creation. Slots are consumed by setting `consumed_at` (soft-delete). `Game.inventory_slots` relationship (ordered by `slot_index`).
   - **`CategoryUsage`** table: created when a matching/measuring question is asked. Unique constraint on `(game_id, question_type, category, feature_class)`. `Game.category_usages` relationship.

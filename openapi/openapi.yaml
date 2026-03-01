@@ -175,6 +175,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/inventory:
+    get:
+      tags:
+      - games
+      summary: Get Inventory
+      description: "Current question inventory \u2014 slots with consumed state and\
+        \ available categories."
+      operationId: get_inventory_games__game_id__inventory_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/players/{player_id}:
     patch:
       tags:
@@ -965,7 +994,7 @@ components:
         slot_index:
           type: integer
           title: Slot Index
-          description: 0-based index into the available radar slot list.
+          description: 0-based index into the original inventory template.
         custom_distance:
           anyOf:
           - type: number
@@ -986,7 +1015,7 @@ components:
         slot_index:
           type: integer
           title: Slot Index
-          description: 0-based index into the available thermometer slot list.
+          description: 0-based index into the original inventory template.
         custom_distance:
           anyOf:
           - type: number
@@ -1325,8 +1354,8 @@ components:
           title: Timing
           description: 'TimingRules: hiding_time_min, rest_periods, etc.'
         inventory:
-          $ref: '#/components/schemas/StaticInventoryResponse'
-          description: Static inventory template (slots + categories).
+          $ref: '#/components/schemas/InventoryResponse'
+          description: Question inventory (slots with consumed state + categories).
         players:
           items:
             $ref: '#/components/schemas/PlayerResponse'
@@ -1362,7 +1391,7 @@ components:
       - players
       - created_at
       title: GameResponse
-      description: Full game state, including players and static inventory template.
+      description: Full game state, including players and question inventory.
     GameStatus:
       type: string
       enum:
@@ -1447,6 +1476,34 @@ components:
       - hider_station_id
       title: HiderStationResponse
       description: The hider's assigned station during seeking.
+    InventoryResponse:
+      properties:
+        radar_slots:
+          items:
+            $ref: '#/components/schemas/SlotResponse'
+          type: array
+          title: Radar Slots
+          description: Radar question slots.
+        thermometer_slots:
+          items:
+            $ref: '#/components/schemas/SlotResponse'
+          type: array
+          title: Thermometer Slots
+          description: Thermometer question slots.
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+          description: Available question categories.
+      type: object
+      required:
+      - radar_slots
+      - thermometer_slots
+      - categories
+      title: InventoryResponse
+      description: "Question inventory \u2014 slots with consumed state and available\
+        \ categories."
     JoinGameRequest:
       properties:
         join_code:
@@ -1461,6 +1518,11 @@ components:
           type: string
           title: Color
           description: Hex color for this player, e.g. "#FF5733".
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/PlayerRole'
+          - type: 'null'
+          description: Optional role to assign on join (hider or seeker).
         device_token:
           type: string
           title: Device Token
@@ -2217,48 +2279,29 @@ components:
       - stop_ids
       title: RouteResponse
       description: A transit route on the effective game map, with ordered stop IDs.
-    StaticInventoryResponse:
+    SlotResponse:
       properties:
-        radar_slots:
-          items:
-            $ref: '#/components/schemas/StaticSlotResponse'
-          type: array
-          title: Radar Slots
-          description: Radar question slots.
-        thermometer_slots:
-          items:
-            $ref: '#/components/schemas/StaticSlotResponse'
-          type: array
-          title: Thermometer Slots
-          description: Thermometer question slots.
-        categories:
-          items:
-            type: string
-          type: array
-          title: Categories
-          description: Available question categories.
-      type: object
-      required:
-      - radar_slots
-      - thermometer_slots
-      - categories
-      title: StaticInventoryResponse
-      description: "Static inventory template \u2014 what tools are available in this\
-        \ game.\n\nNo IDs, no consumed flags. The client derives what's been spent\
-        \ from the\nquestion summary list."
-    StaticSlotResponse:
-      properties:
+        slot_index:
+          type: integer
+          title: Slot Index
+          description: Original template position (stable across the game).
         distance:
           anyOf:
           - type: number
           - type: 'null'
           title: Distance
           description: Preset distance in convention units, or null for custom.
+        consumed:
+          type: boolean
+          title: Consumed
+          description: Whether this slot has been used.
       type: object
       required:
+      - slot_index
       - distance
-      title: StaticSlotResponse
-      description: A slot in the static inventory template.
+      - consumed
+      title: SlotResponse
+      description: A slot in the question inventory.
     StopResponse:
       properties:
         id:

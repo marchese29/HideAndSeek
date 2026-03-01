@@ -49,7 +49,9 @@ def send_push(
     """
     with session_scope():
         role = PlayerRole(role_filter) if role_filter is not None else None
-        tokens = get_device_tokens_for_game(uuid.UUID(game_id), role_filter=role)
+        device_tokens = get_device_tokens_for_game(uuid.UUID(game_id), role_filter=role)
+        # Extract plain strings before session closes to avoid DetachedInstanceError
+        tokens = [dt.token for dt in device_tokens]
 
     if not tokens:
         logger.info('push_no_tokens', game_id=game_id, event_type=event_type)

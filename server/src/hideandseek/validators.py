@@ -25,8 +25,8 @@ from hideandseek.models.types import (
 )
 from hideandseek.queries.location import get_latest_location_for_player
 from hideandseek.queries.questions import (
-    get_available_slots,
     get_question,
+    get_slot_by_index,
     is_category_used,
 )
 from hideandseek.queries.stops import get_stop_by_id
@@ -45,13 +45,17 @@ def validate_slot_request(
     game: Game,
     slot_type: SlotType,
 ) -> InventorySlot:
-    """Validate a radar/thermometer request. Returns the resolved slot."""
-    available = get_available_slots(game.id, slot_type)
+    """Validate a radar/thermometer request. Returns the resolved slot.
 
-    if slot_index < 0 or slot_index >= len(available):
+    slot_index refers to the original template position (stable across the game),
+    not the position within remaining unconsumed slots.
+    """
+    slot = get_slot_by_index(game.id, slot_type, slot_index)
+
+    if slot is None:
         raise HTTPException(status_code=422, detail='Invalid slot index.')
-
-    slot = available[slot_index]
+    if slot.consumed_at is not None:
+        raise HTTPException(status_code=409, detail='Slot has already been consumed.')
     if slot.distance is None and custom_distance is None:
         raise HTTPException(status_code=422, detail='custom_distance is required for custom slots.')
 
