@@ -109,17 +109,14 @@ def update_player(session: Session, player: Player, updates: dict) -> Player:
 
 
 @db_write
-def update_game_status(
-    session: Session, game: Game, status: GameStatus, *, clear_join_code: bool = False
-) -> Game:
-    """Update a game's status (and optionally clear join_code)."""
+def update_game_status(session: Session, game: Game, status: GameStatus) -> Game:
+    """Update a game's status. Clears join_code when entering hiding."""
     game.status = status
     if status == GameStatus.hiding:
         game.hiding_started_at = datetime.now(UTC)
+        game.join_code = None
     elif status == GameStatus.seeking:
         game.seeking_started_at = datetime.now(UTC)
-    if clear_join_code:
-        game.join_code = None
     session.add(game)
     return game
 

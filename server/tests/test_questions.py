@@ -67,7 +67,12 @@ def test_ask_radar_question(client: TestClient, session: Session):
     assert data['parameters']['type'] == 'radar'
     assert data['parameters']['radius'] == 3000
     assert data['sequence'] == 1
-    assert data['answerable_at'] is not None
+    # Ask response is slim — no answer-time fields
+    assert 'answerable_at' not in data
+    assert 'answered_at' not in data
+    assert 'answer' not in data
+    assert 'seeker_location_end' not in data
+    assert 'hider_location' not in data
 
 
 def test_ask_custom_slot_requires_distance(client: TestClient, session: Session):
@@ -208,7 +213,6 @@ def test_lock_in_thermometer(client: TestClient, session: Session):
     data = resp.json()
     assert data['status'] == 'answerable'
     assert data['seeker_location_end'] is not None
-    assert data['answerable_at'] is not None
 
 
 def test_thermometer_full_flow(client: TestClient, session: Session):

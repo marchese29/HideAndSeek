@@ -251,8 +251,9 @@ data/                                   # SQLite DB file (gitignored)
   - **Shared** (any player): `GET /games/{id}` (slim game state with static inventory template — no IDs, no consumed flags, no `hider_station_id`), `GET /games/{id}/questions` (whitelist summary — no parameters, locations, or geometry).
   - **Hider-only** (403 for seekers): `GET /games/{id}/hider-station` (assigned station UUID), `GET /games/{id}/questions/{qid}` (full question detail minus exclusion geometry).
   - **Seeker-only** (403 for hiders): `GET /games/{id}/exclusions` (per-question exclusion geometry + cumulative total), `GET /games/{id}/endgame-exclusions`, `GET /games/{id}/candidate-stations`.
-  - **Write endpoints** (ask/answer/lock-in): return `QuestionDetailResponse` (full detail minus exclusions).
-  - Response schemas: `QuestionSummaryResponse` (shared list), `QuestionDetailResponse` (hider detail + write endpoints), `HiderStationResponse`, `ExclusionsResponse`, `InventoryResponse` (slots with consumed state + categories).
+  - **Ask endpoints** (radar/thermometer/matching/measuring): return `AskQuestionResponse` (slim — only fields meaningful at ask time, no answer-time fields).
+  - **Answer/lock-in endpoints**: return `QuestionDetailResponse` (full detail minus exclusions).
+  - Response schemas: `QuestionSummaryResponse` (shared list), `AskQuestionResponse` (ask endpoints), `QuestionDetailResponse` (hider detail + answer/lock-in), `HiderStationResponse`, `ExclusionsResponse`, `InventoryResponse` (slots with consumed state + categories).
   - `GET /games/{id}/inventory`: lightweight inventory check — returns `InventoryResponse` without loading the full game map. Slots include `slot_index` (original template position), `distance`, and `consumed` boolean.
 - **Relational inventory model**: Game inventory uses proper relational tables instead of JSON:
   - **`InventorySlot`** table: pre-populated from the map's `default_inventory` template at game creation. Slots are consumed by setting `consumed_at` (soft-delete). `Game.inventory_slots` relationship (ordered by `slot_index`).
@@ -276,7 +277,7 @@ data/                                   # SQLite DB file (gitignored)
 lobby → hiding → seeking → finished
 ```
 
-The `GameStatus` enum reflects this. The endgame is a client-side lens over the `seeking` phase (see `design/endgame.md`). Games can be ended from any active state (hiding/seeking). Ending a game nulls out the `join_code` to reclaim the namespace.
+The `GameStatus` enum reflects this. The endgame is a client-side lens over the `seeking` phase (see `design/endgame.md`). Games can be ended from any active state (hiding/seeking). `join_code` is cleared when hiding starts (no longer usable after lobby).
 
 ## Data Model Conventions
 
@@ -298,7 +299,7 @@ The `GameStatus` enum reflects this. The endgame is a client-side lens over the 
 - OpenAPI spec is auto-generated — add routes to FastAPI, not the YAML file.
 - Client identity is via `X-Client-Id` header (UUID). No authentication.
 - Only one unanswered question allowed at a time per game.
-- `join_code` is nullable — nulled out when the game ends to prevent namespace exhaustion.
+- `join_code` is nullable — cleared when hiding starts (reclaims the code for new games).
 - Pagination uses offset/limit query params (`schemas/common.py`).
 - `device_token` is required on `POST /games/join`, optional on `POST /games`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
 - Push notification env vars: `APNS_KEY_PATH`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_USE_SANDBOX`. All optional — when missing, PushService runs in no-op mode.

@@ -215,7 +215,7 @@ def end_game(
     if not celery_app.conf.task_always_eager:
         celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
 
-    game = update_game_status(game, GameStatus.finished, clear_join_code=True)
+    game = update_game_status(game, GameStatus.finished)
     return GameResponse.from_model(game, categories=_game_categories(game))
 
 

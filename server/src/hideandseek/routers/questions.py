@@ -50,6 +50,7 @@ from hideandseek.schemas.request import (
     AskThermometerRequest,
 )
 from hideandseek.schemas.response import (
+    AskQuestionResponse,
     ExclusionsResponse,
     QuestionDetailResponse,
     QuestionExclusionEntry,
@@ -101,12 +102,12 @@ def _record_seeker_location(location: GeoJSONPoint, player: Player, game: Game) 
 # ── Ask endpoints (per-type) ─────────────────────────────────────────────
 
 
-@router.post('/questions/radar', response_model=QuestionDetailResponse, status_code=201)
+@router.post('/questions/radar', response_model=AskQuestionResponse, status_code=201)
 def ask_radar_question(
     body: AskRadarRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
-) -> QuestionDetailResponse:
+) -> AskQuestionResponse:
     """Ask a radar question, spending a radar inventory slot."""
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -128,15 +129,15 @@ def ask_radar_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return QuestionDetailResponse.from_model(question)
+    return AskQuestionResponse.from_model(question)
 
 
-@router.post('/questions/thermometer', response_model=QuestionDetailResponse, status_code=201)
+@router.post('/questions/thermometer', response_model=AskQuestionResponse, status_code=201)
 def ask_thermometer_question(
     body: AskThermometerRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
-) -> QuestionDetailResponse:
+) -> AskQuestionResponse:
     """Ask a thermometer question, spending a thermometer inventory slot."""
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -157,15 +158,15 @@ def ask_thermometer_question(
         question_status=QuestionStatus.in_progress,
     )
 
-    return QuestionDetailResponse.from_model(question)
+    return AskQuestionResponse.from_model(question)
 
 
-@router.post('/questions/matching', response_model=QuestionDetailResponse, status_code=201)
+@router.post('/questions/matching', response_model=AskQuestionResponse, status_code=201)
 def ask_matching_question(
     body: AskMatchingRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
-) -> QuestionDetailResponse:
+) -> AskQuestionResponse:
     """Ask a matching question about a feature category."""
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -192,15 +193,15 @@ def ask_matching_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return QuestionDetailResponse.from_model(question)
+    return AskQuestionResponse.from_model(question)
 
 
-@router.post('/questions/measuring', response_model=QuestionDetailResponse, status_code=201)
+@router.post('/questions/measuring', response_model=AskQuestionResponse, status_code=201)
 def ask_measuring_question(
     body: AskMeasuringRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
-) -> QuestionDetailResponse:
+) -> AskQuestionResponse:
     """Ask a measuring question about a feature category."""
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -229,7 +230,7 @@ def ask_measuring_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return QuestionDetailResponse.from_model(question)
+    return AskQuestionResponse.from_model(question)
 
 
 # ── Lock-in and answer ───────────────────────────────────────────────────

@@ -159,7 +159,9 @@ class GameResponse(BaseModel):
     map_id: uuid.UUID
     status: GameStatus
     convention: str = Field(description='Distance convention: "metric" or "imperial".')
-    join_code: str | None = Field(description='4-character code for joining. Null after game ends.')
+    join_code: str | None = Field(
+        description='4-character code for joining. Null once hiding starts.'
+    )
     hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
     base_question_delay_min: int = Field(description='Auto-answer delay in minutes.')
     inventory: InventoryResponse = Field(
@@ -423,9 +425,6 @@ class QuestionSummaryResponse(BaseModel):
     status: QuestionStatus
     asked_by: uuid.UUID = Field(description='Player ID of the seeker who asked.')
     asked_at: datetime
-    answerable_at: datetime | None = Field(
-        default=None, description='When the question became answerable.'
-    )
     answered_at: datetime | None
     answer: str | None = Field(description='yes/no for radar, closer/farther for thermometer, etc.')
 
@@ -438,16 +437,48 @@ class QuestionSummaryResponse(BaseModel):
             status=question.status,
             asked_by=question.asked_by,
             asked_at=question.asked_at,
-            answerable_at=question.answerable_at,
             answered_at=question.answered_at,
             answer=question.answer,
+        )
+
+
+class AskQuestionResponse(BaseModel):
+    """Slim response for ask endpoints — only fields meaningful at ask time.
+
+    No answer-time fields (seeker_location_end, hider_location, answered_at, answer).
+    """
+
+    id: uuid.UUID
+    game_id: uuid.UUID
+    sequence: int = Field(description='1-based chronological order within the game.')
+    question_type: QuestionType
+    status: QuestionStatus
+    parameters: QuestionParamsResponse = Field(description='Type-specific question parameters.')
+    asked_by: uuid.UUID = Field(description='Player ID of the seeker who asked.')
+    asked_at: datetime
+    seeker_location_start: GeoJSONPoint = Field(
+        description='GeoJSON Point — seeker position when asked.'
+    )
+
+    @staticmethod
+    def from_model(question: QuestionModel) -> AskQuestionResponse:
+        return AskQuestionResponse(
+            id=question.id,
+            game_id=question.game_id,
+            sequence=question.sequence,
+            question_type=question.question_type,
+            status=question.status,
+            parameters=_build_question_params(question),
+            asked_by=question.asked_by,
+            asked_at=question.asked_at,
+            seeker_location_start=GeoJSONPoint(**mapping(question.seeker_location_start)),
         )
 
 
 class QuestionDetailResponse(BaseModel):
     """Full question detail for hiders — everything except exclusion geometry.
 
-    Used by the hider detail endpoint and write endpoints (ask/answer/lock-in).
+    Used by the hider detail endpoint and write endpoints (answer/lock-in).
     """
 
     id: uuid.UUID
@@ -463,9 +494,6 @@ class QuestionDetailResponse(BaseModel):
     )
     seeker_location_end: GeoJSONPoint | None = Field(
         description='GeoJSON Point — seeker position at lock-in (thermometer only).'
-    )
-    answerable_at: datetime | None = Field(
-        default=None, description='When the question became answerable.'
     )
     answered_at: datetime | None
     hider_location: GeoJSONPoint | None = Field(
@@ -491,7 +519,6 @@ class QuestionDetailResponse(BaseModel):
             asked_at=question.asked_at,
             seeker_location_start=GeoJSONPoint(**mapping(question.seeker_location_start)),
             seeker_location_end=_point_or_none(question.seeker_location_end),
-            answerable_at=question.answerable_at,
             answered_at=question.answered_at,
             hider_location=_point_or_none(question.hider_location),
             answer=question.answer,

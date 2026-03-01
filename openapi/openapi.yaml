@@ -532,7 +532,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionDetailResponse'
+                $ref: '#/components/schemas/AskQuestionResponse'
         '422':
           description: Validation Error
           content:
@@ -573,7 +573,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionDetailResponse'
+                $ref: '#/components/schemas/AskQuestionResponse'
         '422':
           description: Validation Error
           content:
@@ -614,7 +614,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionDetailResponse'
+                $ref: '#/components/schemas/AskQuestionResponse'
         '422':
           description: Validation Error
           content:
@@ -655,7 +655,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuestionDetailResponse'
+                $ref: '#/components/schemas/AskQuestionResponse'
         '422':
           description: Validation Error
           content:
@@ -986,6 +986,58 @@ components:
       - category
       title: AskMeasuringRequest
       description: Ask a measuring question about a feature category.
+    AskQuestionResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        game_id:
+          type: string
+          format: uuid
+          title: Game Id
+        sequence:
+          type: integer
+          title: Sequence
+          description: 1-based chronological order within the game.
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        parameters:
+          anyOf:
+          - $ref: '#/components/schemas/RadarParamsResponse'
+          - $ref: '#/components/schemas/ThermometerParamsResponse'
+          - $ref: '#/components/schemas/FeatureParamsResponse'
+          title: Parameters
+          description: Type-specific question parameters.
+        asked_by:
+          type: string
+          format: uuid
+          title: Asked By
+          description: Player ID of the seeker who asked.
+        asked_at:
+          type: string
+          format: date-time
+          title: Asked At
+        seeker_location_start:
+          $ref: '#/components/schemas/Point'
+          description: "GeoJSON Point \u2014 seeker position when asked."
+      type: object
+      required:
+      - id
+      - game_id
+      - sequence
+      - question_type
+      - status
+      - parameters
+      - asked_by
+      - asked_at
+      - seeker_location_start
+      title: AskQuestionResponse
+      description: "Slim response for ask endpoints \u2014 only fields meaningful\
+        \ at ask time.\n\nNo answer-time fields (seeker_location_end, hider_location,\
+        \ answered_at, answer)."
     AskRadarRequest:
       properties:
         location:
@@ -1361,7 +1413,7 @@ components:
           - type: string
           - type: 'null'
           title: Join Code
-          description: 4-character code for joining. Null after game ends.
+          description: 4-character code for joining. Null once hiding starts.
         hiding_time_min:
           type: integer
           title: Hiding Time Min
@@ -2093,13 +2145,6 @@ components:
           - type: 'null'
           description: "GeoJSON Point \u2014 seeker position at lock-in (thermometer\
             \ only)."
-        answerable_at:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Answerable At
-          description: When the question became answerable.
         answered_at:
           anyOf:
           - type: string
@@ -2134,7 +2179,7 @@ components:
       - answer
       title: QuestionDetailResponse
       description: "Full question detail for hiders \u2014 everything except exclusion\
-        \ geometry.\n\nUsed by the hider detail endpoint and write endpoints (ask/answer/lock-in)."
+        \ geometry.\n\nUsed by the hider detail endpoint and write endpoints (answer/lock-in)."
     QuestionExclusionEntry:
       properties:
         question_id:
@@ -2209,13 +2254,6 @@ components:
           type: string
           format: date-time
           title: Asked At
-        answerable_at:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Answerable At
-          description: When the question became answerable.
         answered_at:
           anyOf:
           - type: string

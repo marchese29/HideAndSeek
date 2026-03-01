@@ -306,6 +306,7 @@ def test_start_game(client: TestClient, session: Session):
     assert resp.status_code == 200
     data = resp.json()
     assert data['status'] == 'hiding'
+    assert data['join_code'] is None
     assert data['hiding_started_at'] is not None
     assert data['seeking_started_at'] is None
 
@@ -351,7 +352,9 @@ def test_start_game_not_in_lobby(client: TestClient, session: Session):
 
 
 def test_end_game(client: TestClient, session: Session):
-    game = create_game(session, status=GameStatus.seeking)
+    # In real flow, join_code is already cleared at hiding start.
+    # Factory creates directly at seeking, so we set join_code=None to match.
+    game = create_game(session, status=GameStatus.seeking, join_code=None)
     resp = client.post(f'/games/{game.id}/end')
     assert resp.status_code == 200
     data = resp.json()

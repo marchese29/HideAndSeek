@@ -553,6 +553,49 @@ export interface components {
             feature_class?: number | null;
         };
         /**
+         * AskQuestionResponse
+         * @description Slim response for ask endpoints — only fields meaningful at ask time.
+         *
+         *     No answer-time fields (seeker_location_end, hider_location, answered_at, answer).
+         */
+        AskQuestionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Game Id
+             * Format: uuid
+             */
+            game_id: string;
+            /**
+             * Sequence
+             * @description 1-based chronological order within the game.
+             */
+            sequence: number;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /**
+             * Parameters
+             * @description Type-specific question parameters.
+             */
+            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"];
+            /**
+             * Asked By
+             * Format: uuid
+             * @description Player ID of the seeker who asked.
+             */
+            asked_by: string;
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** @description GeoJSON Point — seeker position when asked. */
+            seeker_location_start: components["schemas"]["Point"];
+        };
+        /**
          * AskRadarRequest
          * @description Ask a radar question, spending a radar inventory slot.
          */
@@ -783,7 +826,7 @@ export interface components {
             convention: string;
             /**
              * Join Code
-             * @description 4-character code for joining. Null after game ends.
+             * @description 4-character code for joining. Null once hiding starts.
              */
             join_code: string | null;
             /**
@@ -1264,7 +1307,7 @@ export interface components {
          * QuestionDetailResponse
          * @description Full question detail for hiders — everything except exclusion geometry.
          *
-         *     Used by the hider detail endpoint and write endpoints (ask/answer/lock-in).
+         *     Used by the hider detail endpoint and write endpoints (answer/lock-in).
          */
         QuestionDetailResponse: {
             /**
@@ -1304,11 +1347,6 @@ export interface components {
             seeker_location_start: components["schemas"]["Point"];
             /** @description GeoJSON Point — seeker position at lock-in (thermometer only). */
             seeker_location_end: components["schemas"]["Point"] | null;
-            /**
-             * Answerable At
-             * @description When the question became answerable.
-             */
-            answerable_at?: string | null;
             /** Answered At */
             answered_at: string | null;
             /** @description GeoJSON Point — hider position at answer time. */
@@ -1378,11 +1416,6 @@ export interface components {
              * Format: date-time
              */
             asked_at: string;
-            /**
-             * Answerable At
-             * @description When the question became answerable.
-             */
-            answerable_at?: string | null;
             /** Answered At */
             answered_at: string | null;
             /**
@@ -2039,7 +2072,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
+                    "application/json": components["schemas"]["AskQuestionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2076,7 +2109,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
+                    "application/json": components["schemas"]["AskQuestionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2113,7 +2146,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
+                    "application/json": components["schemas"]["AskQuestionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2150,7 +2183,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
+                    "application/json": components["schemas"]["AskQuestionResponse"];
                 };
             };
             /** @description Validation Error */
