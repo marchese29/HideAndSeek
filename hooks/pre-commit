@@ -55,3 +55,15 @@ run_if_changed "openapi-regen" "server/" \
     "OpenAPI spec already up to date — skipping regen." \
     "Regenerating OpenAPI spec..." \
     hooks/openapi-regen.sh || exit 1
+
+# --- API types regen (OpenAPI → TypeScript) ---
+run_if_changed "api-types-regen" "openapi/" \
+    "API types already up to date — skipping." \
+    "Regenerating API types from OpenAPI spec..." \
+    hooks/api-types-regen.sh || exit 1
+
+# --- Mobile checks ---
+run_if_changed "mobile-checks" "mobile/" \
+    "Mobile checks passed on this content — skipping." \
+    "Mobile code changed — running checks..." \
+    hooks/mobile-checks.sh || exit 1

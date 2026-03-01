@@ -4,7 +4,7 @@ Geographic "Hide and Seek" game — hiders use public transit to hide in a game 
 
 ## Monorepo Layout
 
-- `ios/` — iOS app (SwiftUI + Google Maps). See `ios/CLAUDE.md`.
+- `mobile/` — Mobile app (React Native + Expo). See `mobile/CLAUDE.md`.
 - `server/` — Python FastAPI backend (UV). See `server/CLAUDE.md`.
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.
 - `design/` — AI-generated design artifacts. See `design/CLAUDE.md`.
@@ -23,7 +23,7 @@ If you believe a commit genuinely does not require a CLAUDE.md update (e.g., a p
 
 CLAUDE.md files exist at:
 - `CLAUDE.md` (this file) — monorepo-wide conventions and workflow
-- `ios/CLAUDE.md` — iOS app build, architecture, conventions
+- `mobile/CLAUDE.md` — mobile app build, architecture, conventions
 - `server/CLAUDE.md` — server commands, style, conventions
 - `openapi/CLAUDE.md` — how the spec is generated and used
 - `design/CLAUDE.md` — design artifact conventions
@@ -32,11 +32,11 @@ CLAUDE.md files exist at:
 
 - Issue tracking: use `bd` (beads) CLI. Run `bd onboard` to get started.
 - Git hooks: `hooks/pre-commit` is the versioned pre-commit hook (server checks + OpenAPI regen + beads JSONL flush). It's symlinked into `.git/hooks/`. Beads installs its own shims for other hooks (`pre-push`, `post-merge`, `post-checkout`, `prepare-commit-msg`) directly in `.git/hooks/`. See Setup below.
-- The pre-commit hook runs server checks (lint, format, typecheck, test) and regenerates `openapi/openapi.yaml` when `server/` files change.
+- The pre-commit hook runs server checks (lint, format, typecheck, test), regenerates `openapi/openapi.yaml` when `server/` files change, regenerates API types when `openapi/` changes, and runs mobile checks (lint + typecheck) when `mobile/` files change.
 - The OpenAPI regen step auto-stages the updated spec (`git add openapi/openapi.yaml`), so it's included in the commit automatically — no manual step needed.
 - Hook steps use `run_if_changed` with hash caching (`.git/hooks-cache/`) to skip work when staged content hasn't changed since the last successful run.
 - To add a new cached hook step: write a script in `hooks/`, then add a `run_if_changed` call in `hooks/pre-commit`.
-- OpenAPI spec is the contract between server and iOS app — never edit it directly.
+- OpenAPI spec is the contract between server and mobile app — never edit it directly.
 
 ## Beads (Issue Tracking)
 
@@ -104,4 +104,14 @@ cd server && uv run pytest
 
 # Regenerate OpenAPI spec
 cd server && uv run python scripts/generate_openapi.py
+
+# Mobile app (development build — not Expo Go, native modules require it)
+cd mobile && npm install              # Install dependencies
+cd mobile && npx expo run:ios         # Build and run on iOS simulator
+cd mobile && npx expo run:android     # Build and run on Android emulator
+cd mobile && npx tsc --noEmit         # Type check
+cd mobile && npx expo lint            # Lint
+
+# Regenerate API types from OpenAPI spec
+cd mobile && scripts/generate-api.sh
 ```
