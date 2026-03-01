@@ -41,6 +41,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")'"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   worker:
     build: ./server

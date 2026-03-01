@@ -1,4 +1,5 @@
 import os
+import time
 from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -7,6 +8,7 @@ from typing import Concatenate
 
 import sqlalchemy as sa
 import structlog
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine
 
 from hideandseek.utils import find_server_root
@@ -48,16 +50,24 @@ def current_session() -> Session:
     return _session_var.get()
 
 
-def create_db_and_tables() -> None:
+def create_db_and_tables(*, max_retries: int = 10) -> None:
     import hideandseek.models  # noqa: F401 — registers all tables on metadata
 
     if DATABASE_URL.startswith('sqlite'):
         _db_dir = find_server_root() / 'data'
         _db_dir.mkdir(parents=True, exist_ok=True)
     elif DATABASE_URL.startswith('postgresql'):
-        with engine.connect() as conn:
-            conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
-            conn.commit()
+        for attempt in range(max_retries):
+            try:
+                with engine.connect() as conn:
+                    conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
+                    conn.commit()
+                break
+            except OperationalError:
+                if attempt == max_retries - 1:
+                    raise
+                logger.warning('db_connect_retry', attempt=attempt + 1, max_retries=max_retries)
+                time.sleep(1)
     SQLModel.metadata.create_all(engine)
 
 
