@@ -105,6 +105,12 @@ cd server && uv run pytest
 # Regenerate OpenAPI spec
 cd server && uv run python scripts/generate_openapi.py
 
+# Import Seattle transit data (downloads GTFS feed, filters, deduplicates, writes to DB)
+cd server && uv run python scripts/import_seattle_gtfs.py
+
+# Seed Seattle GameMap (boundary + 5 KCC districts; requires transit data above)
+cd server && uv run python scripts/seed_seattle_map.py
+
 # Mobile app (development build — not Expo Go, native modules require it)
 cd mobile && npm install              # Install dependencies
 cd mobile && npx expo run:ios         # Build and run on iOS simulator

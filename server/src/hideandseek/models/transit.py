@@ -59,7 +59,7 @@ class RouteStop(SQLModel, table=True):
 
     route_id: uuid.UUID = Field(foreign_key='route.id', primary_key=True)
     stop_id: uuid.UUID = Field(foreign_key='stop.id', primary_key=True)
-    sequence: int
+    sequence: int = Field(primary_key=True)
 
     route: Route = Relationship(back_populates='route_stops')
     stop: Stop = Relationship(back_populates='route_stops')

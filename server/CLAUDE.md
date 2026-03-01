@@ -12,6 +12,8 @@ uv run ruff check .        # Lint
 uv run ruff format .       # Format
 uv run pyright             # Type check
 uv run python scripts/generate_openapi.py     # Regenerate OpenAPI spec
+uv run python scripts/import_seattle_gtfs.py  # Import Seattle transit data from GTFS
+uv run python scripts/seed_seattle_map.py    # Seed Seattle GameMap (requires GTFS import first)
 
 # Docker (from repo root)
 docker compose up --build  # Start PostgreSQL + API + Redis + Celery worker (localhost:8000)
@@ -48,6 +50,153 @@ Always verify server changes with **both** automated checks and manual API calls
 
 Manual testing catches wiring and serialization issues that unit tests miss.
 
+## Simulating a Game (curl)
+
+Use Docker for game simulation — it runs real Celery timers (hiding→seeking transitions, auto-answer deadlines). Seed data first:
+
+```bash
+docker compose down -v && docker compose up --build -d
+DATABASE_URL="postgresql+psycopg://hideandseek:hideandseek@localhost:5432/hideandseek" \
+  uv run python scripts/import_seattle_gtfs.py
+DATABASE_URL="postgresql+psycopg://hideandseek:hideandseek@localhost:5432/hideandseek" \
+  uv run python scripts/seed_seattle_map.py
+```
+
+After seeding, restart the API so it picks up the new data: `docker compose restart api`.
+
+### Game lifecycle
+
+```bash
+MAP_ID="<from GET /maps>"
+HOST="aaaaaaaa-0000-0000-0000-000000000001"
+HIDER="aaaaaaaa-0000-0000-0000-000000000002"
+SEEKER="aaaaaaaa-0000-0000-0000-000000000003"
+
+# 1. Create game (host is not a player — just creates the game)
+curl -s -X POST localhost:8000/games \
+  -H "Content-Type: application/json" -H "X-Client-Id: $HOST" \
+  -d "{\"map_id\": \"$MAP_ID\", \"hiding_time_min\": 60}"
+# → note game_id and join_code
+
+# 2. Join as hider and seeker
+#    BUG: role is accepted but ignored (HideAndSeek-33f) — fix roles in DB after joining
+curl -s -X POST localhost:8000/games/join \
+  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
+  -d '{"join_code": "XXXX", "role": "hider", "name": "Alice", "color": "#E74C3C", "device_token": "fake-hider"}'
+curl -s -X POST localhost:8000/games/join \
+  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -d '{"join_code": "XXXX", "role": "seeker", "name": "Bob", "color": "#3498DB", "device_token": "fake-seeker"}'
+
+# Workaround: set roles directly until HideAndSeek-33f is fixed
+docker exec hideandseek-postgres-1 psql -U hideandseek -c \
+  "UPDATE player SET role = 'hider' WHERE client_id = '$HIDER';
+   UPDATE player SET role = 'seeker' WHERE client_id = '$SEEKER';"
+
+# 3. Optionally tweak timing for fast testing
+docker exec hideandseek-postgres-1 psql -U hideandseek -c \
+  "UPDATE game SET timing = '{\"hiding_time_min\": 1, \"location_question_delay_min\": 1}'
+   WHERE id = '<game_id>';"
+
+# 4. Start game (transitions to "hiding", schedules hiding→seeking timer)
+curl -s -X POST localhost:8000/games/<game_id>/start
+
+# 5. Report hider locations during hiding phase
+curl -s -X POST localhost:8000/games/<game_id>/location \
+  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
+  -d '{"coordinates": {"type": "Point", "coordinates": [<lon>, <lat>]}, "timestamp": "<ISO8601>"}'
+# The hider's last location when hiding ends determines their assigned station.
+
+# 6. Wait for hiding timer (check: docker logs hideandseek-worker-1 | grep transition)
+#    Game auto-transitions to "seeking". Hider station is assigned to nearest stop.
+
+# 7. Report seeker location (required before asking questions)
+curl -s -X POST localhost:8000/games/<game_id>/location \
+  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -d '{"coordinates": {"type": "Point", "coordinates": [<lon>, <lat>]}, "timestamp": "<ISO8601>"}'
+```
+
+### Radar question
+
+```bash
+# Ask (seeker). slot_index is into the REMAINING unconsumed slots, not the original
+# template — this is a known bug (HideAndSeek-dq0).
+# Inventory: [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0] (imperial/medium)
+curl -s -X POST localhost:8000/games/<game_id>/questions/radar \
+  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -d '{"location": {"type": "Point", "coordinates": [<lon>, <lat>]}, "slot_index": <N>}'
+# → status: "answerable", schedules auto-answer timer (location_question_delay_min)
+
+# Answer (hider) — uses hider's latest reported location
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
+  -H "X-Client-Id: $HIDER"
+# → answer: "yes" (hider inside radius) or "no" (outside)
+# → auto-answer timer is revoked (check: docker logs hideandseek-worker-1 | grep revoke)
+
+# If hider doesn't answer, auto-answer fires after the timer expires
+# (check: docker logs hideandseek-worker-1 | grep auto_answer)
+```
+
+### Thermometer question
+
+```bash
+# Ask from starting position (seeker). Status starts as "in_progress" (not answerable yet).
+# Inventory: [0.5, 1.0, 5.0, 10.0] (imperial/medium)
+curl -s -X POST localhost:8000/games/<game_id>/questions/thermometer \
+  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -d '{"location": {"type": "Point", "coordinates": [<start_lon>, <start_lat>]}, "slot_index": <N>}'
+
+# Travel, then report new location
+curl -s -X POST localhost:8000/games/<game_id>/location \
+  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -d '{"coordinates": {"type": "Point", "coordinates": [<end_lon>, <end_lat>]}, "timestamp": "<ISO8601>"}'
+
+# Lock in end position (seeker) — transitions to "answerable", starts auto-answer timer
+curl -s -X POST localhost:8000/games/<game_id>/questions/thermometer/<question_id>/lock-in \
+  -H "X-Client-Id: $SEEKER"
+
+# Answer (hider)
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
+  -H "X-Client-Id: $HIDER"
+# → answer: "closer" (hider nearer to end) or "farther" (hider nearer to start)
+```
+
+### Checking results
+
+```bash
+# Question list (any player)
+curl -s localhost:8000/games/<game_id>/questions -H "X-Client-Id: $SEEKER"
+
+# Question detail (hider only — includes hider_location, parameters)
+curl -s localhost:8000/games/<game_id>/questions/<question_id> -H "X-Client-Id: $HIDER"
+
+# Exclusion zones (seeker only — per-question + cumulative total)
+curl -s localhost:8000/games/<game_id>/exclusions -H "X-Client-Id: $SEEKER"
+
+# Candidate stations (seeker only — stops not eliminated by exclusions)
+curl -s localhost:8000/games/<game_id>/candidate-stations -H "X-Client-Id: $SEEKER"
+```
+
+### Useful DB queries
+
+```bash
+# Check game status and timestamps
+docker exec hideandseek-postgres-1 psql -U hideandseek -c \
+  "SELECT status, hiding_started_at, seeking_started_at FROM game WHERE id = '<game_id>';"
+
+# Check hider station assignment
+docker exec hideandseek-postgres-1 psql -U hideandseek -c \
+  "SELECT g.hider_station_id, s.name FROM game g JOIN stop s ON s.id = g.hider_station_id WHERE g.id = '<game_id>';"
+
+# Check location updates
+docker exec hideandseek-postgres-1 psql -U hideandseek -c \
+  "SELECT p.name, p.role, ST_X(lu.coordinates) AS lon, ST_Y(lu.coordinates) AS lat, lu.timestamp
+   FROM location_update lu JOIN player p ON p.id = lu.player_id
+   WHERE p.game_id = '<game_id>' ORDER BY lu.id;"
+
+# Worker logs (timers, auto-answer, push)
+docker logs hideandseek-worker-1 2>&1 | grep -iE 'transition|auto_answer|revoke|push'
+```
+
 ## Project Structure
 
 ```
@@ -56,6 +205,7 @@ src/hideandseek/
   logging.py, middleware.py              # structlog config, ASGI access log middleware
   validators.py, logic.py, resolution.py # Question lifecycle: validate → orchestrate → resolve
   geo.py, conventions.py, exclusion.py   # Distance math, metric/imperial, exclusion zones
+  gtfs.py                                # Reusable GTFS feed parser (pure data, no DB deps)
   config.py, push.py, utils.py          # Push config, APNS service, shared utils
   celery_app.py, celery_config.py       # Celery instance + broker config
   models/                               # SQLModel table models (types, geo_types, transit,
@@ -69,6 +219,8 @@ src/hideandseek/
 tests/                                  # pytest (one file per router + features, geo, resolution,
                                         #   exclusion, conventions)
 scripts/generate_openapi.py             # OpenAPI spec regeneration
+scripts/import_seattle_gtfs.py          # Seattle GTFS transit data import
+scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + districts)
 data/                                   # SQLite DB file (gitignored)
 ```
 
