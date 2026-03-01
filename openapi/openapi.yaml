@@ -1060,6 +1060,20 @@ components:
           title: Device Token Environment
           description: 'APNS environment: "production" or "sandbox".'
           default: production
+        hiding_time_min:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Hiding Time Min
+          description: Override hiding phase duration. Defaults to map size.
+        base_question_delay_min:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Base Question Delay Min
+          description: Override auto-answer delay. Defaults to 5 minutes.
       type: object
       required:
       - map_id
@@ -1348,11 +1362,14 @@ components:
           - type: 'null'
           title: Join Code
           description: 4-character code for joining. Null after game ends.
-        timing:
-          additionalProperties: true
-          type: object
-          title: Timing
-          description: 'TimingRules: hiding_time_min, rest_periods, etc.'
+        hiding_time_min:
+          type: integer
+          title: Hiding Time Min
+          description: Hiding phase duration in minutes.
+        base_question_delay_min:
+          type: integer
+          title: Base Question Delay Min
+          description: Auto-answer delay in minutes.
         inventory:
           $ref: '#/components/schemas/InventoryResponse'
           description: Question inventory (slots with consumed state + categories).
@@ -1386,7 +1403,8 @@ components:
       - status
       - convention
       - join_code
-      - timing
+      - hiding_time_min
+      - base_question_delay_min
       - inventory
       - players
       - created_at
@@ -1681,6 +1699,18 @@ components:
           type: object
           title: Default Inventory
           description: Default question inventory for games on this map.
+        default_hiding_time_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Hiding Time Min
+          description: Map-level hiding phase duration override (minutes).
+        default_base_question_delay_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Base Question Delay Min
+          description: Map-level auto-answer delay override (minutes).
         notes:
           anyOf:
           - type: string

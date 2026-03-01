@@ -70,7 +70,7 @@ router = APIRouter(
 
 
 def _schedule_auto_answer(game: Game, question_id: uuid.UUID) -> None:
-    delay_minutes = game.timing.get('location_question_delay_min', 5)
+    delay_minutes = game.base_question_delay_min
     auto_answer_question.apply_async(  # type: ignore[attr-defined]
         args=[str(question_id)],
         countdown=delay_minutes * 60,

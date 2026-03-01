@@ -75,6 +75,41 @@ _HIDING_ZONE_IMPERIAL = {
 }
 
 
+_HIDING_TIME_MIN = {
+    MapSize.small: 30,
+    MapSize.medium: 60,
+    MapSize.large: 180,
+}
+
+
+def get_default_hiding_time_min(size: MapSize) -> int:
+    """Return the default hiding phase duration in minutes.
+
+    Determined by map size (not convention). Raises ValueError for special-size
+    maps (they must provide an override).
+    """
+    if size == MapSize.special:
+        raise ValueError('special-size maps must provide a hiding_time_min override.')
+    return _HIDING_TIME_MIN[size]
+
+
+_DEFAULT_QUESTION_DELAY_MIN = 5
+
+
+def resolve_hiding_time_min(
+    *, request_override: int | None, map_default: int | None, size: MapSize
+) -> int:
+    """Resolve hiding time with three-level fallback: request → map → code default."""
+    return request_override or map_default or get_default_hiding_time_min(size)
+
+
+def resolve_base_question_delay_min(
+    *, request_override: int | None, map_default: int | None
+) -> int:
+    """Resolve question delay with three-level fallback: request → map → code default."""
+    return request_override or map_default or _DEFAULT_QUESTION_DELAY_MIN
+
+
 def get_default_hiding_zone_radius(convention: DistanceConvention, size: MapSize) -> float:
     """Return the default hiding zone radius in convention units.
 

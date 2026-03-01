@@ -63,6 +63,12 @@ class MapDetail(BaseModel):
     districts: list = Field(description='District boundaries with id, name, class, and geometry.')
     district_classes: list = Field(description='District class definitions (tier + label).')
     default_inventory: dict = Field(description='Default question inventory for games on this map.')
+    default_hiding_time_min: int | None = Field(
+        default=None, description='Map-level hiding phase duration override (minutes).'
+    )
+    default_base_question_delay_min: int | None = Field(
+        default=None, description='Map-level auto-answer delay override (minutes).'
+    )
     notes: str | None
 
     @staticmethod
@@ -76,6 +82,8 @@ class MapDetail(BaseModel):
             districts=gm.districts,
             district_classes=gm.district_classes,
             default_inventory=gm.default_inventory,
+            default_hiding_time_min=gm.default_hiding_time_min,
+            default_base_question_delay_min=gm.default_base_question_delay_min,
             notes=gm.notes,
         )
 
@@ -152,7 +160,8 @@ class GameResponse(BaseModel):
     status: GameStatus
     convention: str = Field(description='Distance convention: "metric" or "imperial".')
     join_code: str | None = Field(description='4-character code for joining. Null after game ends.')
-    timing: dict = Field(description='TimingRules: hiding_time_min, rest_periods, etc.')
+    hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
+    base_question_delay_min: int = Field(description='Auto-answer delay in minutes.')
     inventory: InventoryResponse = Field(
         description='Question inventory (slots with consumed state + categories).'
     )
@@ -173,7 +182,8 @@ class GameResponse(BaseModel):
             status=game.status,
             convention=game.game_map.convention,
             join_code=game.join_code,
-            timing=game.timing,
+            hiding_time_min=game.hiding_time_min,
+            base_question_delay_min=game.base_question_delay_min,
             inventory=InventoryResponse.from_slots(game.inventory_slots, categories=categories),
             players=[PlayerResponse.from_model(p) for p in game.players],
             created_at=game.created_at,

@@ -98,18 +98,6 @@ class PushEventType(StrEnum):
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────
 
 
-class RestPeriod(BaseModel):
-    start: str  # HH:MM time string
-    end: str
-
-
-class TimingRules(BaseModel):
-    hiding_time_min: int
-    location_question_delay_min: int
-    move_hide_time_min: int
-    rest_periods: list[RestPeriod] = []
-
-
 class DistrictClass(BaseModel):
     district_class: int  # tier level
     label: str

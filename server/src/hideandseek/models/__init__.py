@@ -18,10 +18,8 @@ from hideandseek.models.types import (
     PushEventType,
     QuestionStatus,
     QuestionType,
-    RestPeriod,
     RouteType,
     SlotType,
-    TimingRules,
 )
 
 __all__ = [
@@ -55,6 +53,4 @@ __all__ = [
     'SlotType',
     # Value objects
     'DistrictClass',
-    'RestPeriod',
-    'TimingRules',
 ]

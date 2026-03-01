@@ -75,7 +75,7 @@ SEEKER="aaaaaaaa-0000-0000-0000-000000000003"
 # 1. Create game (host is not a player — just creates the game)
 curl -s -X POST localhost:8000/games \
   -H "Content-Type: application/json" -H "X-Client-Id: $HOST" \
-  -d "{\"map_id\": \"$MAP_ID\", \"hiding_time_min\": 60}"
+  -d "{\"map_id\": \"$MAP_ID\"}"
 # → note game_id and join_code
 
 # 2. Join as hider and seeker
@@ -88,7 +88,7 @@ curl -s -X POST localhost:8000/games/join \
 
 # 3. Optionally tweak timing for fast testing
 docker exec hideandseek-postgres-1 psql -U hideandseek -c \
-  "UPDATE game SET timing = '{\"hiding_time_min\": 1, \"location_question_delay_min\": 1}'
+  "UPDATE game SET hiding_time_min = 1, base_question_delay_min = 1
    WHERE id = '<game_id>';"
 
 # 4. Start game (transitions to "hiding", schedules hiding→seeking timer)
@@ -283,7 +283,7 @@ The `GameStatus` enum reflects this. The endgame is a client-side lens over the 
 - SQLModel for all table models (wraps SQLAlchemy + Pydantic).
 - **Do NOT use `from __future__ import annotations` in model files or `db.py`** — it breaks SQLModel relationship resolution and PEP 695 generics. Use quoted string forward references instead (e.g., `game_map: 'GameMap' = Relationship(...)`).
 - Geometry uses the three-layer pattern (see Architecture Patterns): GeoJSON at API, shapely in Python, native spatial in DB. System dep: `brew install libspatialite` (auto-detected; `SPATIALITE_LIBRARY_PATH` override if non-standard).
-- Value objects (TimingRules, etc.) stored as JSON columns on their parent table. Game inventory and question parameters use proper relational tables (see Architecture Patterns).
+- Game timing uses two int columns on `Game`: `hiding_time_min` and `base_question_delay_min`. Resolved at game creation with a three-level fallback: request override → map default → code default. Code defaults: `get_default_hiding_time_min(size)` (small=30, medium=60, large=180) and 5 min for question delay. `GameMap` has optional `default_hiding_time_min` and `default_base_question_delay_min` columns for per-map overrides. Game inventory and question parameters use proper relational tables (see Architecture Patterns). `DistrictClass` is stored as a JSON column value object.
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int).
 - Relationships use bottom-of-file imports and quoted forward references to avoid circular dependencies.
 - Enums are `StrEnum` — stored as VARCHAR, human-readable in DB.

@@ -106,12 +106,8 @@ def create_game(session: Session, **overrides: Any) -> Game:
         'host_client_id': uuid.uuid4(),
         'join_code': overrides.pop('join_code', uuid.uuid4().hex[:4].upper()),
         'status': GameStatus.lobby,
-        'timing': {
-            'hiding_time_min': 30,
-            'location_question_delay_min': 5,
-            'move_hide_time_min': 15,
-            'rest_periods': [],
-        },
+        'hiding_time_min': 60,
+        'base_question_delay_min': 5,
     }
     defaults.update(overrides)
     game = Game(**defaults)

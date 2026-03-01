@@ -21,6 +21,8 @@ class GameMap(SQLModel, table=True):
     districts: list = Field(default_factory=list, sa_type=sa.JSON)
     district_classes: list = Field(default_factory=list, sa_type=sa.JSON)
     default_inventory: dict = Field(default_factory=dict, sa_type=sa.JSON)
+    default_hiding_time_min: int | None = None
+    default_base_question_delay_min: int | None = None
     hiding_zone_radius: float | None = None
     notes: str | None = None
 

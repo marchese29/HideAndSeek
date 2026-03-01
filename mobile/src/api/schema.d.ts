@@ -620,6 +620,16 @@ export interface components {
              * @default production
              */
             device_token_environment: string;
+            /**
+             * Hiding Time Min
+             * @description Override hiding phase duration. Defaults to map size.
+             */
+            hiding_time_min?: number | null;
+            /**
+             * Base Question Delay Min
+             * @description Override auto-answer delay. Defaults to 5 minutes.
+             */
+            base_question_delay_min?: number | null;
         };
         /**
          * EffectiveMapResponse
@@ -777,12 +787,15 @@ export interface components {
              */
             join_code: string | null;
             /**
-             * Timing
-             * @description TimingRules: hiding_time_min, rest_periods, etc.
+             * Hiding Time Min
+             * @description Hiding phase duration in minutes.
              */
-            timing: {
-                [key: string]: unknown;
-            };
+            hiding_time_min: number;
+            /**
+             * Base Question Delay Min
+             * @description Auto-answer delay in minutes.
+             */
+            base_question_delay_min: number;
             /** @description Question inventory (slots with consumed state + categories). */
             inventory: components["schemas"]["InventoryResponse"];
             /** Players */
@@ -1023,6 +1036,16 @@ export interface components {
             default_inventory: {
                 [key: string]: unknown;
             };
+            /**
+             * Default Hiding Time Min
+             * @description Map-level hiding phase duration override (minutes).
+             */
+            default_hiding_time_min?: number | null;
+            /**
+             * Default Base Question Delay Min
+             * @description Map-level auto-answer delay override (minutes).
+             */
+            default_base_question_delay_min?: number | null;
             /** Notes */
             notes: string | null;
         };

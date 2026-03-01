@@ -7,6 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from hideandseek.celery_app import app as celery_app
+from hideandseek.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
 from hideandseek.db import get_session
 from hideandseek.dependencies import get_client_id, get_game, get_hider_in_game, get_seeker_in_game
 from hideandseek.logic import get_candidate_stations
@@ -71,10 +72,21 @@ def create_game(
             environment=body.device_token_environment,
         )
 
+    hiding_time = resolve_hiding_time_min(
+        request_override=body.hiding_time_min,
+        map_default=game_map.default_hiding_time_min,
+        size=game_map.size,
+    )
+    question_delay = resolve_base_question_delay_min(
+        request_override=body.base_question_delay_min,
+        map_default=game_map.default_base_question_delay_min,
+    )
+
     game = query_create_game(
         map_id=game_map.id,
         host_client_id=client_id,
-        timing={},  # TODO: copy from map default_timing when the field exists
+        hiding_time_min=hiding_time,
+        base_question_delay_min=question_delay,
         default_inventory=game_map.default_inventory,
         convention=game_map.convention,
         size=game_map.size,
@@ -171,7 +183,7 @@ def start_game(
     game = update_game_status(game, GameStatus.hiding)
 
     # Schedule hiding→seeking transition
-    hiding_minutes = game.timing.get('hiding_time_min', 30)
+    hiding_minutes = game.hiding_time_min
     transition_hiding_to_seeking.apply_async(  # type: ignore[attr-defined]
         args=[str(game.id)],
         countdown=hiding_minutes * 60,

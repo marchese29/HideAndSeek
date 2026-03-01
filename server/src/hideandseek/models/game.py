@@ -16,7 +16,8 @@ class Game(SQLModel, table=True):
     host_client_id: uuid.UUID
     status: GameStatus = GameStatus.lobby
     join_code: str | None = Field(default=None, sa_column_kwargs={'unique': True, 'index': True})
-    timing: dict = Field(default_factory=dict, sa_type=sa.JSON)  # TimingRules
+    hiding_time_min: int = 60
+    base_question_delay_min: int = 5
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     hiding_started_at: datetime | None = None
     seeking_started_at: datetime | None = None

@@ -33,6 +33,12 @@ class CreateGameRequest(BaseModel):
         default='production',
         description='APNS environment: "production" or "sandbox".',
     )
+    hiding_time_min: int | None = Field(
+        default=None, ge=1, description='Override hiding phase duration. Defaults to map size.'
+    )
+    base_question_delay_min: int | None = Field(
+        default=None, ge=1, description='Override auto-answer delay. Defaults to 5 minutes.'
+    )
 
 
 class JoinGameRequest(BaseModel):
