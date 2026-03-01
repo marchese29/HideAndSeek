@@ -20,7 +20,6 @@ class GameMap(SQLModel, table=True):
     boundary: Polygon = Field(sa_column=sa.Column(ShapelyGeometry('POLYGON', srid=4326)))
     districts: list = Field(default_factory=list, sa_type=sa.JSON)
     district_classes: list = Field(default_factory=list, sa_type=sa.JSON)
-    feature_classes: list = Field(default_factory=list, sa_type=sa.JSON)
     default_inventory: dict = Field(default_factory=dict, sa_type=sa.JSON)
     hiding_zone_radius: float | None = None
     notes: str | None = None

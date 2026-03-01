@@ -85,6 +85,30 @@ def test_hider_sees_seekers(client: TestClient, session: Session):
     assert players[0]['name'] == 'Seeker'
 
 
+def test_hider_sees_other_hiders(client: TestClient, session: Session):
+    game = create_game(session, status=GameStatus.seeking)
+    hider1 = create_player(session, game.id, name='Hider1', role=PlayerRole.hider)
+    hider2 = create_player(session, game.id, name='Hider2', role=PlayerRole.hider)
+
+    # hider2 reports
+    client.post(
+        f'/games/{game.id}/location',
+        json={'coordinates': _point(0.1, 51.5), 'timestamp': '2026-02-11T10:00:00Z'},
+        headers=_headers(hider2.client_id),
+    )
+
+    # hider1 reports and should see hider2
+    resp = client.post(
+        f'/games/{game.id}/location',
+        json={'coordinates': _point(-0.1, 51.5), 'timestamp': '2026-02-11T10:01:00Z'},
+        headers=_headers(hider1.client_id),
+    )
+    assert resp.status_code == 200
+    players = resp.json()['players']
+    assert len(players) == 1
+    assert players[0]['name'] == 'Hider2'
+
+
 def test_seeker_does_not_see_hider(client: TestClient, session: Session):
     game = create_game(session, status=GameStatus.seeking)
     hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)

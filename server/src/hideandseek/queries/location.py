@@ -49,8 +49,8 @@ class VisiblePlayerData:
 def get_visible_players(session: Session, game: Game, caller: Player) -> list[VisiblePlayerData]:
     """Return the latest location of each player visible to the caller.
 
-    Both hiders and seekers see all seekers (except themselves).
-    Hiders are never visible during active gameplay.
+    Hiders see everyone (all hiders + all seekers) except themselves.
+    Seekers see other seekers only — hiders are hidden from seekers.
     """
     # Subquery: latest location update per player in this game
     latest_sq = (
@@ -67,11 +67,12 @@ def get_visible_players(session: Session, game: Game, caller: Player) -> list[Vi
         select(LocationUpdate, Player)
         .join(latest_sq, LocationUpdate.id == latest_sq.c.max_id)  # type: ignore[arg-type]
         .join(Player, LocationUpdate.player_id == Player.id)  # type: ignore[arg-type]
-        .where(
-            Player.role == PlayerRole.seeker,
-            Player.id != caller.id,
-        )
+        .where(Player.id != caller.id)
     )
+
+    # Seekers can only see other seekers
+    if caller.role == PlayerRole.seeker:
+        stmt = stmt.where(Player.role == PlayerRole.seeker)
 
     results: list[VisiblePlayerData] = []
     for lu, player in session.exec(stmt).all():

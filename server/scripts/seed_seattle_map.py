@@ -10,15 +10,18 @@ Usage:
 from __future__ import annotations
 
 import sys
+from itertools import combinations
 
 from shapely.geometry import Polygon
+from shapely.geometry.base import BaseGeometry
 from sqlmodel import select
 
 from hideandseek.conventions import get_default_inventory
 from hideandseek.db import create_db_and_tables, current_session, session_scope
 from hideandseek.models.game_map import GameMap
+from hideandseek.models.map_feature import GameMapFeature, MapFeature
 from hideandseek.models.transit import TransitDataset
-from hideandseek.models.types import DistanceConvention, MapSize
+from hideandseek.models.types import DistanceConvention, FeatureCategory, MapSize
 
 # ---------------------------------------------------------------------------
 # Polygon coordinates extracted from KML (lon, lat pairs)
@@ -608,6 +611,19 @@ def main() -> None:
     convention = DistanceConvention.imperial
     size = MapSize.medium
 
+    # Compute district borders (shared edges between adjacent district polygons)
+    district_polygons = [(d['id'], d['name'], Polygon(d['coords'])) for d in DISTRICTS]
+    borders: list[tuple[str, str, BaseGeometry]] = []
+    for (id_a, name_a, poly_a), (id_b, name_b, poly_b) in combinations(district_polygons, 2):
+        shared = poly_a.boundary.intersection(poly_b.boundary)
+        if shared.is_empty or shared.geom_type == 'Point':
+            continue
+        stable_id = f'{id_a}--{id_b}'
+        name = f'{name_a} / {name_b} border'
+        borders.append((stable_id, name, shared))
+
+    print(f'  Computed {len(borders)} district borders')
+
     # Create the GameMap
     with session_scope() as session:
         game_map = GameMap(
@@ -623,6 +639,18 @@ def main() -> None:
         session.add(game_map)
         session.flush()
 
+        # Create MapFeature + GameMapFeature for each district border
+        for stable_id, name, geom in borders:
+            feature = MapFeature(
+                category=FeatureCategory.admin_division_border,
+                stable_id=stable_id,
+                name=name,
+                geometry=geom,
+            )
+            session.add(feature)
+            session.flush()
+            session.add(GameMapFeature(game_map_id=game_map.id, map_feature_id=feature.id))
+
         map_name = game_map.name
         map_id = game_map.id
 
@@ -630,6 +658,7 @@ def main() -> None:
     print(f'  Size: {size.value}, Convention: {convention.value}')
     print(f'  Boundary: {len(BOUNDARY_COORDS)} points')
     print(f'  Districts: {len(districts)}')
+    print(f'  District border features: {len(borders)}')
 
 
 if __name__ == '__main__':
