@@ -47,20 +47,17 @@ The effective hiding zone radius is: `game.hiding_zone_radius_override ?? game_m
 
 ## Station Selection
 
-When the hiding timer expires and the game transitions from `hiding` to `seeking`, the server determines which transit stop the hider is at:
+> **Superseded** by `hider-station-election.md` — voluntary election during hiding,
+> ambiguity handling at transition, and fallback resolution cascade.
 
-1. Look up the hider's latest `LocationUpdate`.
-2. Find the nearest playable stop (filtered by the map's boundary and exclusions).
-3. That stop is the hider's station — no confirmation needed.
-
-The hider should be near their chosen station when the timer fires. If they're equidistant between two, the closest one wins. No ambiguity resolution mechanic — keeping it simple avoids a state where the game proceeds without a known hiding zone.
-
-The hider can arrive at their spot early, but this is invisible to seekers. Everyone waits for the full hiding timer regardless.
+The original design (nearest-stop auto-assignment, no ambiguity) is replaced by a richer
+station election flow. See the dedicated design doc for full details.
 
 ### Data model
 
-`Game` gains:
-- `hider_station_id` (UUID, FK → Stop) — set when the hiding timer fires and the game transitions to `seeking`. Non-nullable after that point.
+`Game` has:
+- `hider_station_id` (UUID, FK → Stop) — set when the hider elects or the system assigns.
+- `station_election_status` (enum) — `pending | elected | auto_assigned | ambiguous`.
 - `hiding_zone_radius_override` (float?) — see Hiding Zone section above.
 
 The hiding zone geometry (circle around the station at the appropriate radius) is derived at query time using PostGIS geography casting — `ST_Buffer(coordinates::geography, radius_meters)::geometry` — which produces an accurate metric circle at any latitude without needing a Python-side projection. Not stored.
