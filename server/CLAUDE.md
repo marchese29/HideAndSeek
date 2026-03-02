@@ -124,11 +124,13 @@ curl -s -X POST localhost:8000/games/<game_id>/location \
 ### Radar question
 
 ```bash
-# Ask (seeker). slot_index refers to the original inventory template position (stable).
-# Inventory: [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0] (imperial/medium)
+# Ask (seeker). Slots are re-askable (ask_count increments each time).
+# Inventory: [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, custom] (imperial/medium)
+# For the custom slot (distance=null), pass custom_distance in the request.
 curl -s -X POST localhost:8000/games/<game_id>/questions/radar \
   -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
   -d '{"location": {"type": "Point", "coordinates": [<lon>, <lat>]}, "slot_index": <N>}'
+# For custom slot: "slot_index": 9, "custom_distance": 3.0
 # → status: "answerable", schedules auto-answer timer (location_question_delay_min)
 
 # Answer (hider) — uses hider's latest reported location
@@ -145,7 +147,8 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
 
 ```bash
 # Ask from starting position (seeker). Status starts as "in_progress" (not answerable yet).
-# Inventory: [0.5, 1.0, 5.0, 10.0] (imperial/medium)
+# Inventory: [0.5, 1.0, 5.0, 10.0, custom] (imperial/medium)
+# For the custom slot (distance=null), pass custom_distance in the request.
 curl -s -X POST localhost:8000/games/<game_id>/questions/thermometer \
   -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
   -d '{"location": {"type": "Point", "coordinates": [<start_lon>, <start_lat>]}, "slot_index": <N>}'
@@ -249,7 +252,7 @@ data/                                   # SQLite DB file (gitignored)
 - **Background jobs (Celery + Redis)**: All push delivery and game timers go through Celery tasks. Broker resolution: (1) `CELERY_BROKER_URL` env var if set, (2) auto-detect Redis on `localhost:6379`, (3) eager mode (tasks run synchronously in-process). Set `CELERY_BROKER_URL=''` to force eager mode when Redis is running. Routers call `.delay()` or `.apply_async()` instead of `BackgroundTasks`. Worker tasks use `session_scope()` to get a DB session with ContextVar — all `@db_read`/`@db_write` query functions work naturally inside the `with session_scope():` block.
 - **Task ID convention**: Deterministic IDs (`hiding_timer:{game_id}`, `answer_deadline:{question_id}`) so the API can revoke tasks without storing IDs in the DB.
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). All push delivery goes through the `send_push` Celery task (with retry). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
-- **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_inventory_slot`, `create_map_feature`, `create_game_map_feature`) create test data with sensible defaults and accept `**overrides`. `create_game` automatically creates `InventorySlot` rows from the default template.
+- **Test fixtures**: The `session` fixture sets `_session_var` so direct query calls in tests work without passing session. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_inventory_slot`, `create_map_feature`, `create_game_map_feature`) create test data with sensible defaults and accept `**overrides`. `create_game` automatically creates all `InventorySlot` rows — radar/thermometer from the default template, plus matching/measuring from map feature categories.
 - **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
 - **Geometry — three layers**: Geometry flows through three representations:
   - **API boundary** — GeoJSON via `geojson-pydantic` types (`Point`, `Polygon`, `LineString`). Requests accept GeoJSON; responses return GeoJSON.
@@ -258,29 +261,32 @@ data/                                   # SQLite DB file (gitignored)
 
   Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column type bridges Python↔DB automatically.
 - **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic.py` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic.py`.
-- **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All accept seeker `location` in the request body, which is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer and list endpoints remain unified.
+- **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All use a unified `AskQuestionRequest` body (`slot_index`, `location`, optional `custom_distance`). The URL path determines `question_type`; `slot_index` identifies the inventory slot. Seeker `location` is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer and list endpoints remain unified.
 - **Role-gated endpoint split**: Endpoints are split by role (see `design/game-state-split.md`). Principles: role = access control only (determines *whether* you can call an endpoint, never *what* you get back), fixed response shapes (no conditional field nulling), default-deny on shared endpoints. The split:
-  - **Shared** (any player): `GET /games/{id}` (slim game state with static inventory template — no IDs, no consumed flags, no `hider_station_id`), `GET /games/{id}/questions` (whitelist summary — no parameters, locations, or geometry).
+  - **Shared** (any player): `GET /games/{id}` (slim game state with inventory — slots grouped by type with ask counts, no `hider_station_id`), `GET /games/{id}/questions` (whitelist summary — no parameters, locations, or geometry).
   - **Hider-only** (403 for seekers): `GET /games/{id}/hider-station` (assigned station UUID), `GET /games/{id}/questions/{qid}` (full question detail minus exclusion geometry).
   - **Seeker-only** (403 for hiders): `GET /games/{id}/exclusions` (per-question exclusion geometry + cumulative total), `GET /games/{id}/endgame-exclusions`, `GET /games/{id}/candidate-stations`.
   - **Ask endpoints** (radar/thermometer/matching/measuring): return `AskQuestionResponse` (slim — only fields meaningful at ask time, no answer-time fields).
   - **Answer/lock-in endpoints**: return `QuestionDetailResponse` (full detail minus exclusions).
-  - Response schemas: `QuestionSummaryResponse` (shared list), `AskQuestionResponse` (ask endpoints), `QuestionDetailResponse` (hider detail + answer/lock-in), `HiderStationResponse`, `ExclusionsResponse`, `InventoryResponse` (slots with consumed state + categories).
-  - `GET /games/{id}/inventory`: lightweight inventory check — returns `InventoryResponse` without loading the full game map. Slots include `slot_index` (original template position), `distance`, and `consumed` boolean.
-- **Relational inventory model**: Game inventory uses proper relational tables instead of JSON:
-  - **`InventorySlot`** table: pre-populated from the map's `default_inventory` template at game creation. Slots are consumed by setting `consumed_at` (soft-delete). `Game.inventory_slots` relationship (ordered by `slot_index`).
-  - **`CategoryUsage`** table: created when a matching/measuring question is asked. Unique constraint on `(game_id, question_type, category, feature_class)`. `Game.category_usages` relationship.
+  - Response schemas: `QuestionSummaryResponse` (shared list), `AskQuestionResponse` (ask endpoints), `QuestionDetailResponse` (hider detail + answer/lock-in), `HiderStationResponse`, `ExclusionsResponse`, `InventoryResponse` (slots grouped by type with ask counts).
+  - `GET /games/{id}/inventory`: lightweight inventory check — returns `InventoryResponse` without loading the full game map. Slots grouped by type (radar, thermometer, matching, measuring), each with `slot_index`, `distance`, `ask_count`, and optional `category`/`feature_class`.
+- **Unified inventory model**: All question types share a single `InventorySlot` table, pre-populated at game creation:
+  - Radar/thermometer slots: created from the map's `default_inventory` template. Have `distance` (or `None` for custom).
+  - Matching/measuring slots: created from map feature categories (`get_map_feature_categories`). Have `category` and optional `feature_class`. Categories valid for both types get a slot under each.
+  - Slots are **re-askable** — `ask_count` increments on each use instead of consuming the slot. The server never gates on usage count.
+  - `Game.inventory_slots` relationship. Ordered by `(question_type, slot_index)`.
 - **Per-type question parameters**: Question parameters use one-to-one relational tables instead of a JSON column:
   - `RadarParams` (`radius: float`) — one-to-one via `Question.radar_params`
   - `ThermometerParams` (`min_travel: float`) — one-to-one via `Question.thermometer_params`
   - `FeatureQuestionParams` (category, source, `seeker_distance`/`hider_distance`, seeker/hider resolution) — one-to-one via `Question.feature_params`, shared by matching and measuring
   - All distance values are stored in **convention units** (meters for metric maps, miles for imperial). Conversion to meters for geo math happens in `logic.py` via `to_meters()`/`from_meters()`.
   - Seeker resolution fields are **non-optional** — if the seeker's feature can't be resolved, the ask endpoint returns 422. Hider resolution fields are populated at answer time.
-- **Question types**: Four types with two inventory models:
-  - **Slot-based** (radar, thermometer): consume an `InventorySlot` row. Radar → `answerable` immediately; thermometer → `in_progress` until seeker locks in.
-  - **Category-based** (matching, measuring): create a `CategoryUsage` row. Both → `answerable` immediately. Available categories are inclusion-based: derived from map features (via `GameMapFeature`) minus existing `CategoryUsage` rows.
-  - **Matching**: resolves each player's nearest feature (or containing feature for `CONTAINMENT_CATEGORIES`); answer is `"yes"` (same `stable_id`), `"no"` (different), or `"null"` (hider unresolvable).
-  - **Measuring**: resolves each player's distance to nearest feature; answer is `"closer"` (seeker closer), `"farther"`, or `"null"` (hider unresolvable).
+- **Question types**: Four types, all using `InventorySlot`:
+  - **Radar**: uses slot with `distance`. Radar → `answerable` immediately.
+  - **Thermometer**: uses slot with `distance`. Thermometer → `in_progress` until seeker locks in.
+  - **Matching**: uses slot with `category` (and optional `feature_class`). Resolves each player's nearest feature (or containing feature for `CONTAINMENT_CATEGORIES`); answer is `"yes"` (same `stable_id`), `"no"` (different), or `"null"` (hider unresolvable). → `answerable` immediately.
+  - **Measuring**: uses slot with `category`. Resolves each player's distance to nearest feature; answer is `"closer"` (seeker closer), `"farther"`, or `"null"` (hider unresolvable). → `answerable` immediately.
+  - All types are re-askable — `ask_count` tracks usage for client display (e.g., multiplier indicators).
 - **Geo math**: `geo.py` provides pure distance functions: `distance(point_a, point_b)` for shapely Points (geodesic via pyproj) and `distance_to_feature(player, geometry)` for distance to any geometry. Answer computation and exclusion zone generation live in `logic.py`, which delegates to `exclusion.py` for the geometry. Each answered question has an `exclusion` (this question's zone) and `total_exclusion` (cumulative union across all answered questions in the game).
 
 ## Game States

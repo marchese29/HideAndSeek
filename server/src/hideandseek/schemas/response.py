@@ -21,7 +21,6 @@ from hideandseek.models.types import (
     PlayerRole,
     QuestionStatus,
     QuestionType,
-    SlotType,
     StationElectionStatus,
 )
 
@@ -114,40 +113,49 @@ class SlotResponse(BaseModel):
 
     slot_index: int = Field(description='Original template position (stable across the game).')
     distance: float | None = Field(
-        description='Preset distance in convention units, or null for custom.'
+        default=None,
+        description='Preset distance or null for custom. Radar/thermometer only.',
     )
-    consumed: bool = Field(description='Whether this slot has been used.')
+    category: str | None = Field(
+        default=None, description='Feature category. Matching/measuring only.'
+    )
+    feature_class: int | None = Field(
+        default=None, description='Feature class tier. Classed categories only.'
+    )
+    ask_count: int = Field(description='Number of times this slot has been used.')
 
 
 class InventoryResponse(BaseModel):
-    """Question inventory — slots with consumed state and available categories."""
+    """Question inventory — all slots grouped by question type."""
 
     radar_slots: list[SlotResponse] = Field(description='Radar question slots.')
     thermometer_slots: list[SlotResponse] = Field(description='Thermometer question slots.')
-    categories: list[str] = Field(description='Available question categories.')
+    matching_slots: list[SlotResponse] = Field(description='Matching question slots.')
+    measuring_slots: list[SlotResponse] = Field(description='Measuring question slots.')
 
     @staticmethod
-    def from_slots(
-        slots: Sequence[InventorySlotModel], *, categories: list[str]
-    ) -> InventoryResponse:
-        radar_slots = [
-            SlotResponse(
-                slot_index=s.slot_index, distance=s.distance, consumed=s.consumed_at is not None
+    def from_slots(slots: Sequence[InventorySlotModel]) -> InventoryResponse:
+        groups: dict[str, list[SlotResponse]] = {
+            'radar': [],
+            'thermometer': [],
+            'matching': [],
+            'measuring': [],
+        }
+        for s in slots:
+            groups[s.question_type].append(
+                SlotResponse(
+                    slot_index=s.slot_index,
+                    distance=s.distance,
+                    category=str(s.category) if s.category else None,
+                    feature_class=s.feature_class,
+                    ask_count=s.ask_count,
+                )
             )
-            for s in slots
-            if s.slot_type == SlotType.radar
-        ]
-        thermometer_slots = [
-            SlotResponse(
-                slot_index=s.slot_index, distance=s.distance, consumed=s.consumed_at is not None
-            )
-            for s in slots
-            if s.slot_type == SlotType.thermometer
-        ]
         return InventoryResponse(
-            radar_slots=radar_slots,
-            thermometer_slots=thermometer_slots,
-            categories=categories,
+            radar_slots=groups['radar'],
+            thermometer_slots=groups['thermometer'],
+            matching_slots=groups['matching'],
+            measuring_slots=groups['measuring'],
         )
 
 
@@ -167,7 +175,7 @@ class GameResponse(BaseModel):
     hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
     base_question_delay_min: int = Field(description='Auto-answer delay in minutes.')
     inventory: InventoryResponse = Field(
-        description='Question inventory (slots with consumed state + categories).'
+        description='Question inventory — all slots grouped by type.'
     )
     players: list[PlayerResponse]
     created_at: datetime
@@ -179,7 +187,7 @@ class GameResponse(BaseModel):
     )
 
     @staticmethod
-    def from_model(game: GameModel, *, categories: list[str]) -> GameResponse:
+    def from_model(game: GameModel) -> GameResponse:
         return GameResponse(
             id=game.id,
             map_id=game.map_id,
@@ -188,7 +196,7 @@ class GameResponse(BaseModel):
             join_code=game.join_code,
             hiding_time_min=game.hiding_time_min,
             base_question_delay_min=game.base_question_delay_min,
-            inventory=InventoryResponse.from_slots(game.inventory_slots, categories=categories),
+            inventory=InventoryResponse.from_slots(game.inventory_slots),
             players=[PlayerResponse.from_model(p) for p in game.players],
             created_at=game.created_at,
             hiding_started_at=game.hiding_started_at,
@@ -425,6 +433,7 @@ class QuestionSummaryResponse(BaseModel):
     sequence: int = Field(description='1-based chronological order within the game.')
     question_type: QuestionType
     status: QuestionStatus
+    ask_count: int = Field(description='Which attempt this was (1 = first ask).')
     asked_by: uuid.UUID = Field(description='Player ID of the seeker who asked.')
     asked_at: datetime
     answered_at: datetime | None
@@ -437,6 +446,7 @@ class QuestionSummaryResponse(BaseModel):
             sequence=question.sequence,
             question_type=question.question_type,
             status=question.status,
+            ask_count=question.ask_count,
             asked_by=question.asked_by,
             asked_at=question.asked_at,
             answered_at=question.answered_at,
@@ -455,6 +465,7 @@ class AskQuestionResponse(BaseModel):
     sequence: int = Field(description='1-based chronological order within the game.')
     question_type: QuestionType
     status: QuestionStatus
+    ask_count: int = Field(description='Which attempt this was (1 = first ask).')
     parameters: QuestionParamsResponse = Field(description='Type-specific question parameters.')
     asked_by: uuid.UUID = Field(description='Player ID of the seeker who asked.')
     asked_at: datetime
@@ -470,6 +481,7 @@ class AskQuestionResponse(BaseModel):
             sequence=question.sequence,
             question_type=question.question_type,
             status=question.status,
+            ask_count=question.ask_count,
             parameters=_build_question_params(question),
             asked_by=question.asked_by,
             asked_at=question.asked_at,
@@ -488,6 +500,7 @@ class QuestionDetailResponse(BaseModel):
     sequence: int = Field(description='1-based chronological order within the game.')
     question_type: QuestionType
     status: QuestionStatus
+    ask_count: int = Field(description='Which attempt this was (1 = first ask).')
     parameters: QuestionParamsResponse = Field(description='Type-specific question parameters.')
     asked_by: uuid.UUID = Field(description='Player ID of the seeker who asked.')
     asked_at: datetime
@@ -516,6 +529,7 @@ class QuestionDetailResponse(BaseModel):
             sequence=question.sequence,
             question_type=question.question_type,
             status=question.status,
+            ask_count=question.ask_count,
             parameters=_build_question_params(question),
             asked_by=question.asked_by,
             asked_at=question.asked_at,

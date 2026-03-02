@@ -247,11 +247,17 @@ curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Client-Id: $HIDER_CLIENT" | pp
 
 echo ""
+echo "=== Look up matching slot_index for hospital ==="
+INV=$(curl -sf "$BASE/games/$GAME_ID/inventory")
+MATCHING_IDX=$(echo "$INV" | python3 -c "import sys,json; inv=json.load(sys.stdin); print(next(s['slot_index'] for s in inv['matching_slots'] if s['category']=='hospital'))")
+echo "  matching slot_index for hospital: $MATCHING_IDX"
+
+echo ""
 echo "=== POST /questions/matching (hospital category) ==="
 Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/matching" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $SEEKER_CLIENT" \
-  -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"category":"hospital"}')
+  -d "{\"location\":{\"type\":\"Point\",\"coordinates\":[-0.1,51.5]},\"slot_index\":$MATCHING_IDX}")
 echo "$Q" | pp
 Q_ID=$(echo "$Q" | jq_val "['id']")
 echo "  Seeker feature: $(echo "$Q" | jq_val "['parameters']['seeker_resolution']['name']")"
@@ -262,11 +268,16 @@ curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Client-Id: $HIDER_CLIENT" | pp
 
 echo ""
+echo "=== Look up measuring slot_index for hospital ==="
+MEASURING_IDX=$(echo "$INV" | python3 -c "import sys,json; inv=json.load(sys.stdin); print(next(s['slot_index'] for s in inv['measuring_slots'] if s['category']=='hospital'))")
+echo "  measuring slot_index for hospital: $MEASURING_IDX"
+
+echo ""
 echo "=== POST /questions/measuring (hospital category) ==="
 Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/measuring" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $SEEKER_CLIENT" \
-  -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"category":"hospital"}')
+  -d "{\"location\":{\"type\":\"Point\",\"coordinates\":[-0.1,51.5]},\"slot_index\":$MEASURING_IDX}")
 echo "$Q" | pp
 Q_ID=$(echo "$Q" | jq_val "['id']")
 

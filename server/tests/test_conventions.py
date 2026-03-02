@@ -74,35 +74,36 @@ def test_default_inventory_metric_small():
     radar_distances = [s['distance'] for s in inv['radars']]
     thermo_distances = [s['distance'] for s in inv['thermometers']]
     assert radar_distances[0] == 500
-    assert radar_distances[-1] == 160_000
-    assert len(radar_distances) == 9
-    assert thermo_distances == [1_000, 5_000, 10_000]
+    assert radar_distances[-2] == 160_000
+    assert radar_distances[-1] is None
+    assert len(radar_distances) == 10
+    assert thermo_distances == [1_000, 5_000, 10_000, None]
 
 
 def test_default_inventory_metric_medium():
     inv = get_default_inventory(DistanceConvention.metric, MapSize.medium)
     thermo_distances = [s['distance'] for s in inv['thermometers']]
-    assert thermo_distances == [1_000, 5_000, 10_000, 15_000]
+    assert thermo_distances == [1_000, 5_000, 10_000, 15_000, None]
 
 
 def test_default_inventory_metric_large():
     inv = get_default_inventory(DistanceConvention.metric, MapSize.large)
     thermo_distances = [s['distance'] for s in inv['thermometers']]
-    assert thermo_distances == [1_000, 5_000, 10_000, 15_000, 75_000]
+    assert thermo_distances == [1_000, 5_000, 10_000, 15_000, 75_000, None]
 
 
 def test_default_inventory_imperial_small():
     inv = get_default_inventory(DistanceConvention.imperial, MapSize.small)
     radar_distances = [s['distance'] for s in inv['radars']]
     thermo_distances = [s['distance'] for s in inv['thermometers']]
-    assert radar_distances == [0.25, 0.5, 1, 2, 5, 10, 25, 50, 100]
-    assert thermo_distances == [0.5, 1, 5]
+    assert radar_distances == [0.25, 0.5, 1, 2, 5, 10, 25, 50, 100, None]
+    assert thermo_distances == [0.5, 1, 5, None]
 
 
 def test_default_inventory_imperial_large():
     inv = get_default_inventory(DistanceConvention.imperial, MapSize.large)
     thermo_distances = [s['distance'] for s in inv['thermometers']]
-    assert thermo_distances == [0.5, 1, 5, 10, 25]
+    assert thermo_distances == [0.5, 1, 5, 10, 25, None]
 
 
 def test_default_inventory_special_raises():

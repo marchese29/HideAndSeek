@@ -66,7 +66,7 @@ def create_game(
     session.flush()  # Materialize game.id for FK references
 
     inventory = default_inventory if default_inventory else get_default_inventory(convention, size)
-    create_inventory_slots(game.id, inventory)
+    create_inventory_slots(game.id, inventory, map_id)
 
     return game
 

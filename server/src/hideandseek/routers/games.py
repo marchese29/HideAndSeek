@@ -28,7 +28,6 @@ from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType, StationElectionStatus
 from hideandseek.queries.device_tokens import upsert_device_token
 from hideandseek.queries.effective_map import get_effective_map_data
-from hideandseek.queries.features import get_map_feature_categories
 from hideandseek.queries.games import (
     add_player,
     find_game_by_join_code,
@@ -72,12 +71,6 @@ router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(get_se
 _ACTIVE_STATES = {GameStatus.hiding, GameStatus.seeking}
 
 
-def _game_categories(game: Game) -> list[str]:
-    """Distinct category names available on a game's map."""
-    cats = get_map_feature_categories(game_map_id=game.map_id)
-    return sorted({str(c) for c, _ in cats})
-
-
 @router.post('', response_model=GameResponse, status_code=201)
 def create_game(
     body: CreateGameRequest,
@@ -116,7 +109,7 @@ def create_game(
         excluded_stop_ids=body.excluded_stop_ids,
         excluded_route_ids=body.excluded_route_ids,
     )
-    return GameResponse.from_model(game, categories=_game_categories(game))
+    return GameResponse.from_model(game)
 
 
 @router.post('/join', response_model=JoinGameResponse, status_code=201)
@@ -145,7 +138,7 @@ def join_game(
         role=body.role,
     )
     return JoinGameResponse(
-        game=GameResponse.from_model(game, categories=_game_categories(game)),
+        game=GameResponse.from_model(game),
         player_id=player.id,
     )
 
@@ -155,16 +148,16 @@ def get_game_state(
     game: Game = Depends(get_game),
 ) -> GameResponse:
     """Fetch current game state."""
-    return GameResponse.from_model(game, categories=_game_categories(game))
+    return GameResponse.from_model(game)
 
 
 @router.get('/{game_id}/inventory', response_model=InventoryResponse)
 def get_inventory(
     game: Game = Depends(get_game),
 ) -> InventoryResponse:
-    """Current question inventory — slots with consumed state and available categories."""
+    """Current question inventory — all slots grouped by type."""
     slots = get_inventory_slots(game.id)
-    return InventoryResponse.from_slots(slots, categories=_game_categories(game))
+    return InventoryResponse.from_slots(slots)
 
 
 @router.patch(
@@ -220,7 +213,7 @@ def start_game(
         alert='Game on! The hiding phase has begun.',
     )
 
-    return GameResponse.from_model(game, categories=_game_categories(game))
+    return GameResponse.from_model(game)
 
 
 @router.post('/{game_id}/end', response_model=GameResponse)
@@ -239,7 +232,7 @@ def end_game(
         celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
 
     game = update_game_status(game, GameStatus.finished)
-    return GameResponse.from_model(game, categories=_game_categories(game))
+    return GameResponse.from_model(game)
 
 
 @router.get('/{game_id}/hider-station', response_model=HiderStationResponse)

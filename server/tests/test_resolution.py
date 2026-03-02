@@ -5,17 +5,14 @@ from __future__ import annotations
 from shapely.geometry import Point, Polygon
 from sqlmodel import Session
 
-from hideandseek.models.types import FeatureCategory, QuestionType
-from hideandseek.queries.questions import record_category_usage
+from hideandseek.models.types import FeatureCategory
 from hideandseek.resolution import (
     category_key,
     compute_matching_answer,
     compute_measuring_answer,
-    get_available_categories,
     resolve_feature_for_player,
 )
 from tests.conftest import (
-    create_game,
     create_game_map,
     create_game_map_feature,
     create_map_feature,
@@ -30,60 +27,6 @@ def test_category_key_without_class():
 
 def test_category_key_with_class():
     assert category_key(FeatureCategory.administrative_area, 1) == 'administrative_area:1'
-
-
-# ── get_available_categories ─────────────────────────────────────────────────
-
-
-def test_available_categories_filters_by_type(session: Session):
-    """Only matching-supported categories returned for matching."""
-    gm = create_game_map(session)
-    hosp = create_map_feature(session, category=FeatureCategory.hospital)
-    # rail_station is measuring-only
-    rail = create_map_feature(
-        session,
-        category=FeatureCategory.rail_station,
-        stable_id='rail-1',
-        name='Station',
-    )
-    create_game_map_feature(session, gm.id, hosp.id)
-    create_game_map_feature(session, gm.id, rail.id)
-
-    game = create_game(session, map_id=gm.id)
-
-    matching = get_available_categories(
-        map_id=gm.id,
-        question_type=QuestionType.matching,
-        game_id=game.id,
-    )
-    measuring = get_available_categories(
-        map_id=gm.id,
-        question_type=QuestionType.measuring,
-        game_id=game.id,
-    )
-
-    matching_cats = {c for c, _ in matching}
-    measuring_cats = {c for c, _ in measuring}
-    assert FeatureCategory.hospital in matching_cats
-    assert FeatureCategory.rail_station not in matching_cats
-    assert FeatureCategory.rail_station in measuring_cats
-    assert FeatureCategory.hospital in measuring_cats
-
-
-def test_available_categories_excludes_used(session: Session):
-    gm = create_game_map(session)
-    hosp = create_map_feature(session, category=FeatureCategory.hospital)
-    create_game_map_feature(session, gm.id, hosp.id)
-
-    game = create_game(session, map_id=gm.id)
-    record_category_usage(game.id, QuestionType.matching, FeatureCategory.hospital, None)
-
-    avail = get_available_categories(
-        map_id=gm.id,
-        question_type=QuestionType.matching,
-        game_id=game.id,
-    )
-    assert len(avail) == 0
 
 
 # ── resolve_feature_for_player ───────────────────────────────────────────────

@@ -113,7 +113,7 @@ export interface paths {
         };
         /**
          * Get Inventory
-         * @description Current question inventory — slots with consumed state and available categories.
+         * @description Current question inventory — all slots grouped by type.
          */
         get: operations["get_inventory_games__game_id__inventory_get"];
         put?: never;
@@ -567,34 +567,22 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * AskMatchingRequest
-         * @description Ask a matching question about a feature category.
+         * AskQuestionRequest
+         * @description Ask a question, identified by slot_index. The URL determines question_type.
          */
-        AskMatchingRequest: {
+        AskQuestionRequest: {
+            /**
+             * Slot Index
+             * @description 0-based index into the inventory for this question type.
+             */
+            slot_index: number;
             /** @description Current seeker position as a GeoJSON Point. */
             location: components["schemas"]["Point"];
-            /** @description Feature category to match on. */
-            category: components["schemas"]["FeatureCategory"];
             /**
-             * Feature Class
-             * @description Feature class tier. Required for classed categories.
+             * Custom Distance
+             * @description Required for custom slots (distance=null).
              */
-            feature_class?: number | null;
-        };
-        /**
-         * AskMeasuringRequest
-         * @description Ask a measuring question about a feature category.
-         */
-        AskMeasuringRequest: {
-            /** @description Current seeker position as a GeoJSON Point. */
-            location: components["schemas"]["Point"];
-            /** @description Feature category to measure distance to. */
-            category: components["schemas"]["FeatureCategory"];
-            /**
-             * Feature Class
-             * @description Feature class tier. Required for classed categories.
-             */
-            feature_class?: number | null;
+            custom_distance?: number | null;
         };
         /**
          * AskQuestionResponse
@@ -621,6 +609,11 @@ export interface components {
             question_type: components["schemas"]["QuestionType"];
             status: components["schemas"]["QuestionStatus"];
             /**
+             * Ask Count
+             * @description Which attempt this was (1 = first ask).
+             */
+            ask_count: number;
+            /**
              * Parameters
              * @description Type-specific question parameters.
              */
@@ -638,42 +631,6 @@ export interface components {
             asked_at: string;
             /** @description GeoJSON Point — seeker position when asked. */
             seeker_location_start: components["schemas"]["Point"];
-        };
-        /**
-         * AskRadarRequest
-         * @description Ask a radar question, spending a radar inventory slot.
-         */
-        AskRadarRequest: {
-            /** @description Current seeker position as a GeoJSON Point. */
-            location: components["schemas"]["Point"];
-            /**
-             * Slot Index
-             * @description 0-based index into the original inventory template.
-             */
-            slot_index: number;
-            /**
-             * Custom Distance
-             * @description Required for custom slots (distance=null). In convention units.
-             */
-            custom_distance?: number | null;
-        };
-        /**
-         * AskThermometerRequest
-         * @description Ask a thermometer question, spending a thermometer inventory slot.
-         */
-        AskThermometerRequest: {
-            /** @description Current seeker position as a GeoJSON Point. */
-            location: components["schemas"]["Point"];
-            /**
-             * Slot Index
-             * @description 0-based index into the original inventory template.
-             */
-            slot_index: number;
-            /**
-             * Custom Distance
-             * @description Required for custom slots (distance=null). In convention units.
-             */
-            custom_distance?: number | null;
         };
         /**
          * CreateGameRequest
@@ -806,11 +763,6 @@ export interface components {
             total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
         };
         /**
-         * FeatureCategory
-         * @enum {string}
-         */
-        FeatureCategory: "transit_line" | "administrative_area" | "landmass" | "high_speed_train_line" | "rail_station" | "international_border" | "admin_division_border" | "coastline" | "commercial_airport" | "mountain" | "park" | "amusement_park" | "zoo" | "aquarium" | "golf_course" | "museum" | "movie_theater" | "hospital" | "library" | "foreign_consulate";
-        /**
          * FeatureParamsResponse
          * @description Parameters for a matching or measuring question.
          */
@@ -897,7 +849,7 @@ export interface components {
              * @description Auto-answer delay in minutes.
              */
             base_question_delay_min: number;
-            /** @description Question inventory (slots with consumed state + categories). */
+            /** @description Question inventory — all slots grouped by type. */
             inventory: components["schemas"]["InventoryResponse"];
             /** Players */
             players: components["schemas"]["PlayerResponse"][];
@@ -980,7 +932,7 @@ export interface components {
         };
         /**
          * InventoryResponse
-         * @description Question inventory — slots with consumed state and available categories.
+         * @description Question inventory — all slots grouped by question type.
          */
         InventoryResponse: {
             /**
@@ -994,10 +946,15 @@ export interface components {
              */
             thermometer_slots: components["schemas"]["SlotResponse"][];
             /**
-             * Categories
-             * @description Available question categories.
+             * Matching Slots
+             * @description Matching question slots.
              */
-            categories: string[];
+            matching_slots: components["schemas"]["SlotResponse"][];
+            /**
+             * Measuring Slots
+             * @description Measuring question slots.
+             */
+            measuring_slots: components["schemas"]["SlotResponse"][];
         };
         /**
          * JoinGameRequest
@@ -1424,6 +1381,11 @@ export interface components {
             question_type: components["schemas"]["QuestionType"];
             status: components["schemas"]["QuestionStatus"];
             /**
+             * Ask Count
+             * @description Which attempt this was (1 = first ask).
+             */
+            ask_count: number;
+            /**
              * Parameters
              * @description Type-specific question parameters.
              */
@@ -1501,6 +1463,11 @@ export interface components {
             sequence: number;
             question_type: components["schemas"]["QuestionType"];
             status: components["schemas"]["QuestionStatus"];
+            /**
+             * Ask Count
+             * @description Which attempt this was (1 = first ask).
+             */
+            ask_count: number;
             /**
              * Asked By
              * Format: uuid
@@ -1589,14 +1556,24 @@ export interface components {
             slot_index: number;
             /**
              * Distance
-             * @description Preset distance in convention units, or null for custom.
+             * @description Preset distance or null for custom. Radar/thermometer only.
              */
-            distance: number | null;
+            distance?: number | null;
             /**
-             * Consumed
-             * @description Whether this slot has been used.
+             * Category
+             * @description Feature category. Matching/measuring only.
              */
-            consumed: boolean;
+            category?: string | null;
+            /**
+             * Feature Class
+             * @description Feature class tier. Classed categories only.
+             */
+            feature_class?: number | null;
+            /**
+             * Ask Count
+             * @description Number of times this slot has been used.
+             */
+            ask_count: number;
         };
         /**
          * StationElectionStatus
@@ -2274,7 +2251,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AskRadarRequest"];
+                "application/json": components["schemas"]["AskQuestionRequest"];
             };
         };
         responses: {
@@ -2311,7 +2288,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AskThermometerRequest"];
+                "application/json": components["schemas"]["AskQuestionRequest"];
             };
         };
         responses: {
@@ -2348,7 +2325,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AskMatchingRequest"];
+                "application/json": components["schemas"]["AskQuestionRequest"];
             };
         };
         responses: {
@@ -2385,7 +2362,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AskMeasuringRequest"];
+                "application/json": components["schemas"]["AskQuestionRequest"];
             };
         };
         responses: {

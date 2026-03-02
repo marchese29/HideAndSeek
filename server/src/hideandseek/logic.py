@@ -31,7 +31,6 @@ from hideandseek.models.question import Question
 from hideandseek.models.question_params import FeatureQuestionParams
 from hideandseek.models.transit import Stop
 from hideandseek.models.types import (
-    FeatureCategory,
     PlayerRole,
     QuestionStatus,
     QuestionType,
@@ -40,7 +39,6 @@ from hideandseek.models.types import (
 from hideandseek.queries.features import get_features_by_category
 from hideandseek.queries.location import get_latest_location_for_player
 from hideandseek.queries.questions import (
-    consume_slot,
     create_feature_params,
     create_question,
     create_radar_params,
@@ -48,8 +46,8 @@ from hideandseek.queries.questions import (
     get_latest_total_exclusion,
     get_question_count,
     list_answered_questions_after_sequence,
-    record_category_usage,
     update_question,
+    use_slot,
 )
 from hideandseek.queries.stops import (
     all_hiders_within_radius,
@@ -73,11 +71,11 @@ def ask_radar(
     slot: InventorySlot,
     custom_distance: float | None,
 ) -> Question:
-    """Create a radar question: consume slot, persist. Immediately answerable."""
+    """Create a radar question: use slot, persist. Immediately answerable."""
     dist = slot.distance or custom_distance
     assert dist is not None  # guaranteed by validator
 
-    consume_slot(slot)
+    use_slot(slot)
 
     question = create_question(
         game_id=game.id,
@@ -86,6 +84,7 @@ def ask_radar(
         status=QuestionStatus.answerable,
         asked_by=player_id,
         seeker_location_start=seeker_location,
+        ask_count=slot.ask_count,
     )
     create_radar_params(question.id, radius=dist)
 
@@ -99,11 +98,11 @@ def ask_thermometer(
     slot: InventorySlot,
     custom_distance: float | None,
 ) -> Question:
-    """Create a thermometer question: consume slot, persist. Starts in_progress."""
+    """Create a thermometer question: use slot, persist. Starts in_progress."""
     dist = slot.distance or custom_distance
     assert dist is not None  # guaranteed by validator
 
-    consume_slot(slot)
+    use_slot(slot)
 
     question = create_question(
         game_id=game.id,
@@ -112,6 +111,7 @@ def ask_thermometer(
         status=QuestionStatus.in_progress,
         asked_by=player_id,
         seeker_location_start=seeker_location,
+        ask_count=slot.ask_count,
     )
     create_thermometer_params(question.id, min_travel=dist)
 
@@ -122,25 +122,26 @@ def ask_matching(
     game: Game,
     player_id: uuid.UUID,
     seeker_location: Point,
-    category: FeatureCategory,
-    feature_class: int | None,
+    slot: InventorySlot,
 ) -> Question:
-    """Create a matching question: resolve seeker feature, consume category, persist.
+    """Create a matching question: resolve seeker feature, use slot, persist.
 
     Raises ValueError if seeker feature cannot be resolved.
     """
+    assert slot.category is not None
+
     seeker_feature, seeker_dist = resolve_feature_for_player(
-        category=category,
+        category=slot.category,
         location=seeker_location,
         game_map_id=game.map_id,
-        feature_class=feature_class,
+        feature_class=slot.feature_class,
         for_matching=True,
     )
 
     if seeker_feature is None:
-        raise ValueError(f'No feature found for category {category} near the seeker location.')
+        raise ValueError(f'No feature found for category {slot.category} near the seeker location.')
 
-    record_category_usage(game.id, QuestionType.matching, category, feature_class)
+    use_slot(slot)
 
     question = create_question(
         game_id=game.id,
@@ -149,12 +150,13 @@ def ask_matching(
         status=QuestionStatus.answerable,
         asked_by=player_id,
         seeker_location_start=seeker_location,
+        ask_count=slot.ask_count,
     )
     convention = game.game_map.convention
     create_feature_params(
         question.id,
-        category=category,
-        feature_class=feature_class,
+        category=slot.category,
+        feature_class=slot.feature_class,
         source='map_data',
         seeker_feature_id=seeker_feature.stable_id,
         seeker_feature_name=seeker_feature.name,
@@ -168,25 +170,26 @@ def ask_measuring(
     game: Game,
     player_id: uuid.UUID,
     seeker_location: Point,
-    category: FeatureCategory,
-    feature_class: int | None,
+    slot: InventorySlot,
 ) -> Question:
-    """Create a measuring question: resolve seeker feature distance, consume category, persist.
+    """Create a measuring question: resolve seeker feature distance, use slot, persist.
 
     Raises ValueError if seeker feature cannot be resolved.
     """
+    assert slot.category is not None
+
     seeker_feature, seeker_dist = resolve_feature_for_player(
-        category=category,
+        category=slot.category,
         location=seeker_location,
         game_map_id=game.map_id,
-        feature_class=feature_class,
+        feature_class=slot.feature_class,
         for_matching=False,
     )
 
     if seeker_feature is None:
-        raise ValueError(f'No feature found for category {category} near the seeker location.')
+        raise ValueError(f'No feature found for category {slot.category} near the seeker location.')
 
-    record_category_usage(game.id, QuestionType.measuring, category, feature_class)
+    use_slot(slot)
 
     question = create_question(
         game_id=game.id,
@@ -195,12 +198,13 @@ def ask_measuring(
         status=QuestionStatus.answerable,
         asked_by=player_id,
         seeker_location_start=seeker_location,
+        ask_count=slot.ask_count,
     )
     convention = game.game_map.convention
     create_feature_params(
         question.id,
-        category=category,
-        feature_class=feature_class,
+        category=slot.category,
+        feature_class=slot.feature_class,
         source='map_data',
         seeker_feature_id=seeker_feature.stable_id,
         seeker_feature_name=seeker_feature.name,
@@ -399,7 +403,7 @@ def answer_measuring(question: Question, game: Game) -> None:
         if pois:
             seeker_distance_m = to_meters(params.seeker_distance, convention)
             exclusion = exclude_measuring(
-                boundary, seeker_distance_m, pois, hider_closer=answer == 'closer'
+                boundary, seeker_distance_m, pois, hider_closer=answer == 'farther'
             )
         else:
             exclusion = None

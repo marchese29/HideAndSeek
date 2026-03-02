@@ -20,7 +20,8 @@ from hideandseek.models.game_map import GameMap
 from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.map_feature import GameMapFeature, MapFeature
 from hideandseek.models.transit import TransitDataset
-from hideandseek.models.types import FeatureCategory, GameStatus, MapSize, SlotType
+from hideandseek.models.types import FeatureCategory, GameStatus, MapSize, QuestionType
+from hideandseek.resolution import MATCHING_CATEGORIES, MEASURING_CATEGORIES
 
 
 @pytest.fixture
@@ -115,31 +116,60 @@ def create_game(session: Session, **overrides: Any) -> Game:
     session.commit()
     session.refresh(game)
 
-    # Create InventorySlot rows from the template
-    _create_inventory_slots(session, game.id, inventory_template)
+    # Create InventorySlot rows from the template + map features
+    _create_inventory_slots(session, game, inventory_template)
 
     return game
 
 
-def _create_inventory_slots(session: Session, game_id: uuid.UUID, template: dict[str, Any]) -> None:
-    """Create InventorySlot rows from a default_inventory template."""
-    for slot_type_str in ('radars', 'thermometers'):
-        slot_type = SlotType.radar if slot_type_str == 'radars' else SlotType.thermometer
-        for idx, slot_data in enumerate(template.get(slot_type_str, [])):
+def _create_inventory_slots(session: Session, game: Game, template: dict[str, Any]) -> None:
+    """Create InventorySlot rows from a default_inventory template and map features."""
+    from hideandseek.queries.features import get_map_feature_categories
+    from hideandseek.resolution import category_key
+
+    # Radar and thermometer slots from template
+    for type_key, question_type in (
+        ('radars', QuestionType.radar),
+        ('thermometers', QuestionType.thermometer),
+    ):
+        for idx, slot_data in enumerate(template.get(type_key, [])):
             slot = InventorySlot(
-                game_id=game_id,
-                slot_type=slot_type,
+                game_id=game.id,
+                question_type=question_type,
                 slot_index=idx,
                 distance=slot_data.get('distance'),
             )
             session.add(slot)
+
+    # Matching and measuring slots from map feature categories
+    map_cats = get_map_feature_categories(game_map_id=game.map_id)
+    sorted_cats = sorted(map_cats, key=lambda pair: category_key(pair[0], pair[1]))
+
+    for question_type, type_categories in (
+        (QuestionType.matching, MATCHING_CATEGORIES),
+        (QuestionType.measuring, MEASURING_CATEGORIES),
+    ):
+        idx = 0
+        for cat, cls in sorted_cats:
+            if cat not in type_categories:
+                continue
+            slot = InventorySlot(
+                game_id=game.id,
+                question_type=question_type,
+                slot_index=idx,
+                category=cat,
+                feature_class=cls,
+            )
+            session.add(slot)
+            idx += 1
+
     session.commit()
 
 
 def create_inventory_slot(
     session: Session,
     game_id: uuid.UUID,
-    slot_type: SlotType = SlotType.radar,
+    question_type: QuestionType = QuestionType.radar,
     slot_index: int = 0,
     distance: float | None = 3000,
     **overrides: Any,
@@ -147,7 +177,7 @@ def create_inventory_slot(
     """Create a single InventorySlot for testing."""
     defaults: dict[str, Any] = {
         'game_id': game_id,
-        'slot_type': slot_type,
+        'question_type': question_type,
         'slot_index': slot_index,
         'distance': distance,
     }

@@ -64,6 +64,7 @@ def test_ask_radar_question(client: TestClient, session: Session):
     data = resp.json()
     assert data['question_type'] == 'radar'
     assert data['status'] == 'answerable'
+    assert data['ask_count'] == 1
     assert data['parameters']['type'] == 'radar'
     assert data['parameters']['radius'] == 3000
     assert data['sequence'] == 1
@@ -115,10 +116,11 @@ def test_ask_question_deducts_slot(client: TestClient, session: Session):
     )
     assert resp.status_code == 200
 
-    # Static inventory doesn't show consumed state — slot distances remain the same
+    # Inventory shows ask_count incremented
     game_resp = client.get(f'/games/{game.id}')
     radar_slots = game_resp.json()['inventory']['radar_slots']
-    assert len(radar_slots) == 3  # static template is unchanged
+    assert len(radar_slots) == 3
+    assert radar_slots[0]['ask_count'] == 1  # used once
 
 
 def test_ask_question_invalid_slot_index(client: TestClient, session: Session):
@@ -170,6 +172,36 @@ def test_ask_question_while_unanswered(client: TestClient, session: Session):
     )
     assert resp.status_code == 409
     assert 'unanswered' in resp.json()['detail']
+
+
+def test_reask_radar_slot(client: TestClient, session: Session):
+    """Re-asking the same radar slot increments ask_count."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+
+    # First ask
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+    assert resp.json()['ask_count'] == 1
+    q1_id = resp.json()['id']
+
+    # Answer
+    client.post(
+        f'/games/{game.id}/questions/{q1_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+
+    # Re-ask same slot
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+    assert resp.json()['ask_count'] == 2
 
 
 # ── POST /games/{game_id}/questions/thermometer ──────────────────────────────
@@ -292,6 +324,7 @@ def test_answer_question(client: TestClient, session: Session):
     assert data['hider_location'] is not None
     assert data['answer'] == 'no'  # hider ~56 km from seeker, outside 3 km radar
     assert data['answered_at'] is not None
+    assert data['ask_count'] == 1
     # Detail response has no exclusion fields
     assert 'exclusion' not in data
     assert 'total_exclusion' not in data
@@ -346,6 +379,7 @@ def test_list_questions(client: TestClient, session: Session):
     assert 'sequence' in q
     assert 'question_type' in q
     assert 'status' in q
+    assert 'ask_count' in q
     assert 'asked_by' in q
     assert 'asked_at' in q
     assert 'answer' in q
@@ -389,6 +423,7 @@ def test_question_detail_hider_only(client: TestClient, session: Session):
     data = resp.json()
     assert data['parameters']['type'] == 'radar'
     assert data['seeker_location_start'] is not None
+    assert data['ask_count'] == 1
     # No exclusion fields on detail
     assert 'exclusion' not in data
     assert 'total_exclusion' not in data
@@ -472,20 +507,40 @@ def _setup_feature_game(client: TestClient, session: Session) -> tuple[Game, Pla
     return game, hider, seeker
 
 
+def _get_matching_slot_index(client: TestClient, game: Game, category: str) -> int:
+    """Find the slot_index for a matching slot with the given category."""
+    inv = client.get(f'/games/{game.id}/inventory').json()
+    for slot in inv['matching_slots']:
+        if slot['category'] == category:
+            return slot['slot_index']
+    raise ValueError(f'No matching slot for category {category}')
+
+
+def _get_measuring_slot_index(client: TestClient, game: Game, category: str) -> int:
+    """Find the slot_index for a measuring slot with the given category."""
+    inv = client.get(f'/games/{game.id}/inventory').json()
+    for slot in inv['measuring_slots']:
+        if slot['category'] == category:
+            return slot['slot_index']
+    raise ValueError(f'No measuring slot for category {category}')
+
+
 # ── POST /questions/matching ─────────────────────────────────────────────────
 
 
 def test_ask_matching_question(client: TestClient, session: Session):
     game, hider, seeker = _setup_feature_game(client, session)
+    slot_idx = _get_matching_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/matching',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
     assert resp.status_code == 201
     data = resp.json()
     assert data['question_type'] == 'matching'
     assert data['status'] == 'answerable'
+    assert data['ask_count'] == 1
     assert data['parameters']['type'] == 'matching'
     assert data['parameters']['category'] == 'hospital'
     assert data['parameters']['source'] == 'map_data'
@@ -496,9 +551,10 @@ def test_ask_matching_question(client: TestClient, session: Session):
 def test_answer_matching_no(client: TestClient, session: Session):
     """Different nearest hospitals → answer 'no'."""
     game, hider, seeker = _setup_feature_game(client, session)
+    slot_idx = _get_matching_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/matching',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
     q_id = resp.json()['id']
@@ -531,9 +587,10 @@ def test_answer_matching_yes(client: TestClient, session: Session):
     _report_location(client, game.id, seeker.client_id, -0.101, 51.501)
     _report_location(client, game.id, hider.client_id, -0.099, 51.499)
 
+    slot_idx = _get_matching_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/matching',
-        json={'location': _point(-0.101, 51.501), 'category': 'hospital'},
+        json={'location': _point(-0.101, 51.501), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
     q_id = resp.json()['id']
@@ -545,47 +602,54 @@ def test_answer_matching_yes(client: TestClient, session: Session):
     assert resp.json()['answer'] == 'yes'
 
 
-def test_matching_category_already_used(client: TestClient, session: Session):
+def test_reask_matching_slot(client: TestClient, session: Session):
+    """Re-asking the same matching slot increments ask_count."""
     game, hider, seeker = _setup_feature_game(client, session)
+    slot_idx = _get_matching_slot_index(client, game, 'hospital')
+
     # Ask and answer a matching question
     resp = client.post(
         f'/games/{game.id}/questions/matching',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
+    assert resp.status_code == 201
+    assert resp.json()['ask_count'] == 1
     q_id = resp.json()['id']
     client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
         headers=_headers(hider.client_id),
     )
 
-    # Try same category again
+    # Re-ask same slot
     resp = client.post(
         f'/games/{game.id}/questions/matching',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
-    assert resp.status_code == 409
-    assert 'already used' in resp.json()['detail']
+    assert resp.status_code == 201
+    assert resp.json()['ask_count'] == 2
 
 
-def test_matching_category_not_on_map(client: TestClient, session: Session):
-    game, hider, seeker = _setup_feature_game(client, session)
+def test_matching_no_feature_on_map(client: TestClient, session: Session):
+    """Matching slot_index for a category not on the map → 422 (invalid slot index)."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    # No map features → no matching slots exist
     resp = client.post(
         f'/games/{game.id}/questions/matching',
-        json={'location': _point(-0.115, 51.499), 'category': 'zoo'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': 0},
         headers=_headers(seeker.client_id),
     )
     assert resp.status_code == 422
-    assert 'not available' in resp.json()['detail']
 
 
 def test_matching_consumes_inventory(client: TestClient, session: Session):
     """After asking a matching question, the category appears in the questions list."""
     game, hider, seeker = _setup_feature_game(client, session)
+    slot_idx = _get_matching_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/matching',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
     assert resp.status_code == 201
@@ -604,9 +668,10 @@ def test_matching_consumes_inventory(client: TestClient, session: Session):
 
 def test_ask_measuring_question(client: TestClient, session: Session):
     game, hider, seeker = _setup_feature_game(client, session)
+    slot_idx = _get_measuring_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
     assert resp.status_code == 201
@@ -619,9 +684,10 @@ def test_ask_measuring_question(client: TestClient, session: Session):
 def test_answer_measuring_farther(client: TestClient, session: Session):
     """Seeker farther from nearest hospital than hider → 'farther'."""
     game, hider, seeker = _setup_feature_game(client, session)
+    slot_idx = _get_measuring_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
     q_id = resp.json()['id']
@@ -657,9 +723,10 @@ def test_answer_measuring_closer(client: TestClient, session: Session):
     _report_location(client, game.id, seeker.client_id, -0.1001, 51.5001)
     _report_location(client, game.id, hider.client_id, -0.2, 51.6)
 
+    slot_idx = _get_measuring_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
-        json={'location': _point(-0.1001, 51.5001), 'category': 'hospital'},
+        json={'location': _point(-0.1001, 51.5001), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
     q_id = resp.json()['id']
@@ -671,13 +738,17 @@ def test_answer_measuring_closer(client: TestClient, session: Session):
     assert resp.json()['answer'] == 'closer'
 
 
-def test_measuring_category_already_used(client: TestClient, session: Session):
+def test_reask_measuring_slot(client: TestClient, session: Session):
+    """Re-asking the same measuring slot increments ask_count."""
     game, hider, seeker = _setup_feature_game(client, session)
+    slot_idx = _get_measuring_slot_index(client, game, 'hospital')
+
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
+    assert resp.json()['ask_count'] == 1
     q_id = resp.json()['id']
     client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
@@ -686,10 +757,11 @@ def test_measuring_category_already_used(client: TestClient, session: Session):
 
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
-        json={'location': _point(-0.115, 51.499), 'category': 'hospital'},
+        json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 201
+    assert resp.json()['ask_count'] == 2
 
 
 # ── Exclusion zone integration tests ──────────────────────────────────────────
@@ -739,7 +811,7 @@ def test_exclusions_accumulate(client: TestClient, session: Session):
     data = resp.json()
     assert len(data['exclusions']) == 1
 
-    # Ask + answer second radar question (slot 1 — slot 0 already consumed)
+    # Ask + answer second radar question (slot 1)
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.05, 51.52), 'slot_index': 1},
@@ -866,9 +938,10 @@ def test_imperial_measuring_distances_in_miles(client: TestClient, session: Sess
     # Hider far from hospital
     _report_location(client, game.id, hider.client_id, -0.2, 51.6)
 
+    slot_idx = _get_measuring_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
-        json={'location': _point(-0.1001, 51.5001), 'category': 'hospital'},
+        json={'location': _point(-0.1001, 51.5001), 'slot_index': slot_idx},
         headers=_headers(seeker.client_id),
     )
     assert resp.status_code == 201
@@ -887,3 +960,19 @@ def test_imperial_measuring_distances_in_miles(client: TestClient, session: Sess
     hider_dist = data['parameters']['hider_resolution']['distance']
     # Hider ~8 miles from hospital
     assert hider_dist > 1  # more than 1 mile
+
+
+# ── Inventory includes matching/measuring slots ──────────────────────────────
+
+
+def test_inventory_includes_feature_slots(client: TestClient, session: Session):
+    """When map has features, inventory includes matching and measuring slots."""
+    game, hider, seeker = _setup_feature_game(client, session)
+    inv = client.get(f'/games/{game.id}/inventory').json()
+    assert len(inv['matching_slots']) > 0
+    assert len(inv['measuring_slots']) > 0
+    # Hospital should appear in both matching and measuring
+    matching_cats = {s['category'] for s in inv['matching_slots']}
+    measuring_cats = {s['category'] for s in inv['measuring_slots']}
+    assert 'hospital' in matching_cats
+    assert 'hospital' in measuring_cats

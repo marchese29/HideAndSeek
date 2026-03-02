@@ -142,6 +142,6 @@ def get_default_inventory(convention: DistanceConvention, size: MapSize) -> dict
         thermos = _THERMO_METRIC[size]
 
     return {
-        'radars': [{'distance': d} for d in radars],
-        'thermometers': [{'distance': d} for d in thermos],
+        'radars': [{'distance': d} for d in radars] + [{'distance': None}],
+        'thermometers': [{'distance': d} for d in thermos] + [{'distance': None}],
     }

@@ -83,47 +83,14 @@ class LocationReportRequest(BaseModel):
 # ── Questions ─────────────────────────────────────────────────────────────────
 
 
-class AskRadarRequest(BaseModel):
-    """Ask a radar question, spending a radar inventory slot."""
+class AskQuestionRequest(BaseModel):
+    """Ask a question, identified by slot_index. The URL determines question_type."""
 
+    slot_index: int = Field(description='0-based index into the inventory for this question type.')
     location: Point = Field(description='Current seeker position as a GeoJSON Point.')
-    slot_index: int = Field(description='0-based index into the original inventory template.')
     custom_distance: float | None = Field(
         default=None,
-        description='Required for custom slots (distance=null). In convention units.',
-    )
-
-
-class AskThermometerRequest(BaseModel):
-    """Ask a thermometer question, spending a thermometer inventory slot."""
-
-    location: Point = Field(description='Current seeker position as a GeoJSON Point.')
-    slot_index: int = Field(description='0-based index into the original inventory template.')
-    custom_distance: float | None = Field(
-        default=None,
-        description='Required for custom slots (distance=null). In convention units.',
-    )
-
-
-class AskMatchingRequest(BaseModel):
-    """Ask a matching question about a feature category."""
-
-    location: Point = Field(description='Current seeker position as a GeoJSON Point.')
-    category: FeatureCategory = Field(description='Feature category to match on.')
-    feature_class: int | None = Field(
-        default=None,
-        description='Feature class tier. Required for classed categories.',
-    )
-
-
-class AskMeasuringRequest(BaseModel):
-    """Ask a measuring question about a feature category."""
-
-    location: Point = Field(description='Current seeker position as a GeoJSON Point.')
-    category: FeatureCategory = Field(description='Feature category to measure distance to.')
-    feature_class: int | None = Field(
-        default=None,
-        description='Feature class tier. Required for classed categories.',
+        description='Required for custom slots (distance=null).',
     )
 
 

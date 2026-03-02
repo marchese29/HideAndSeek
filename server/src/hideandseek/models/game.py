@@ -35,7 +35,6 @@ class Game(SQLModel, table=True):
         back_populates='game',
         sa_relationship_kwargs={'order_by': 'InventorySlot.slot_index'},
     )
-    category_usages: list['CategoryUsage'] = Relationship(back_populates='game')  # noqa: F821
 
 
 class Player(SQLModel, table=True):
@@ -57,13 +56,12 @@ class Player(SQLModel, table=True):
 
 # Avoid circular imports — resolved at runtime by SQLModel.
 from hideandseek.models.game_map import GameMap  # noqa: E402
-from hideandseek.models.inventory import CategoryUsage, InventorySlot  # noqa: E402
+from hideandseek.models.inventory import InventorySlot  # noqa: E402
 from hideandseek.models.location import LocationUpdate  # noqa: E402
 from hideandseek.models.question import Question  # noqa: E402
 from hideandseek.models.transit import Stop  # noqa: E402
 
 __all__ = [
-    'CategoryUsage',
     'Game',
     'GameMap',
     'InventorySlot',

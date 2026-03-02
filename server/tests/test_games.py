@@ -112,31 +112,40 @@ def test_get_game_state(client: TestClient, session: Session):
 
 
 def test_get_game_inventory(client: TestClient, session: Session):
-    """GameResponse inventory includes slot_index, distance, and consumed state."""
+    """GameResponse inventory includes slot_index, distance, ask_count, and category slots."""
     game = create_game(session)
     resp = client.get(f'/games/{game.id}')
     assert resp.status_code == 200
     inv = resp.json()['inventory']
     assert len(inv['radar_slots']) == 3
-    assert inv['radar_slots'][0] == {'slot_index': 0, 'distance': 3000.0, 'consumed': False}
-    assert inv['radar_slots'][2] == {'slot_index': 2, 'distance': None, 'consumed': False}
+    assert inv['radar_slots'][0] == {
+        'slot_index': 0,
+        'distance': 3000.0,
+        'category': None,
+        'feature_class': None,
+        'ask_count': 0,
+    }
+    assert inv['radar_slots'][2]['distance'] is None
     assert len(inv['thermometer_slots']) == 2
     # No internal IDs exposed
     assert 'id' not in inv['radar_slots'][0]
-    # Categories list
-    assert isinstance(inv['categories'], list)
+    # Matching and measuring slots (empty if no map features)
+    assert isinstance(inv['matching_slots'], list)
+    assert isinstance(inv['measuring_slots'], list)
 
 
 def test_get_inventory_endpoint(client: TestClient, session: Session):
-    """Dedicated inventory endpoint returns slots with consumed state."""
+    """Dedicated inventory endpoint returns slots grouped by type."""
     game = create_game(session)
     resp = client.get(f'/games/{game.id}/inventory')
     assert resp.status_code == 200
     inv = resp.json()
     assert len(inv['radar_slots']) == 3
-    assert inv['radar_slots'][0] == {'slot_index': 0, 'distance': 3000.0, 'consumed': False}
+    assert inv['radar_slots'][0]['distance'] == 3000.0
+    assert inv['radar_slots'][0]['ask_count'] == 0
     assert len(inv['thermometer_slots']) == 2
-    assert isinstance(inv['categories'], list)
+    assert isinstance(inv['matching_slots'], list)
+    assert isinstance(inv['measuring_slots'], list)
 
 
 def test_get_game_not_found(client: TestClient):

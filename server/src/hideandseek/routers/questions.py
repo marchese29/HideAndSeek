@@ -34,7 +34,6 @@ from hideandseek.models.types import (
     PushEventType,
     QuestionStatus,
     QuestionType,
-    SlotType,
 )
 from hideandseek.queries.location import create_location_update, get_latest_location_for_player
 from hideandseek.queries.questions import (
@@ -43,12 +42,7 @@ from hideandseek.queries.questions import (
     list_questions,
     update_question,
 )
-from hideandseek.schemas.request import (
-    AskMatchingRequest,
-    AskMeasuringRequest,
-    AskRadarRequest,
-    AskThermometerRequest,
-)
+from hideandseek.schemas.request import AskQuestionRequest
 from hideandseek.schemas.response import (
     AskQuestionResponse,
     ExclusionsResponse,
@@ -59,11 +53,7 @@ from hideandseek.schemas.response import (
 )
 from hideandseek.tasks.game_timers import auto_answer_question
 from hideandseek.tasks.push import send_push
-from hideandseek.validators import (
-    validate_answer_request,
-    validate_category_request,
-    validate_slot_request,
-)
+from hideandseek.validators import validate_answer_request, validate_slot_request
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['questions'], dependencies=[Depends(get_session)]
@@ -104,7 +94,7 @@ def _record_seeker_location(location: GeoJSONPoint, player: Player, game: Game) 
 
 @router.post('/questions/radar', response_model=AskQuestionResponse, status_code=201)
 def ask_radar_question(
-    body: AskRadarRequest,
+    body: AskQuestionRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
 ) -> AskQuestionResponse:
@@ -112,7 +102,7 @@ def ask_radar_question(
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
 
-    slot = validate_slot_request(body.slot_index, body.custom_distance, game, SlotType.radar)
+    slot = validate_slot_request(body.slot_index, body.custom_distance, game, QuestionType.radar)
     question = ask_radar(game, player.id, seeker_location, slot, body.custom_distance)
     _schedule_auto_answer(game, question.id)
 
@@ -134,7 +124,7 @@ def ask_radar_question(
 
 @router.post('/questions/thermometer', response_model=AskQuestionResponse, status_code=201)
 def ask_thermometer_question(
-    body: AskThermometerRequest,
+    body: AskQuestionRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
 ) -> AskQuestionResponse:
@@ -142,7 +132,9 @@ def ask_thermometer_question(
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
 
-    slot = validate_slot_request(body.slot_index, body.custom_distance, game, SlotType.thermometer)
+    slot = validate_slot_request(
+        body.slot_index, body.custom_distance, game, QuestionType.thermometer
+    )
     question = ask_thermometer(game, player.id, seeker_location, slot, body.custom_distance)
 
     tp = question.thermometer_params
@@ -163,7 +155,7 @@ def ask_thermometer_question(
 
 @router.post('/questions/matching', response_model=AskQuestionResponse, status_code=201)
 def ask_matching_question(
-    body: AskMatchingRequest,
+    body: AskQuestionRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
 ) -> AskQuestionResponse:
@@ -171,22 +163,23 @@ def ask_matching_question(
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
 
-    validate_category_request(body.category, body.feature_class, game, QuestionType.matching)
+    slot = validate_slot_request(body.slot_index, body.custom_distance, game, QuestionType.matching)
 
     try:
-        question = ask_matching(game, player.id, seeker_location, body.category, body.feature_class)
+        question = ask_matching(game, player.id, seeker_location, slot)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     _schedule_auto_answer(game, question.id)
 
+    fp = question.feature_params
+    assert fp is not None
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.question_asked,
         role_filter='hider',
         alert=(
-            f'A matching question about {body.category} has been asked. '
-            f'Your answer timer is running.'
+            f'A matching question about {fp.category} has been asked. Your answer timer is running.'
         ),
         question_id=str(question.id),
         question_type=QuestionType.matching,
@@ -198,7 +191,7 @@ def ask_matching_question(
 
 @router.post('/questions/measuring', response_model=AskQuestionResponse, status_code=201)
 def ask_measuring_question(
-    body: AskMeasuringRequest,
+    body: AskQuestionRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
 ) -> AskQuestionResponse:
@@ -206,23 +199,25 @@ def ask_measuring_question(
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
 
-    validate_category_request(body.category, body.feature_class, game, QuestionType.measuring)
+    slot = validate_slot_request(
+        body.slot_index, body.custom_distance, game, QuestionType.measuring
+    )
 
     try:
-        question = ask_measuring(
-            game, player.id, seeker_location, body.category, body.feature_class
-        )
+        question = ask_measuring(game, player.id, seeker_location, slot)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     _schedule_auto_answer(game, question.id)
 
+    fp = question.feature_params
+    assert fp is not None
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.question_asked,
         role_filter='hider',
         alert=(
-            f'A measuring question about {body.category} has been asked. '
+            f'A measuring question about {fp.category} has been asked. '
             f'Your answer timer is running.'
         ),
         question_id=str(question.id),

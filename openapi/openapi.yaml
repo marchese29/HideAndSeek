@@ -180,8 +180,7 @@ paths:
       tags:
       - games
       summary: Get Inventory
-      description: "Current question inventory \u2014 slots with consumed state and\
-        \ available categories."
+      description: "Current question inventory \u2014 all slots grouped by type."
       operationId: get_inventory_games__game_id__inventory_get
       parameters:
       - name: game_id
@@ -666,7 +665,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AskRadarRequest'
+              $ref: '#/components/schemas/AskQuestionRequest'
       responses:
         '201':
           description: Successful Response
@@ -707,7 +706,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AskThermometerRequest'
+              $ref: '#/components/schemas/AskQuestionRequest'
       responses:
         '201':
           description: Successful Response
@@ -748,7 +747,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AskMatchingRequest'
+              $ref: '#/components/schemas/AskQuestionRequest'
       responses:
         '201':
           description: Successful Response
@@ -789,7 +788,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AskMeasuringRequest'
+              $ref: '#/components/schemas/AskQuestionRequest'
       responses:
         '201':
           description: Successful Response
@@ -1087,46 +1086,27 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
-    AskMatchingRequest:
+    AskQuestionRequest:
       properties:
+        slot_index:
+          type: integer
+          title: Slot Index
+          description: 0-based index into the inventory for this question type.
         location:
           $ref: '#/components/schemas/Point'
           description: Current seeker position as a GeoJSON Point.
-        category:
-          $ref: '#/components/schemas/FeatureCategory'
-          description: Feature category to match on.
-        feature_class:
+        custom_distance:
           anyOf:
-          - type: integer
+          - type: number
           - type: 'null'
-          title: Feature Class
-          description: Feature class tier. Required for classed categories.
+          title: Custom Distance
+          description: Required for custom slots (distance=null).
       type: object
       required:
+      - slot_index
       - location
-      - category
-      title: AskMatchingRequest
-      description: Ask a matching question about a feature category.
-    AskMeasuringRequest:
-      properties:
-        location:
-          $ref: '#/components/schemas/Point'
-          description: Current seeker position as a GeoJSON Point.
-        category:
-          $ref: '#/components/schemas/FeatureCategory'
-          description: Feature category to measure distance to.
-        feature_class:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Feature Class
-          description: Feature class tier. Required for classed categories.
-      type: object
-      required:
-      - location
-      - category
-      title: AskMeasuringRequest
-      description: Ask a measuring question about a feature category.
+      title: AskQuestionRequest
+      description: Ask a question, identified by slot_index. The URL determines question_type.
     AskQuestionResponse:
       properties:
         id:
@@ -1145,6 +1125,10 @@ components:
           $ref: '#/components/schemas/QuestionType'
         status:
           $ref: '#/components/schemas/QuestionStatus'
+        ask_count:
+          type: integer
+          title: Ask Count
+          description: Which attempt this was (1 = first ask).
         parameters:
           anyOf:
           - $ref: '#/components/schemas/RadarParamsResponse'
@@ -1171,6 +1155,7 @@ components:
       - sequence
       - question_type
       - status
+      - ask_count
       - parameters
       - asked_by
       - asked_at
@@ -1179,48 +1164,6 @@ components:
       description: "Slim response for ask endpoints \u2014 only fields meaningful\
         \ at ask time.\n\nNo answer-time fields (seeker_location_end, hider_location,\
         \ answered_at, answer)."
-    AskRadarRequest:
-      properties:
-        location:
-          $ref: '#/components/schemas/Point'
-          description: Current seeker position as a GeoJSON Point.
-        slot_index:
-          type: integer
-          title: Slot Index
-          description: 0-based index into the original inventory template.
-        custom_distance:
-          anyOf:
-          - type: number
-          - type: 'null'
-          title: Custom Distance
-          description: Required for custom slots (distance=null). In convention units.
-      type: object
-      required:
-      - location
-      - slot_index
-      title: AskRadarRequest
-      description: Ask a radar question, spending a radar inventory slot.
-    AskThermometerRequest:
-      properties:
-        location:
-          $ref: '#/components/schemas/Point'
-          description: Current seeker position as a GeoJSON Point.
-        slot_index:
-          type: integer
-          title: Slot Index
-          description: 0-based index into the original inventory template.
-        custom_distance:
-          anyOf:
-          - type: number
-          - type: 'null'
-          title: Custom Distance
-          description: Required for custom slots (distance=null). In convention units.
-      type: object
-      required:
-      - location
-      - slot_index
-      title: AskThermometerRequest
-      description: Ask a thermometer question, spending a thermometer inventory slot.
     CreateGameRequest:
       properties:
         map_id:
@@ -1466,30 +1409,6 @@ components:
       title: ExclusionsResponse
       description: "Seeker tactical view \u2014 per-question exclusion geometry and\
         \ cumulative total."
-    FeatureCategory:
-      type: string
-      enum:
-      - transit_line
-      - administrative_area
-      - landmass
-      - high_speed_train_line
-      - rail_station
-      - international_border
-      - admin_division_border
-      - coastline
-      - commercial_airport
-      - mountain
-      - park
-      - amusement_park
-      - zoo
-      - aquarium
-      - golf_course
-      - museum
-      - movie_theater
-      - hospital
-      - library
-      - foreign_consulate
-      title: FeatureCategory
     FeatureParamsResponse:
       properties:
         type:
@@ -1581,7 +1500,7 @@ components:
           description: Auto-answer delay in minutes.
         inventory:
           $ref: '#/components/schemas/InventoryResponse'
-          description: Question inventory (slots with consumed state + categories).
+          description: "Question inventory \u2014 all slots grouped by type."
         players:
           items:
             $ref: '#/components/schemas/PlayerResponse'
@@ -1752,20 +1671,26 @@ components:
           type: array
           title: Thermometer Slots
           description: Thermometer question slots.
-        categories:
+        matching_slots:
           items:
-            type: string
+            $ref: '#/components/schemas/SlotResponse'
           type: array
-          title: Categories
-          description: Available question categories.
+          title: Matching Slots
+          description: Matching question slots.
+        measuring_slots:
+          items:
+            $ref: '#/components/schemas/SlotResponse'
+          type: array
+          title: Measuring Slots
+          description: Measuring question slots.
       type: object
       required:
       - radar_slots
       - thermometer_slots
-      - categories
+      - matching_slots
+      - measuring_slots
       title: InventoryResponse
-      description: "Question inventory \u2014 slots with consumed state and available\
-        \ categories."
+      description: "Question inventory \u2014 all slots grouped by question type."
     JoinGameRequest:
       properties:
         join_code:
@@ -2358,6 +2283,10 @@ components:
           $ref: '#/components/schemas/QuestionType'
         status:
           $ref: '#/components/schemas/QuestionStatus'
+        ask_count:
+          type: integer
+          title: Ask Count
+          description: Which attempt this was (1 = first ask).
         parameters:
           anyOf:
           - $ref: '#/components/schemas/RadarParamsResponse'
@@ -2407,6 +2336,7 @@ components:
       - sequence
       - question_type
       - status
+      - ask_count
       - parameters
       - asked_by
       - asked_at
@@ -2483,6 +2413,10 @@ components:
           $ref: '#/components/schemas/QuestionType'
         status:
           $ref: '#/components/schemas/QuestionStatus'
+        ask_count:
+          type: integer
+          title: Ask Count
+          description: Which attempt this was (1 = first ask).
         asked_by:
           type: string
           format: uuid
@@ -2510,6 +2444,7 @@ components:
       - sequence
       - question_type
       - status
+      - ask_count
       - asked_by
       - asked_at
       - answered_at
@@ -2596,16 +2531,27 @@ components:
           - type: number
           - type: 'null'
           title: Distance
-          description: Preset distance in convention units, or null for custom.
-        consumed:
-          type: boolean
-          title: Consumed
-          description: Whether this slot has been used.
+          description: Preset distance or null for custom. Radar/thermometer only.
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+          description: Feature category. Matching/measuring only.
+        feature_class:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Feature Class
+          description: Feature class tier. Classed categories only.
+        ask_count:
+          type: integer
+          title: Ask Count
+          description: Number of times this slot has been used.
       type: object
       required:
       - slot_index
-      - distance
-      - consumed
+      - ask_count
       title: SlotResponse
       description: A slot in the question inventory.
     StationElectionStatus:

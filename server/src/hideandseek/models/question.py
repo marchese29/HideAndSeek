@@ -30,6 +30,7 @@ class Question(SQLModel, table=True):
     hider_location: Point | None = Field(
         default=None, sa_column=sa.Column(ShapelyGeometry('POINT', srid=4326), nullable=True)
     )
+    ask_count: int = 1
     answer: str | None = None
     exclusion: BaseGeometry | None = Field(
         default=None, sa_column=sa.Column(ShapelyGeometry('GEOMETRY', srid=4326), nullable=True)

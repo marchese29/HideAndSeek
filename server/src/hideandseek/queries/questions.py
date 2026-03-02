@@ -10,7 +10,7 @@ from shapely.geometry.base import BaseGeometry
 from sqlmodel import Session, select
 
 from hideandseek.db import db_read, db_write
-from hideandseek.models.inventory import CategoryUsage, InventorySlot
+from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.question import Question
 from hideandseek.models.question_params import (
     FeatureQuestionParams,
@@ -21,8 +21,8 @@ from hideandseek.models.types import (
     FeatureCategory,
     QuestionStatus,
     QuestionType,
-    SlotType,
 )
+from hideandseek.resolution import MATCHING_CATEGORIES, MEASURING_CATEGORIES
 
 
 @db_read
@@ -55,6 +55,7 @@ def create_question(
     status: QuestionStatus,
     asked_by: uuid.UUID,
     seeker_location_start: Point,
+    ask_count: int = 1,
 ) -> Question:
     """Create a question (without type-specific params — add those separately)."""
     q = Question(
@@ -64,6 +65,7 @@ def create_question(
         status=status,
         asked_by=asked_by,
         seeker_location_start=seeker_location_start,
+        ask_count=ask_count,
     )
     if status == QuestionStatus.answerable:
         q.answerable_at = datetime.now(UTC)
@@ -180,112 +182,92 @@ def update_question(session: Session, question: Question, updates: dict) -> Ques
 
 @db_read
 def get_inventory_slots(session: Session, game_id: uuid.UUID) -> list[InventorySlot]:
-    """Return all inventory slots for a game, ordered by slot_index."""
+    """Return all inventory slots for a game, ordered by question_type then slot_index."""
     return list(
         session.exec(
             select(InventorySlot)
             .where(InventorySlot.game_id == game_id)
-            .order_by(InventorySlot.slot_index)  # type: ignore[arg-type]
+            .order_by(InventorySlot.question_type, InventorySlot.slot_index)  # type: ignore[arg-type]
         ).all()
     )
 
 
 @db_read
 def get_slot_by_index(
-    session: Session, game_id: uuid.UUID, slot_type: SlotType, slot_index: int
+    session: Session, game_id: uuid.UUID, question_type: QuestionType, slot_index: int
 ) -> InventorySlot | None:
-    """Return a specific slot by its original template index (regardless of consumed state)."""
+    """Return a specific slot by its type and index."""
     return session.exec(
         select(InventorySlot).where(
             InventorySlot.game_id == game_id,
-            InventorySlot.slot_type == slot_type,
+            InventorySlot.question_type == question_type,
             InventorySlot.slot_index == slot_index,
         )
     ).one_or_none()
 
 
 @db_write
-def consume_slot(session: Session, slot: InventorySlot) -> InventorySlot:
-    """Mark a slot as consumed."""
-    slot.consumed_at = datetime.now(UTC)
+def use_slot(session: Session, slot: InventorySlot) -> InventorySlot:
+    """Increment a slot's ask_count."""
+    slot.ask_count += 1
     session.add(slot)
     return slot
 
 
 @db_write
 def create_inventory_slots(
-    session: Session, game_id: uuid.UUID, default_inventory: dict
+    session: Session,
+    game_id: uuid.UUID,
+    default_inventory: dict,
+    map_id: uuid.UUID,
 ) -> list[InventorySlot]:
-    """Create InventorySlot rows from a map's default_inventory template."""
+    """Create InventorySlot rows from a map's default_inventory and feature categories.
+
+    Radar/thermometer slots come from default_inventory.
+    Matching/measuring slots are derived from the map's feature categories.
+    """
+    from hideandseek.queries.features import get_map_feature_categories
+    from hideandseek.resolution import category_key
+
     slots: list[InventorySlot] = []
-    for slot_type_str in ('radars', 'thermometers'):
-        slot_type = SlotType.radar if slot_type_str == 'radars' else SlotType.thermometer
-        for idx, slot_data in enumerate(default_inventory.get(slot_type_str, [])):
+
+    # Radar and thermometer slots from default_inventory
+    for type_key, question_type in (
+        ('radars', QuestionType.radar),
+        ('thermometers', QuestionType.thermometer),
+    ):
+        for idx, slot_data in enumerate(default_inventory.get(type_key, [])):
             slot = InventorySlot(
                 game_id=game_id,
-                slot_type=slot_type,
+                question_type=question_type,
                 slot_index=idx,
                 distance=slot_data.get('distance'),
             )
             session.add(slot)
             slots.append(slot)
-    return slots
 
+    # Matching and measuring slots from map feature categories
+    map_cats = get_map_feature_categories(game_map_id=map_id)
+    # Sort by category_key for deterministic slot_index ordering
+    sorted_cats = sorted(map_cats, key=lambda pair: category_key(pair[0], pair[1]))
 
-# ── Category usage queries ──────────────────────────────────────────────
-
-
-@db_write
-def record_category_usage(
-    session: Session,
-    game_id: uuid.UUID,
-    question_type: QuestionType,
-    category: FeatureCategory,
-    feature_class: int | None,
-) -> CategoryUsage:
-    """Record that a category has been used for a question type in a game."""
-    usage = CategoryUsage(
-        game_id=game_id,
-        question_type=question_type,
-        category=category,
-        feature_class=feature_class,
-        consumed_at=datetime.now(UTC),
-    )
-    session.add(usage)
-    return usage
-
-
-@db_read
-def get_category_usages(
-    session: Session, game_id: uuid.UUID, question_type: QuestionType
-) -> list[CategoryUsage]:
-    """Return all category usages for a game and question type."""
-    return list(
-        session.exec(
-            select(CategoryUsage).where(
-                CategoryUsage.game_id == game_id,
-                CategoryUsage.question_type == question_type,
+    for question_type, type_categories in (
+        (QuestionType.matching, MATCHING_CATEGORIES),
+        (QuestionType.measuring, MEASURING_CATEGORIES),
+    ):
+        idx = 0
+        for cat, cls in sorted_cats:
+            if cat not in type_categories:
+                continue
+            slot = InventorySlot(
+                game_id=game_id,
+                question_type=question_type,
+                slot_index=idx,
+                category=cat,
+                feature_class=cls,
             )
-        ).all()
-    )
+            session.add(slot)
+            slots.append(slot)
+            idx += 1
 
-
-@db_read
-def is_category_used(
-    session: Session,
-    game_id: uuid.UUID,
-    question_type: QuestionType,
-    category: FeatureCategory,
-    feature_class: int | None,
-) -> bool:
-    """Check whether a category has already been used."""
-    stmt = select(CategoryUsage.id).where(
-        CategoryUsage.game_id == game_id,
-        CategoryUsage.question_type == question_type,
-        CategoryUsage.category == category,
-    )
-    if feature_class is not None:
-        stmt = stmt.where(CategoryUsage.feature_class == feature_class)
-    else:
-        stmt = stmt.where(CategoryUsage.feature_class.is_(None))  # type: ignore[union-attr]
-    return session.exec(stmt).first() is not None
+    return slots

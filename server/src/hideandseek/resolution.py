@@ -3,7 +3,7 @@
 Layer responsibilities:
 - geo.py — pure math (geodesic distance, distance_to_feature)
 - queries/features.py — pure data access (spatial SQL)
-- resolution.py (this file) — business logic (answer computation, availability)
+- resolution.py (this file) — business logic (answer computation, category classification)
 - routers/questions.py — HTTP orchestration
 """
 
@@ -15,13 +15,11 @@ from shapely.geometry import Point
 
 from hideandseek.geo import distance_to_feature
 from hideandseek.models.map_feature import MapFeature
-from hideandseek.models.types import FeatureCategory, QuestionType
+from hideandseek.models.types import FeatureCategory
 from hideandseek.queries.features import (
-    get_map_feature_categories,
     resolve_containing_feature,
     resolve_nearest_feature,
 )
-from hideandseek.queries.questions import get_category_usages
 
 # ── Category classification ──────────────────────────────────────────────
 
@@ -80,39 +78,6 @@ def category_key(category: FeatureCategory, feature_class: int | None) -> str:
     if feature_class is not None:
         return f'{category}:{feature_class}'
     return str(category)
-
-
-def get_available_categories(
-    map_id: uuid.UUID,
-    question_type: QuestionType,
-    game_id: uuid.UUID,
-) -> list[tuple[FeatureCategory, int | None]]:
-    """Categories available for asking.
-
-    Availability is inclusion-based: a category is available if features for it
-    exist on the map (via GameMapFeature). Filters by:
-    1. Question type support (matching vs measuring)
-    2. Already-used categories from CategoryUsage table
-    """
-    type_categories = (
-        MATCHING_CATEGORIES if question_type == QuestionType.matching else MEASURING_CATEGORIES
-    )
-
-    usages = get_category_usages(game_id, question_type)
-    used_keys: set[str] = {category_key(u.category, u.feature_class) for u in usages}
-
-    map_cats = get_map_feature_categories(game_map_id=map_id)
-
-    result: list[tuple[FeatureCategory, int | None]] = []
-    for cat, cls in map_cats:
-        if cat not in type_categories:
-            continue
-        key = category_key(cat, cls)
-        if key in used_keys:
-            continue
-        result.append((cat, cls))
-
-    return result
 
 
 def resolve_feature_for_player(

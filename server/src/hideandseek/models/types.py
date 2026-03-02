@@ -67,11 +67,6 @@ class FeatureCategory(StrEnum):
     foreign_consulate = 'foreign_consulate'
 
 
-class SlotType(StrEnum):
-    radar = 'radar'
-    thermometer = 'thermometer'
-
-
 class QuestionType(StrEnum):
     radar = 'radar'
     thermometer = 'thermometer'
