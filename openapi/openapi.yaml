@@ -892,7 +892,10 @@ paths:
       tags:
       - questions
       summary: Veto Question
-      description: "Hider vetoes a question \u2014 no answer, no exclusion zone."
+      description: "Hider vetoes a question \u2014 no answer, no exclusion zone.\n\
+        \nWith scheduled=true, the veto is deferred: it fires when the auto-answer\n\
+        timer expires instead of immediately. The hider can still answer normally\n\
+        before the timer to cancel the scheduled veto implicitly."
       operationId: veto_question_games__game_id__questions__question_id__veto_post
       parameters:
       - name: question_id
@@ -909,6 +912,13 @@ paths:
           type: string
           format: uuid
           title: Game Id
+      - name: scheduled
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Scheduled
       - name: x-client-id
         in: header
         required: true

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import structlog
 
@@ -102,6 +103,24 @@ def auto_answer_question(question_id: str) -> None:
         game = get_game_by_id(question.game_id)
         if not game:
             logger.warning('auto_answer_game_not_found', game_id=str(question.game_id))
+            return
+
+        # Scheduled veto: veto instead of computing an answer
+        if question.scheduled_veto:
+            update_question(
+                question,
+                {'status': QuestionStatus.vetoed, 'answered_at': datetime.now(UTC)},
+            )
+            game_id = str(question.game_id)
+            logger.info('scheduled_veto_executed', question_id=question_id, game_id=game_id)
+            send_push.delay(  # type: ignore[attr-defined]
+                game_id,
+                PushEventType.question_vetoed,
+                role_filter='seeker',
+                alert='The hider used a veto!',
+                question_id=question_id,
+                question_type=question.question_type,
+            )
             return
 
         # Resolve ambiguous station before computing the answer

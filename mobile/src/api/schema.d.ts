@@ -460,6 +460,10 @@ export interface paths {
         /**
          * Veto Question
          * @description Hider vetoes a question — no answer, no exclusion zone.
+         *
+         *     With scheduled=true, the veto is deferred: it fires when the auto-answer
+         *     timer expires instead of immediately. The hider can still answer normally
+         *     before the timer to cancel the scheduled veto implicitly.
          */
         post: operations["veto_question_games__game_id__questions__question_id__veto_post"];
         delete?: never;
@@ -2476,7 +2480,9 @@ export interface operations {
     };
     veto_question_games__game_id__questions__question_id__veto_post: {
         parameters: {
-            query?: never;
+            query?: {
+                scheduled?: boolean;
+            };
             header: {
                 "x-client-id": string;
             };

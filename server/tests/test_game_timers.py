@@ -288,3 +288,34 @@ def test_auto_answer_measuring_question(session: Session):
     session.refresh(question)
     assert question.status == QuestionStatus.answered
     assert question.answer == 'closer'  # seeker 50m vs hider far away
+
+
+# ── scheduled veto via auto_answer ────────────────────────────────────────────
+
+
+def test_auto_answer_executes_scheduled_veto(session: Session):
+    """When scheduled_veto is set, auto-answer vetoes instead of computing an answer."""
+    game, question = _create_answerable_question(session)
+    question.scheduled_veto = True
+    session.add(question)
+    session.commit()
+
+    auto_answer_question(str(question.id))
+    session.expire_all()
+    session.refresh(question)
+    assert question.status == QuestionStatus.vetoed
+    assert question.answered_at is not None
+    assert question.answer is None
+    assert question.hider_location is None
+
+
+def test_auto_answer_without_scheduled_veto_still_answers(session: Session):
+    """Without the flag, auto-answer computes an answer as normal."""
+    game, question = _create_answerable_question(session)
+    assert question.scheduled_veto is False
+
+    auto_answer_question(str(question.id))
+    session.expire_all()
+    session.refresh(question)
+    assert question.status == QuestionStatus.answered
+    assert question.answer is not None

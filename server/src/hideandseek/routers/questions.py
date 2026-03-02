@@ -330,13 +330,23 @@ def answer_question(
 )
 def veto_question(
     question_id: uuid.UUID,
+    scheduled: bool = False,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
 ) -> QuestionDetailResponse:
-    """Hider vetoes a question — no answer, no exclusion zone."""
+    """Hider vetoes a question — no answer, no exclusion zone.
+
+    With scheduled=true, the veto is deferred: it fires when the auto-answer
+    timer expires instead of immediately. The hider can still answer normally
+    before the timer to cancel the scheduled veto implicitly.
+    """
     question, _hider_location = validate_answer_request(question_id, game, player.id, player.role)
 
-    # Revoke the auto-answer deadline
+    if scheduled:
+        update_question(question, {'scheduled_veto': True})
+        return QuestionDetailResponse.from_model(question)
+
+    # Immediate veto — revoke auto-answer and mark vetoed now
     if not celery_app.conf.task_always_eager:
         celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
 

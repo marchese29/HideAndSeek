@@ -950,6 +950,74 @@ def test_veto_no_exclusion_generated(client: TestClient, session: Session):
     assert resp.json()['total_exclusion'] is None
 
 
+# ── Scheduled veto tests ──────────────────────────────────────────────────────
+
+
+def test_scheduled_veto_sets_flag(client: TestClient, session: Session):
+    """Calling veto with scheduled=true keeps question answerable and sets the flag."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/veto?scheduled=true',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['status'] == 'answerable'  # NOT vetoed yet
+    assert data['answer'] is None
+    assert data['answered_at'] is None
+
+
+def test_scheduled_veto_answer_overrides(client: TestClient, session: Session):
+    """Hider can answer normally after scheduling a veto — answer wins."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    # Schedule veto
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/veto?scheduled=true',
+        headers=_headers(hider.client_id),
+    )
+
+    # Answer normally — overrides the scheduled veto
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()['status'] == 'answered'
+    assert resp.json()['answer'] is not None
+
+
+def test_scheduled_veto_immediate_still_works(client: TestClient, session: Session):
+    """Calling veto without scheduled flag still vetoes immediately."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/veto',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()['status'] == 'vetoed'
+
+
 # ── Imperial convention tests ──────────────────────────────────────────────
 
 

@@ -147,6 +147,12 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/veto \
   -H "X-Client-Id: $HIDER"
 # → status: "vetoed", answer: null, no exclusion
 # → seekers can re-ask the same slot (ask_count increments)
+
+# Scheduled veto (hider) — veto fires when auto-answer timer expires
+curl -s -X POST "localhost:8000/games/<game_id>/questions/<question_id>/veto?scheduled=true" \
+  -H "X-Client-Id: $HIDER"
+# → question stays answerable, veto triggers at timer expiry
+# → hider can still answer normally before the timer to override
 ```
 
 ### Thermometer question
@@ -266,7 +272,7 @@ data/                                   # SQLite DB file (gitignored)
   - **Database** — native spatial columns (PostGIS for Docker/production, SpatiaLite for local/tests). The `ShapelyGeometry(Geometry)` column type in `models/geo_types.py` transparently converts between shapely and WKB — model code never touches WKB directly.
 
   Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column type bridges Python↔DB automatically.
-- **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic.py` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic.py`. Question status: `asked` → `in_progress` (thermometer only) → `answerable` → `answered` or `vetoed`. Veto is a hider action (`POST /questions/{qid}/veto`) that skips answer computation — no exclusion zone, no hider location snapshot. Vetoed questions don't block new questions.
+- **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic.py` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic.py`. Question status: `asked` → `in_progress` (thermometer only) → `answerable` → `answered` or `vetoed`. Veto is a hider action (`POST /questions/{qid}/veto`) that skips answer computation — no exclusion zone, no hider location snapshot. Vetoed questions don't block new questions. Scheduled veto (`?scheduled=true`) sets a flag instead of vetoing immediately — the auto-answer task checks `scheduled_veto` and vetoes at timer expiry. The hider can still answer normally before the timer to override. The `scheduled_veto` field is server-only (not in any response schema) so seekers never see it.
 - **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All use a unified `AskQuestionRequest` body (`slot_index`, `location`, optional `custom_distance`). The URL path determines `question_type`; `slot_index` identifies the inventory slot. Seeker `location` is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer and list endpoints remain unified.
 - **Role-gated endpoint split**: Endpoints are split by role (see `design/game-state-split.md`). Principles: role = access control only (determines *whether* you can call an endpoint, never *what* you get back), fixed response shapes (no conditional field nulling), default-deny on shared endpoints. The split:
   - **Shared** (any player): `GET /games/{id}` (slim game state with inventory — slots grouped by type with ask counts, no `hider_station_id`), `GET /games/{id}/questions` (whitelist summary — no parameters, locations, or geometry).
