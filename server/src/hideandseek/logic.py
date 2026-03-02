@@ -18,6 +18,7 @@ from hideandseek.conventions import from_meters, get_default_hiding_zone_radius,
 from hideandseek.exclusion import (
     EndgameExclusionResult,
     compute_endgame_exclusions,
+    compute_hiding_zone,
     exclude_matching,
     exclude_measuring,
     exclude_radar,
@@ -34,6 +35,7 @@ from hideandseek.models.types import (
     PlayerRole,
     QuestionStatus,
     QuestionType,
+    StationElectionStatus,
 )
 from hideandseek.queries.features import get_features_by_category
 from hideandseek.queries.location import get_latest_location_for_player
@@ -49,7 +51,16 @@ from hideandseek.queries.questions import (
     record_category_usage,
     update_question,
 )
-from hideandseek.queries.stops import get_candidate_stations as query_candidate_stations
+from hideandseek.queries.stops import (
+    all_hiders_within_radius,
+    get_closest_stop_to_any,
+    get_stops_within_radius_of_all,
+    get_stops_within_radius_of_any,
+    validate_stop_playable,
+)
+from hideandseek.queries.stops import (
+    get_candidate_stations as query_candidate_stations,
+)
 from hideandseek.resolution import resolve_feature_for_player
 
 # ── Ask ──────────────────────────────────────────────────────────────────
@@ -422,7 +433,7 @@ def _update_hider_resolution(
 # ── Endgame ─────────────────────────────────────────────────────────────
 
 
-def _effective_hiding_zone_radius_m(game: Game) -> float:
+def effective_hiding_zone_radius_m(game: Game) -> float:
     """Compute effective hiding zone radius in meters for a game.
 
     Fallback chain: game-level override → map-level override → code-level default.
@@ -444,7 +455,7 @@ def get_endgame_exclusions(
     Returns hiding zone geometry and per-question exclusions intersected with it,
     starting from questions after the given sequence number.
     """
-    radius_m = _effective_hiding_zone_radius_m(game)
+    radius_m = effective_hiding_zone_radius_m(game)
     questions = list_answered_questions_after_sequence(game.id, after_sequence)
     return compute_endgame_exclusions(
         game.game_map.boundary, station.coordinates, radius_m, questions
@@ -453,8 +464,102 @@ def get_endgame_exclusions(
 
 def get_candidate_stations(game: Game, offset: int, limit: int) -> list[Stop]:
     """Return playable stops not fully covered by the game's total exclusion."""
-    radius_m = _effective_hiding_zone_radius_m(game)
+    radius_m = effective_hiding_zone_radius_m(game)
     return query_candidate_stations(game, radius_m, offset, limit)
+
+
+# ── Station election ──────────────────────────────────────────────────
+
+
+def _get_hider_locations(game: Game) -> list[Point]:
+    """Fetch latest location for each hider in the game."""
+    hiders = [p for p in game.players if p.role == PlayerRole.hider]
+    locations = []
+    for hider in hiders:
+        latest = get_latest_location_for_player(hider.id, game.id)
+        if latest:
+            locations.append(latest.coordinates)
+    return locations
+
+
+def validate_station_election(game: Game, station_id: uuid.UUID) -> Stop:
+    """Validate a station election request. Returns the stop.
+
+    Raises ValueError if the stop is not playable or any hider is outside the radius.
+    """
+    stop = validate_stop_playable(game, station_id)
+    if not stop:
+        raise ValueError('Stop is not a playable station in this game.')
+
+    radius_m = effective_hiding_zone_radius_m(game)
+    hider_locations = _get_hider_locations(game)
+    if not hider_locations:
+        raise ValueError('No hider locations available.')
+
+    if not all_hiders_within_radius(stop, hider_locations, radius_m):
+        raise ValueError('Not all hiders are within the hiding zone radius of this station.')
+
+    return stop
+
+
+def resolve_station_at_transition(
+    game: Game,
+) -> tuple[Stop | None, StationElectionStatus]:
+    """Resolve hider station at the hiding→seeking transition.
+
+    If already elected, returns (None, elected) — no work needed.
+    Otherwise finds valid candidates (stops where all hiders are within radius).
+    Exactly 1 → auto_assigned. 0 or 2+ → ambiguous.
+    """
+    if game.station_election_status == StationElectionStatus.elected:
+        return None, StationElectionStatus.elected
+
+    radius_m = effective_hiding_zone_radius_m(game)
+    hider_locations = _get_hider_locations(game)
+    if not hider_locations:
+        return None, StationElectionStatus.ambiguous
+
+    candidates = get_stops_within_radius_of_all(game, hider_locations, radius_m)
+    if len(candidates) == 1:
+        return candidates[0], StationElectionStatus.auto_assigned
+    return None, StationElectionStatus.ambiguous
+
+
+def resolve_station_fallback(game: Game) -> Stop:
+    """Resolve station via 3-tier cascade for ambiguity fallback.
+
+    1. All hiders within radius → pick tightest fit
+    2. Any hider within radius → pick shortest min distance
+    3. Closest (stop, hider) pair
+
+    Each query returns results ordered by its selection criterion,
+    so index 0 is the best pick for that tier.
+    """
+    radius_m = effective_hiding_zone_radius_m(game)
+    hider_locations = _get_hider_locations(game)
+
+    # Tier 1: all hiders in radius — ordered by max hider distance (tightest fit first)
+    candidates = get_stops_within_radius_of_all(game, hider_locations, radius_m)
+    if candidates:
+        return candidates[0]
+
+    # Tier 2: any hider in radius — ordered by min hider distance (shortest first)
+    candidates = get_stops_within_radius_of_any(game, hider_locations, radius_m)
+    if candidates:
+        return candidates[0]
+
+    # Tier 3: absolute closest (stop, hider) pair across all combos
+    stop = get_closest_stop_to_any(game, hider_locations)
+    if stop:
+        return stop
+
+    raise RuntimeError('No playable stops found for fallback resolution.')
+
+
+def compute_hiding_zone_for_station(game: Game, station: Stop) -> BaseGeometry:
+    """Compute the hiding zone polygon for a station in a game."""
+    radius_m = effective_hiding_zone_radius_m(game)
+    return compute_hiding_zone(station.coordinates, radius_m, game.game_map.boundary)
 
 
 _HIDER_LOCATION_FRESHNESS = timedelta(minutes=1)

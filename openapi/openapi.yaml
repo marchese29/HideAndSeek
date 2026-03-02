@@ -306,7 +306,8 @@ paths:
       tags:
       - games
       summary: Get Hider Station
-      description: The hider's assigned station during seeking.
+      description: The hider's station and election status. Available during hiding
+        and seeking.
       operationId: get_hider_station_games__game_id__hider_station_get
       parameters:
       - name: game_id
@@ -330,6 +331,146 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HiderStationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - games
+      summary: Elect Hider Station
+      description: Elect a station as the hider's hiding zone anchor. Permanent.
+      operationId: elect_hider_station_games__game_id__hider_station_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ElectStationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HidingZoneResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/nearby-stations:
+    get:
+      tags:
+      - games
+      summary: Get Nearby Stations
+      description: Playable stops within hiding zone radius of a point, with hiding
+        zone polygons.
+      operationId: get_nearby_stations_games__game_id__nearby_stations_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+          description: Latitude of the query point.
+          title: Lat
+        description: Latitude of the query point.
+      - name: lng
+        in: query
+        required: true
+        schema:
+          type: number
+          description: Longitude of the query point.
+          title: Lng
+        description: Longitude of the query point.
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NearbyStationResponse'
+                title: Response Get Nearby Stations Games  Game Id  Nearby Stations
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/hiding-zone:
+    get:
+      tags:
+      - games
+      summary: Get Hiding Zone
+      description: Hiding zone polygon for a given station.
+      operationId: get_hiding_zone_games__game_id__hiding_zone_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: station_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stop ID to compute the hiding zone for.
+          title: Station Id
+        description: Stop ID to compute the hiding zone for.
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HidingZoneResponse'
         '422':
           description: Validation Error
           content:
@@ -1173,6 +1314,22 @@ components:
 
 
         Single source of truth for what the client should render.'
+    ElectStationRequest:
+      properties:
+        station_id:
+          type: string
+          format: uuid
+          title: Station Id
+          description: ID of the stop to elect as hider station.
+        location:
+          $ref: '#/components/schemas/Point'
+          description: Current hider position as a GeoJSON Point.
+      type: object
+      required:
+      - station_id
+      - location
+      title: ElectStationRequest
+      description: "Elect a hider station \u2014 lock in the hiding zone."
     EndgameExclusionEntryResponse:
       properties:
         question_id:
@@ -1538,14 +1695,49 @@ components:
     HiderStationResponse:
       properties:
         hider_station_id:
-          type: string
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Hider Station Id
+          description: Station UUID, or null if not yet assigned (ambiguous/pending).
+        station_election_status:
+          $ref: '#/components/schemas/StationElectionStatus'
+          description: Current station election status.
       type: object
       required:
       - hider_station_id
+      - station_election_status
       title: HiderStationResponse
-      description: The hider's assigned station during seeking.
+      description: "The hider's assigned station \u2014 includes election status."
+    HidingZoneResponse:
+      properties:
+        hiding_zone:
+          oneOf:
+          - $ref: '#/components/schemas/Point'
+          - $ref: '#/components/schemas/MultiPoint'
+          - $ref: '#/components/schemas/LineString'
+          - $ref: '#/components/schemas/MultiLineString'
+          - $ref: '#/components/schemas/Polygon'
+          - $ref: '#/components/schemas/MultiPolygon'
+          - $ref: '#/components/schemas/GeometryCollection'
+          title: Hiding Zone
+          description: Hiding zone polygon (buffer clipped to game map boundary).
+          discriminator:
+            propertyName: type
+            mapping:
+              GeometryCollection: '#/components/schemas/GeometryCollection'
+              LineString: '#/components/schemas/LineString'
+              MultiLineString: '#/components/schemas/MultiLineString'
+              MultiPoint: '#/components/schemas/MultiPoint'
+              MultiPolygon: '#/components/schemas/MultiPolygon'
+              Point: '#/components/schemas/Point'
+              Polygon: '#/components/schemas/Polygon'
+      type: object
+      required:
+      - hiding_zone
+      title: HidingZoneResponse
+      description: The hiding zone polygon around a given station.
     InventoryResponse:
       properties:
         radar_slots:
@@ -1944,6 +2136,52 @@ components:
       - coordinates
       title: MultiPolygon
       description: MultiPolygon Model
+    NearbyStationResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        stable_id:
+          type: string
+          title: Stable Id
+          description: Stable identifier from the transit dataset.
+        name:
+          type: string
+          title: Name
+        coordinates:
+          $ref: '#/components/schemas/Point'
+          description: GeoJSON Point.
+        hiding_zone:
+          oneOf:
+          - $ref: '#/components/schemas/Point'
+          - $ref: '#/components/schemas/MultiPoint'
+          - $ref: '#/components/schemas/LineString'
+          - $ref: '#/components/schemas/MultiLineString'
+          - $ref: '#/components/schemas/Polygon'
+          - $ref: '#/components/schemas/MultiPolygon'
+          - $ref: '#/components/schemas/GeometryCollection'
+          title: Hiding Zone
+          description: Hiding zone polygon (buffer clipped to game map boundary).
+          discriminator:
+            propertyName: type
+            mapping:
+              GeometryCollection: '#/components/schemas/GeometryCollection'
+              LineString: '#/components/schemas/LineString'
+              MultiLineString: '#/components/schemas/MultiLineString'
+              MultiPoint: '#/components/schemas/MultiPoint'
+              MultiPolygon: '#/components/schemas/MultiPolygon'
+              Point: '#/components/schemas/Point'
+              Polygon: '#/components/schemas/Polygon'
+      type: object
+      required:
+      - id
+      - stable_id
+      - name
+      - coordinates
+      - hiding_zone
+      title: NearbyStationResponse
+      description: A playable stop near a given point, with its hiding zone polygon.
     PlayerResponse:
       properties:
         id:
@@ -2370,6 +2608,14 @@ components:
       - consumed
       title: SlotResponse
       description: A slot in the question inventory.
+    StationElectionStatus:
+      type: string
+      enum:
+      - pending
+      - elected
+      - auto_assigned
+      - ambiguous
+      title: StationElectionStatus
     StopResponse:
       properties:
         id:

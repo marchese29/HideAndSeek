@@ -193,9 +193,53 @@ export interface paths {
         };
         /**
          * Get Hider Station
-         * @description The hider's assigned station during seeking.
+         * @description The hider's station and election status. Available during hiding and seeking.
          */
         get: operations["get_hider_station_games__game_id__hider_station_get"];
+        put?: never;
+        /**
+         * Elect Hider Station
+         * @description Elect a station as the hider's hiding zone anchor. Permanent.
+         */
+        post: operations["elect_hider_station_games__game_id__hider_station_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/games/{game_id}/nearby-stations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Nearby Stations
+         * @description Playable stops within hiding zone radius of a point, with hiding zone polygons.
+         */
+        get: operations["get_nearby_stations_games__game_id__nearby_stations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/games/{game_id}/hiding-zone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Hiding Zone
+         * @description Hiding zone polygon for a given station.
+         */
+        get: operations["get_hiding_zone_games__game_id__hiding_zone_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -696,6 +740,20 @@ export interface components {
             routes: components["schemas"]["RouteResponse"][];
         };
         /**
+         * ElectStationRequest
+         * @description Elect a hider station — lock in the hiding zone.
+         */
+        ElectStationRequest: {
+            /**
+             * Station Id
+             * Format: uuid
+             * @description ID of the stop to elect as hider station.
+             */
+            station_id: string;
+            /** @description Current hider position as a GeoJSON Point. */
+            location: components["schemas"]["Point"];
+        };
+        /**
          * EndgameExclusionEntryResponse
          * @description One question's exclusion intersected with the hiding zone.
          */
@@ -898,14 +956,27 @@ export interface components {
         };
         /**
          * HiderStationResponse
-         * @description The hider's assigned station during seeking.
+         * @description The hider's assigned station — includes election status.
          */
         HiderStationResponse: {
             /**
              * Hider Station Id
-             * Format: uuid
+             * @description Station UUID, or null if not yet assigned (ambiguous/pending).
              */
-            hider_station_id: string;
+            hider_station_id: string | null;
+            /** @description Current station election status. */
+            station_election_status: components["schemas"]["StationElectionStatus"];
+        };
+        /**
+         * HidingZoneResponse
+         * @description The hiding zone polygon around a given station.
+         */
+        HidingZoneResponse: {
+            /**
+             * Hiding Zone
+             * @description Hiding zone polygon (buffer clipped to game map boundary).
+             */
+            hiding_zone: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
         };
         /**
          * InventoryResponse
@@ -1196,6 +1267,31 @@ export interface components {
             type: "MultiPolygon";
             /** Coordinates */
             coordinates: (components["schemas"]["Position2D"] | components["schemas"]["Position3D"])[][][];
+        };
+        /**
+         * NearbyStationResponse
+         * @description A playable stop near a given point, with its hiding zone polygon.
+         */
+        NearbyStationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Stable Id
+             * @description Stable identifier from the transit dataset.
+             */
+            stable_id: string;
+            /** Name */
+            name: string;
+            /** @description GeoJSON Point. */
+            coordinates: components["schemas"]["Point"];
+            /**
+             * Hiding Zone
+             * @description Hiding zone polygon (buffer clipped to game map boundary).
+             */
+            hiding_zone: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
         };
         /**
          * PlayerResponse
@@ -1502,6 +1598,11 @@ export interface components {
              */
             consumed: boolean;
         };
+        /**
+         * StationElectionStatus
+         * @enum {string}
+         */
+        StationElectionStatus: "pending" | "elected" | "auto_assigned" | "ambiguous";
         /**
          * StopResponse
          * @description A transit stop on the effective game map.
@@ -1899,6 +2000,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HiderStationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    elect_hider_station_games__game_id__hider_station_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-client-id": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ElectStationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HidingZoneResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_nearby_stations_games__game_id__nearby_stations_get: {
+        parameters: {
+            query: {
+                /** @description Latitude of the query point. */
+                lat: number;
+                /** @description Longitude of the query point. */
+                lng: number;
+            };
+            header: {
+                "x-client-id": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NearbyStationResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_hiding_zone_games__game_id__hiding_zone_get: {
+        parameters: {
+            query: {
+                /** @description Stop ID to compute the hiding zone for. */
+                station_id: string;
+            };
+            header: {
+                "x-client-id": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HidingZoneResponse"];
                 };
             };
             /** @description Validation Error */

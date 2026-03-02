@@ -19,6 +19,7 @@ from hideandseek.models.types import (
     PlayerRole,
     QuestionStatus,
     QuestionType,
+    StationElectionStatus,
 )
 from hideandseek.tasks.game_timers import auto_answer_question, transition_hiding_to_seeking
 from tests.conftest import (
@@ -40,12 +41,49 @@ def _patch_engine(session: Session, monkeypatch: pytest.MonkeyPatch):
 
 
 def test_transition_hiding_to_seeking(session: Session):
+    """Without hider locations, transition sets ambiguous status."""
     game = create_game(session, status=GameStatus.hiding)
     transition_hiding_to_seeking(str(game.id))
     session.expire_all()
     session.refresh(game)
     assert game.status == GameStatus.seeking
     assert game.seeking_started_at is not None
+    # No hider locations → ambiguous
+    assert game.station_election_status == StationElectionStatus.ambiguous
+    assert game.hider_station_id is None
+
+
+def test_transition_preserves_early_election(session: Session):
+    """If station was elected during hiding, transition leaves it alone."""
+    from hideandseek.models.game_map import GameMap
+    from hideandseek.models.transit import Stop
+
+    game = create_game(
+        session,
+        status=GameStatus.hiding,
+        station_election_status=StationElectionStatus.elected,
+    )
+    game_map = session.get(GameMap, game.map_id)
+    assert game_map is not None
+    stop = Stop(
+        stable_id='early-elect',
+        dataset_id=game_map.transit_dataset_id,
+        name='Early Station',
+        coordinates=Point(0.5, 0.5),
+    )
+    session.add(stop)
+    session.commit()
+    session.refresh(stop)
+    game.hider_station_id = stop.id
+    session.add(game)
+    session.commit()
+
+    transition_hiding_to_seeking(str(game.id))
+    session.expire_all()
+    session.refresh(game)
+    assert game.status == GameStatus.seeking
+    assert game.station_election_status == StationElectionStatus.elected
+    assert game.hider_station_id == stop.id
 
 
 def test_transition_idempotent_when_already_seeking(session: Session):

@@ -139,6 +139,18 @@ def exclude_thermometer(
     return exclude_matching(game_map, seeker_end, [seeker_start], same=seeker_closer)
 
 
+# ── Hiding zone ───────────────────────────────────────────────────────────
+
+
+def compute_hiding_zone(
+    station: Point,
+    radius_m: float,
+    boundary: BaseGeometry,
+) -> BaseGeometry:
+    """Compute the hiding zone around a station, clipped to the game map boundary."""
+    return _buffer(station, radius_m).intersection(boundary)
+
+
 # ── Endgame exclusions ─────────────────────────────────────────────────────
 
 
@@ -172,7 +184,7 @@ def compute_endgame_exclusions(
     intersects each question's stored exclusion with it, and builds a fresh cumulative
     total_exclusion from the intersected results only (long-game exclusions do not carry over).
     """
-    hiding_zone = _buffer(station, radius_m).intersection(game_map)
+    hiding_zone = compute_hiding_zone(station, radius_m, game_map)
     cumulative: BaseGeometry | None = None
     entries: list[EndgameExclusionEntry] = []
 

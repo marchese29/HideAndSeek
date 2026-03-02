@@ -3,16 +3,29 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from shapely.geometry import Point
 
 from hideandseek.celery_app import app as celery_app
 from hideandseek.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
 from hideandseek.db import get_session
-from hideandseek.dependencies import get_client_id, get_game, get_hider_in_game, get_seeker_in_game
-from hideandseek.logic import get_candidate_stations
+from hideandseek.dependencies import (
+    get_client_id,
+    get_game,
+    get_hider_in_game,
+    get_player_in_game,
+    get_seeker_in_game,
+)
+from hideandseek.logic import (
+    compute_hiding_zone_for_station,
+    effective_hiding_zone_radius_m,
+    get_candidate_stations,
+    validate_station_election,
+)
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import GameStatus, PlayerRole, PushEventType
+from hideandseek.models.types import GameStatus, PlayerRole, PushEventType, StationElectionStatus
 from hideandseek.queries.device_tokens import upsert_device_token
 from hideandseek.queries.effective_map import get_effective_map_data
 from hideandseek.queries.features import get_map_feature_categories
@@ -20,6 +33,7 @@ from hideandseek.queries.games import (
     add_player,
     find_game_by_join_code,
     get_player,
+    set_hider_station,
     update_game_status,
 )
 from hideandseek.queries.games import (
@@ -28,15 +42,24 @@ from hideandseek.queries.games import (
 from hideandseek.queries.games import (
     update_player as query_update_player,
 )
+from hideandseek.queries.location import create_location_update
 from hideandseek.queries.maps import get_map
 from hideandseek.queries.questions import get_inventory_slots
-from hideandseek.schemas.request import CreateGameRequest, JoinGameRequest, PlayerUpdate
+from hideandseek.queries.stops import get_stops_near_point, validate_stop_playable
+from hideandseek.schemas.request import (
+    CreateGameRequest,
+    ElectStationRequest,
+    JoinGameRequest,
+    PlayerUpdate,
+)
 from hideandseek.schemas.response import (
     EffectiveMapResponse,
     GameResponse,
     HiderStationResponse,
+    HidingZoneResponse,
     InventoryResponse,
     JoinGameResponse,
+    NearbyStationResponse,
     PlayerResponse,
     StopResponse,
 )
@@ -224,14 +247,95 @@ def get_hider_station(
     game: Game = Depends(get_game),
     _player: Player = Depends(get_hider_in_game),
 ) -> HiderStationResponse:
-    """The hider's assigned station during seeking."""
-    if game.status != GameStatus.seeking:
+    """The hider's station and election status. Available during hiding and seeking."""
+    if game.status not in {GameStatus.hiding, GameStatus.seeking}:
         raise HTTPException(
-            status_code=409, detail='Hider station is only available during seeking.'
+            status_code=409, detail='Hider station is only available during hiding or seeking.'
         )
-    if game.hider_station_id is None:
-        raise HTTPException(status_code=404, detail='Hider station not yet assigned.')
-    return HiderStationResponse(hider_station_id=game.hider_station_id)
+    return HiderStationResponse(
+        hider_station_id=game.hider_station_id,
+        station_election_status=game.station_election_status,
+    )
+
+
+@router.post('/{game_id}/hider-station', response_model=HidingZoneResponse)
+def elect_hider_station(
+    body: ElectStationRequest,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_hider_in_game),
+) -> HidingZoneResponse:
+    """Elect a station as the hider's hiding zone anchor. Permanent."""
+    not_hiding = game.status != GameStatus.hiding
+    not_ambiguous = game.station_election_status != StationElectionStatus.ambiguous
+    if not_hiding and not_ambiguous:
+        raise HTTPException(
+            status_code=409,
+            detail='Station election is only allowed during hiding or when ambiguous.',
+        )
+    if game.hider_station_id is not None:
+        raise HTTPException(status_code=409, detail='Station has already been elected.')
+
+    # Store caller's location update
+    coords = Point(body.location.coordinates[0], body.location.coordinates[1])
+    create_location_update(
+        player_id=player.id,
+        game_id=game.id,
+        coordinates=coords,
+        timestamp=datetime.now(UTC),
+    )
+
+    try:
+        stop = validate_station_election(game, body.station_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    set_hider_station(game, stop.id, StationElectionStatus.elected)
+    zone = compute_hiding_zone_for_station(game, stop)
+
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.station_elected,
+        role_filter='hider',
+        alert=f'Station locked in: {stop.name}',
+    )
+
+    return HidingZoneResponse.from_geometry(zone)
+
+
+@router.get('/{game_id}/nearby-stations', response_model=list[NearbyStationResponse])
+def get_nearby_stations(
+    lat: float = Query(description='Latitude of the query point.'),
+    lng: float = Query(description='Longitude of the query point.'),
+    game: Game = Depends(get_game),
+    _player: Player = Depends(get_player_in_game),
+) -> list[NearbyStationResponse]:
+    """Playable stops within hiding zone radius of a point, with hiding zone polygons."""
+    radius_m = effective_hiding_zone_radius_m(game)
+    location = Point(lng, lat)
+    stops = get_stops_near_point(game, location, radius_m)
+
+    return [
+        NearbyStationResponse.from_stop_and_zone(
+            s,
+            compute_hiding_zone_for_station(game, s),
+        )
+        for s in stops
+    ]
+
+
+@router.get('/{game_id}/hiding-zone', response_model=HidingZoneResponse)
+def get_hiding_zone(
+    station_id: uuid.UUID = Query(description='Stop ID to compute the hiding zone for.'),
+    game: Game = Depends(get_game),
+    _player: Player = Depends(get_player_in_game),
+) -> HidingZoneResponse:
+    """Hiding zone polygon for a given station."""
+    stop = validate_stop_playable(game, station_id)
+    if not stop:
+        raise HTTPException(status_code=404, detail='Station not found or not playable.')
+
+    zone = compute_hiding_zone_for_station(game, stop)
+    return HidingZoneResponse.from_geometry(zone)
 
 
 @router.get('/{game_id}/map', response_model=EffectiveMapResponse)

@@ -12,7 +12,13 @@ from sqlmodel import Session, select
 from hideandseek.conventions import get_default_inventory
 from hideandseek.db import db_read, db_write
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import DistanceConvention, GameStatus, MapSize, PlayerRole
+from hideandseek.models.types import (
+    DistanceConvention,
+    GameStatus,
+    MapSize,
+    PlayerRole,
+    StationElectionStatus,
+)
 from hideandseek.queries.questions import create_inventory_slots
 
 
@@ -122,7 +128,20 @@ def update_game_status(session: Session, game: Game, status: GameStatus) -> Game
 
 
 @db_write
-def set_hider_station(session: Session, game: Game, station_id: uuid.UUID) -> None:
-    """Set the hider's codified station on the game."""
+def set_hider_station(
+    session: Session,
+    game: Game,
+    station_id: uuid.UUID,
+    status: StationElectionStatus,
+) -> None:
+    """Set the hider's station and election status on the game."""
     game.hider_station_id = station_id
+    game.station_election_status = status
+    session.add(game)
+
+
+@db_write
+def set_station_ambiguous(session: Session, game: Game) -> None:
+    """Mark station election as ambiguous (0 or 2+ valid candidates)."""
+    game.station_election_status = StationElectionStatus.ambiguous
     session.add(game)

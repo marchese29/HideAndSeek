@@ -5,7 +5,7 @@ from typing import Optional
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
 
-from hideandseek.models.types import GameStatus, PlayerRole
+from hideandseek.models.types import GameStatus, PlayerRole, StationElectionStatus
 
 
 class Game(SQLModel, table=True):
@@ -22,6 +22,7 @@ class Game(SQLModel, table=True):
     hiding_started_at: datetime | None = None
     seeking_started_at: datetime | None = None
     hider_station_id: uuid.UUID | None = Field(default=None, foreign_key='stop.id')
+    station_election_status: StationElectionStatus = StationElectionStatus.pending
     excluded_stop_ids: list = Field(default_factory=list, sa_type=sa.JSON)
     excluded_route_ids: list = Field(default_factory=list, sa_type=sa.JSON)
     hiding_zone_radius_override: float | None = None

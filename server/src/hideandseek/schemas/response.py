@@ -13,6 +13,7 @@ from geojson_pydantic import Polygon as GeoJSONPolygon
 from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
 from pydantic import BaseModel, Field, TypeAdapter
 from shapely.geometry import mapping
+from shapely.geometry.base import BaseGeometry
 
 from hideandseek.models.types import (
     GameStatus,
@@ -21,6 +22,7 @@ from hideandseek.models.types import (
     QuestionStatus,
     QuestionType,
     SlotType,
+    StationElectionStatus,
 )
 
 if TYPE_CHECKING:
@@ -529,9 +531,53 @@ class QuestionDetailResponse(BaseModel):
 
 
 class HiderStationResponse(BaseModel):
-    """The hider's assigned station during seeking."""
+    """The hider's assigned station — includes election status."""
 
-    hider_station_id: uuid.UUID
+    hider_station_id: uuid.UUID | None = Field(
+        description='Station UUID, or null if not yet assigned (ambiguous/pending).'
+    )
+    station_election_status: StationElectionStatus = Field(
+        description='Current station election status.'
+    )
+
+
+class NearbyStationResponse(BaseModel):
+    """A playable stop near a given point, with its hiding zone polygon."""
+
+    id: uuid.UUID
+    stable_id: str = Field(description='Stable identifier from the transit dataset.')
+    name: str
+    coordinates: GeoJSONPoint = Field(description='GeoJSON Point.')
+    hiding_zone: GeoJSONGeometry = Field(
+        description='Hiding zone polygon (buffer clipped to game map boundary).'
+    )
+
+    @staticmethod
+    def from_stop_and_zone(
+        stop: StopModel,
+        zone: BaseGeometry,
+    ) -> NearbyStationResponse:
+        return NearbyStationResponse(
+            id=stop.id,
+            stable_id=stop.stable_id,
+            name=stop.name,
+            coordinates=GeoJSONPoint(**mapping(stop.coordinates)),
+            hiding_zone=_geojson_adapter.validate_python(mapping(zone)),
+        )
+
+
+class HidingZoneResponse(BaseModel):
+    """The hiding zone polygon around a given station."""
+
+    hiding_zone: GeoJSONGeometry = Field(
+        description='Hiding zone polygon (buffer clipped to game map boundary).'
+    )
+
+    @staticmethod
+    def from_geometry(zone: BaseGeometry) -> HidingZoneResponse:
+        return HidingZoneResponse(
+            hiding_zone=_geojson_adapter.validate_python(mapping(zone)),
+        )
 
 
 # ── Exclusions ───────────────────────────────────────────────────────────

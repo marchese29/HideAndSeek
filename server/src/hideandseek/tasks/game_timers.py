@@ -13,7 +13,8 @@ from hideandseek.logic import (
     answer_measuring,
     answer_radar,
     answer_thermometer,
-    compute_hider_centroid,
+    resolve_station_at_transition,
+    resolve_station_fallback,
 )
 from hideandseek.models.types import (
     GameStatus,
@@ -21,11 +22,16 @@ from hideandseek.models.types import (
     PushEventType,
     QuestionStatus,
     QuestionType,
+    StationElectionStatus,
 )
-from hideandseek.queries.games import get_game_by_id, set_hider_station, update_game_status
+from hideandseek.queries.games import (
+    get_game_by_id,
+    set_hider_station,
+    set_station_ambiguous,
+    update_game_status,
+)
 from hideandseek.queries.location import get_latest_location_for_player
 from hideandseek.queries.questions import get_question, update_question
-from hideandseek.queries.stops import get_nearest_playable_stop
 from hideandseek.tasks.push import send_push
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -46,17 +52,27 @@ def transition_hiding_to_seeking(game_id: str) -> None:
             logger.info('transition_skipped', game_id=game_id, status=game.status)
             return
 
-        # Auto-select the hider's nearest playable stop
-        centroid = compute_hider_centroid(game)
-        if centroid:
-            stop = get_nearest_playable_stop(game, centroid)
-            if stop:
-                set_hider_station(game, stop.id)
-                logger.info('hider_station_set', game_id=game_id, stop_id=str(stop.id))
-            else:
-                logger.warning('no_playable_stop_found', game_id=game_id)
-        else:
-            logger.warning('no_hider_location', game_id=game_id)
+        # Resolve station election
+        stop, status = resolve_station_at_transition(game)
+        if status == StationElectionStatus.auto_assigned and stop:
+            set_hider_station(game, stop.id, StationElectionStatus.auto_assigned)
+            logger.info('station_auto_assigned', game_id=game_id, stop_id=str(stop.id))
+            send_push.delay(  # type: ignore[attr-defined]
+                game_id,
+                PushEventType.station_auto_assigned,
+                role_filter='hider',
+                alert=f'Your station was auto-assigned: {stop.name}',
+            )
+        elif status == StationElectionStatus.ambiguous:
+            set_station_ambiguous(game)
+            logger.info('station_ambiguous', game_id=game_id)
+            send_push.delay(  # type: ignore[attr-defined]
+                game_id,
+                PushEventType.station_ambiguous,
+                role_filter='hider',
+                alert='Station could not be determined. Please select your station.',
+            )
+        # elected: already set, nothing to do
 
         update_game_status(game, GameStatus.seeking)
         logger.info('transition_hiding_to_seeking', game_id=game_id)
@@ -87,6 +103,22 @@ def auto_answer_question(question_id: str) -> None:
         if not game:
             logger.warning('auto_answer_game_not_found', game_id=str(question.game_id))
             return
+
+        # Resolve ambiguous station before computing the answer
+        if game.station_election_status == StationElectionStatus.ambiguous:
+            stop = resolve_station_fallback(game)
+            set_hider_station(game, stop.id, StationElectionStatus.auto_assigned)
+            logger.info(
+                'station_auto_resolved',
+                game_id=str(game.id),
+                stop_id=str(stop.id),
+            )
+            send_push.delay(  # type: ignore[attr-defined]
+                str(game.id),
+                PushEventType.station_auto_resolved,
+                role_filter='hider',
+                alert=f'Your station was auto-resolved: {stop.name}',
+            )
 
         # Find the hider's latest location
         hiders = [p for p in game.players if p.role == PlayerRole.hider]

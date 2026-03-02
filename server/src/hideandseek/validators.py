@@ -22,6 +22,7 @@ from hideandseek.models.types import (
     QuestionStatus,
     QuestionType,
     SlotType,
+    StationElectionStatus,
 )
 from hideandseek.queries.location import get_latest_location_for_player
 from hideandseek.queries.questions import (
@@ -107,6 +108,12 @@ def validate_answer_request(
     """Validate an answer request. Returns (question, hider_location)."""
     if player_role != 'hider':
         raise HTTPException(status_code=403, detail='Only the hider can answer questions.')
+
+    if game.station_election_status == StationElectionStatus.ambiguous:
+        raise HTTPException(
+            status_code=409,
+            detail='Cannot answer questions while station is ambiguous. Elect a station first.',
+        )
 
     question = get_question(question_id)
     if not question or question.game_id != game.id:

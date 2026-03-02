@@ -7,7 +7,7 @@ from shapely.geometry import LineString, Point
 from sqlmodel import Session
 
 from hideandseek.models.game import Game
-from hideandseek.models.types import GameStatus, PlayerRole, RouteType
+from hideandseek.models.types import GameStatus, PlayerRole, RouteType, StationElectionStatus
 from tests.conftest import create_game, create_game_map, create_player
 
 
@@ -165,9 +165,10 @@ def test_set_hider_station(session: Session):
     session.commit()
     session.refresh(stop)
 
-    set_hider_station(game, stop.id)
+    set_hider_station(game, stop.id, StationElectionStatus.auto_assigned)
     session.refresh(game)
     assert game.hider_station_id == stop.id
+    assert game.station_election_status == StationElectionStatus.auto_assigned
 
 
 # ── GET /games/{game_id}/hider-station ───────────────────────────────────
@@ -207,7 +208,9 @@ def test_hider_station_endpoint_hider_sees_station(client: TestClient, session: 
 
     resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.client_id))
     assert resp.status_code == 200
-    assert resp.json()['hider_station_id'] == str(stop_id)
+    data = resp.json()
+    assert data['hider_station_id'] == str(stop_id)
+    assert data['station_election_status'] == 'pending'
 
 
 def test_hider_station_endpoint_seeker_403(client: TestClient, session: Session):
@@ -241,22 +244,36 @@ def test_hider_station_not_in_shared_game_state(client: TestClient, session: Ses
     assert 'hider_station_id' not in resp.json()
 
 
-def test_hider_station_404_when_not_assigned(client: TestClient, session: Session):
-    """GET /hider-station returns 404 when station not yet assigned."""
+def test_hider_station_pending_when_not_assigned(client: TestClient, session: Session):
+    """GET /hider-station returns 200 with null station and pending status."""
     game = create_game(session, status=GameStatus.seeking)
     hider = create_player(session, game.id, role=PlayerRole.hider)
 
     resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.client_id))
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['hider_station_id'] is None
+    assert data['station_election_status'] == 'pending'
 
 
-def test_hider_station_409_when_not_seeking(client: TestClient, session: Session):
-    """GET /hider-station returns 409 when game is not in seeking state."""
+def test_hider_station_409_when_lobby(client: TestClient, session: Session):
+    """GET /hider-station returns 409 when game is in lobby."""
     game = create_game(session, status=GameStatus.lobby)
     hider = create_player(session, game.id, role=PlayerRole.hider)
 
     resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.client_id))
     assert resp.status_code == 409
+
+
+def test_hider_station_available_during_hiding(client: TestClient, session: Session):
+    """GET /hider-station returns 200 during hiding with pending status."""
+    game = create_game(session, status=GameStatus.hiding)
+    hider = create_player(session, game.id, role=PlayerRole.hider)
+
+    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.client_id))
+    assert resp.status_code == 200
+    assert resp.json()['station_election_status'] == 'pending'
+    assert resp.json()['hider_station_id'] is None
 
 
 # ── PATCH /games/{game_id}/players/{player_id} ──────────────────────────────
@@ -430,3 +447,102 @@ def test_get_effective_map(client: TestClient, session: Session):
     assert data['stops'][0]['name'] == 'Oxford Circus'
     assert len(data['routes']) == 1
     assert data['routes'][0]['stop_ids'] == [str(stop.id)]
+
+
+# ── POST /games/{game_id}/hider-station (election) ─────────────────────
+
+
+def test_elect_station_seeker_403(client: TestClient, session: Session):
+    """POST /hider-station as seeker returns 403."""
+    game = create_game(session, status=GameStatus.hiding)
+    create_player(session, game.id, role=PlayerRole.hider)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
+
+    resp = client.post(
+        f'/games/{game.id}/hider-station',
+        json={
+            'station_id': str(uuid.uuid4()),
+            'location': {'type': 'Point', 'coordinates': [0.5, 0.5]},
+        },
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 403
+
+
+def test_elect_station_wrong_phase_409(client: TestClient, session: Session):
+    """POST /hider-station in lobby returns 409."""
+    game = create_game(session, status=GameStatus.lobby)
+    hider = create_player(session, game.id, role=PlayerRole.hider)
+
+    resp = client.post(
+        f'/games/{game.id}/hider-station',
+        json={
+            'station_id': str(uuid.uuid4()),
+            'location': {'type': 'Point', 'coordinates': [0.5, 0.5]},
+        },
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 409
+
+
+def test_elect_station_already_elected_409(client: TestClient, session: Session):
+    """POST /hider-station when already elected returns 409."""
+    from hideandseek.models.game_map import GameMap
+
+    game = create_game(session, status=GameStatus.hiding)
+    hider = create_player(session, game.id, role=PlayerRole.hider)
+    game_map = session.get(GameMap, game.map_id)
+    assert game_map is not None
+    stop_id = _create_stop(session, game_map.transit_dataset_id)
+    _set_hider_station(session, game, stop_id)
+
+    resp = client.post(
+        f'/games/{game.id}/hider-station',
+        json={
+            'station_id': str(uuid.uuid4()),
+            'location': {'type': 'Point', 'coordinates': [0.5, 0.5]},
+        },
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 409
+
+
+def test_elect_station_during_ambiguity(client: TestClient, session: Session):
+    """POST /hider-station allowed when status is ambiguous (even in seeking)."""
+    from hideandseek.models.game_map import GameMap
+
+    game = create_game(
+        session,
+        status=GameStatus.seeking,
+        station_election_status=StationElectionStatus.ambiguous,
+    )
+    hider = create_player(session, game.id, role=PlayerRole.hider)
+    game_map = session.get(GameMap, game.map_id)
+    assert game_map is not None
+
+    # The stop_id won't be playable (SpatiaLite doesn't support the PostGIS
+    # queries in validate_station_election), so we expect a 422, not a 409.
+    resp = client.post(
+        f'/games/{game.id}/hider-station',
+        json={
+            'station_id': str(uuid.uuid4()),
+            'location': {'type': 'Point', 'coordinates': [0.5, 0.5]},
+        },
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 422  # validation error, not 409
+
+
+# ── GET /games/{game_id}/hiding-zone ────────────────────────────────────
+
+
+def test_hiding_zone_stop_not_found(client: TestClient, session: Session):
+    """GET /hiding-zone returns 404 for unknown station_id."""
+    game = create_game(session, status=GameStatus.hiding)
+    player = create_player(session, game.id, role=PlayerRole.hider)
+
+    resp = client.get(
+        f'/games/{game.id}/hiding-zone?station_id={uuid.uuid4()}',
+        headers=_headers(player.client_id),
+    )
+    assert resp.status_code == 404

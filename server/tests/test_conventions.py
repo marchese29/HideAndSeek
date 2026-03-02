@@ -138,39 +138,39 @@ def test_hiding_zone_special_raises():
         get_default_hiding_zone_radius(DistanceConvention.metric, MapSize.special)
 
 
-# ── _effective_hiding_zone_radius_m fallback chain ─────────────────────
+# ── effective_hiding_zone_radius_m fallback chain ─────────────────────
 
 
 def test_effective_radius_game_override_takes_precedence(session: Session):
     """Game-level hiding_zone_radius_override beats map-level and code-level defaults."""
-    from hideandseek.logic import _effective_hiding_zone_radius_m
+    from hideandseek.logic import effective_hiding_zone_radius_m
     from tests.conftest import create_game, create_game_map
 
     gm = create_game_map(session, hiding_zone_radius=750)
     game = create_game(session, map_id=gm.id, hiding_zone_radius_override=999)
-    result = _effective_hiding_zone_radius_m(game)
+    result = effective_hiding_zone_radius_m(game)
     # 999 meters (metric convention, so no conversion)
     assert result == 999
 
 
 def test_effective_radius_map_override_used_without_game_override(session: Session):
     """Map-level hiding_zone_radius used when game-level override is None."""
-    from hideandseek.logic import _effective_hiding_zone_radius_m
+    from hideandseek.logic import effective_hiding_zone_radius_m
     from tests.conftest import create_game, create_game_map
 
     gm = create_game_map(session, hiding_zone_radius=750)
     game = create_game(session, map_id=gm.id)
-    result = _effective_hiding_zone_radius_m(game)
+    result = effective_hiding_zone_radius_m(game)
     assert result == 750
 
 
 def test_effective_radius_falls_back_to_code_default(session: Session):
     """Code-level default used when both overrides are None."""
-    from hideandseek.logic import _effective_hiding_zone_radius_m
+    from hideandseek.logic import effective_hiding_zone_radius_m
     from tests.conftest import create_game, create_game_map
 
     gm = create_game_map(session)  # hiding_zone_radius defaults to None
     game = create_game(session, map_id=gm.id)
-    result = _effective_hiding_zone_radius_m(game)
+    result = effective_hiding_zone_radius_m(game)
     # Default for metric medium is 500m
     assert result == 500

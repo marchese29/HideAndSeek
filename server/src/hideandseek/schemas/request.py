@@ -127,6 +127,13 @@ class AskMeasuringRequest(BaseModel):
     )
 
 
+class ElectStationRequest(BaseModel):
+    """Elect a hider station — lock in the hiding zone."""
+
+    station_id: uuid.UUID = Field(description='ID of the stop to elect as hider station.')
+    location: Point = Field(description='Current hider position as a GeoJSON Point.')
+
+
 class PreviewQuestionRequest(BaseModel):
     """Preview the nearest feature for a matching/measuring question without consuming inventory."""
 

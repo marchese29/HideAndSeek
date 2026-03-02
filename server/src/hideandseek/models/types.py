@@ -86,6 +86,13 @@ class QuestionStatus(StrEnum):
     answered = 'answered'
 
 
+class StationElectionStatus(StrEnum):
+    pending = 'pending'
+    elected = 'elected'
+    auto_assigned = 'auto_assigned'
+    ambiguous = 'ambiguous'
+
+
 class PushEventType(StrEnum):
     game_started = 'game_started'
     phase_changed = 'phase_changed'
@@ -93,6 +100,10 @@ class PushEventType(StrEnum):
     question_answerable = 'question_answerable'
     question_answered = 'question_answered'
     question_auto_answered = 'question_auto_answered'
+    station_auto_assigned = 'station_auto_assigned'
+    station_ambiguous = 'station_ambiguous'
+    station_elected = 'station_elected'
+    station_auto_resolved = 'station_auto_resolved'
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

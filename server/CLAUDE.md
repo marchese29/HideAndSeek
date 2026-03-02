@@ -100,8 +100,20 @@ curl -s -X POST localhost:8000/games/<game_id>/location \
   -d '{"coordinates": {"type": "Point", "coordinates": [<lon>, <lat>]}, "timestamp": "<ISO8601>"}'
 # The hider's last location when hiding ends determines their assigned station.
 
+# 5b. (Optional) Elect station during hiding — locks in the hider's station early
+curl -s -X POST localhost:8000/games/<game_id>/hider-station \
+  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
+  -d '{"station_id": "<stop_uuid>", "location": {"type": "Point", "coordinates": [<lon>, <lat>]}}'
+# → Returns hiding zone polygon. Station is now locked in.
+
+# 5c. Query nearby stations to find candidates for election
+curl -s "localhost:8000/games/<game_id>/nearby-stations?lat=<lat>&lng=<lon>" \
+  -H "X-Client-Id: $HIDER"
+
 # 6. Wait for hiding timer (check: docker logs hideandseek-worker-1 | grep transition)
-#    Game auto-transitions to "seeking". Hider station is assigned to nearest stop.
+#    Game auto-transitions to "seeking". If no election:
+#    - 1 valid candidate → auto_assigned
+#    - 0 or 2+ candidates → ambiguous (hider must elect via POST /hider-station)
 
 # 7. Report seeker location (required before asking questions)
 curl -s -X POST localhost:8000/games/<game_id>/location \
@@ -218,7 +230,7 @@ data/                                   # SQLite DB file (gitignored)
 ```
 
 **Key callouts** (things that aren't obvious from file names):
-- `logic.py` is the **conversion boundary** — `to_meters()` before geo math, `from_meters()` after. Also owns endgame functions (`get_endgame_exclusions`, `get_candidate_stations`, `compute_hider_centroid`).
+- `logic.py` is the **conversion boundary** — `to_meters()` before geo math, `from_meters()` after. Also owns endgame functions (`get_endgame_exclusions`, `get_candidate_stations`, `compute_hider_centroid`) and station election functions (`validate_station_election`, `resolve_station_at_transition`, `resolve_station_fallback`, `compute_hiding_zone_for_station`).
 - `exclusion.py` is called from `logic.py`, not from routers. Also has `compute_endgame_exclusions` for hiding zone intersection.
 - `resolution.py` owns category classification sets and feature resolution strategy (containment vs nearest).
 - `models/__init__.py` re-exports all models — import it to register tables on metadata.
@@ -278,6 +290,21 @@ lobby → hiding → seeking → finished
 ```
 
 The `GameStatus` enum reflects this. The endgame is a client-side lens over the `seeking` phase (see `design/endgame.md`). Games can be ended from any active state (hiding/seeking). `join_code` is cleared when hiding starts (no longer usable after lobby).
+
+### Station Election
+
+Hiders can voluntarily elect their station during hiding, or the system assigns it at the hiding→seeking transition. Tracked by `StationElectionStatus` enum on `Game`:
+
+- **`pending`** — hiding phase, no election yet (default).
+- **`elected`** — hider locked in via `POST /hider-station`.
+- **`auto_assigned`** — system found exactly one valid candidate at transition.
+- **`ambiguous`** — 0 or 2+ valid candidates at transition; hider must resolve via `POST /hider-station`.
+
+Questions cannot be answered while status is `ambiguous`. The auto-answer timer resolves ambiguity via a 3-tier fallback cascade (all-in-radius → any-in-radius → closest pair) before computing the answer. See `design/hider-station-election.md` for full design.
+
+**Endpoints**: `GET /nearby-stations` (query nearby playable stops), `POST /hider-station` (elect), `GET /hiding-zone` (preview zone polygon), `GET /hider-station` (check status — available during hiding + seeking).
+
+**Key files**: `logic.py` (election validation, transition resolution, fallback cascade, hiding zone computation), `queries/stops.py` (PostGIS spatial queries), `exclusion.py` (`compute_hiding_zone`), `tasks/game_timers.py` (transition + auto-answer ambiguity handling), `validators.py` (ambiguity check on answer requests).
 
 ## Data Model Conventions
 
