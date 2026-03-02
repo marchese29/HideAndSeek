@@ -79,6 +79,7 @@ class QuestionStatus(StrEnum):
     in_progress = 'in_progress'
     answerable = 'answerable'
     answered = 'answered'
+    vetoed = 'vetoed'
 
 
 class StationElectionStatus(StrEnum):
@@ -98,6 +99,7 @@ class PushEventType(StrEnum):
     station_auto_assigned = 'station_auto_assigned'
     station_ambiguous = 'station_ambiguous'
     station_elected = 'station_elected'
+    question_vetoed = 'question_vetoed'
     station_auto_resolved = 'station_auto_resolved'
 
 

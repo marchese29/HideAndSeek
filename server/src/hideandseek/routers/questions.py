@@ -321,6 +321,39 @@ def answer_question(
     return QuestionDetailResponse.from_model(question)
 
 
+# ── Veto ─────────────────────────────────────────────────────────────────
+
+
+@router.post(
+    '/questions/{question_id}/veto',
+    response_model=QuestionDetailResponse,
+)
+def veto_question(
+    question_id: uuid.UUID,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> QuestionDetailResponse:
+    """Hider vetoes a question — no answer, no exclusion zone."""
+    question, _hider_location = validate_answer_request(question_id, game, player.id, player.role)
+
+    # Revoke the auto-answer deadline
+    if not celery_app.conf.task_always_eager:
+        celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
+
+    update_question(question, {'status': QuestionStatus.vetoed, 'answered_at': datetime.now(UTC)})
+
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.question_vetoed,
+        role_filter='seeker',
+        alert='The hider used a veto!',
+        question_id=str(question.id),
+        question_type=question.question_type,
+    )
+
+    return QuestionDetailResponse.from_model(question)
+
+
 # ── List + detail + exclusions ────────────────────────────────────────────
 
 

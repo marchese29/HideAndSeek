@@ -27,12 +27,12 @@ from hideandseek.resolution import MATCHING_CATEGORIES, MEASURING_CATEGORIES
 
 @db_read
 def has_unanswered_question(session: Session, game_id: uuid.UUID) -> bool:
-    """Return True if the game has any question not yet in 'answered' status."""
+    """Return True if the game has any question not in a terminal status."""
     return (
         session.exec(
             select(Question.id).where(
                 Question.game_id == game_id,
-                Question.status != QuestionStatus.answered,
+                Question.status.not_in([QuestionStatus.answered, QuestionStatus.vetoed]),  # type: ignore[union-attr]
             )
         ).first()
         is not None

@@ -832,6 +832,124 @@ def test_exclusions_accumulate(client: TestClient, session: Session):
     assert len(data['exclusions']) == 2
 
 
+# ── Veto tests ────────────────────────────────────────────────────────────────
+
+
+def test_veto_question(client: TestClient, session: Session):
+    """Veto sets status=vetoed, no answer, no hider_location, no exclusion."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/veto',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['status'] == 'vetoed'
+    assert data['answer'] is None
+    assert data['hider_location'] is None
+    assert data['answered_at'] is not None
+
+
+def test_veto_then_reask(client: TestClient, session: Session):
+    """After veto, the same slot can be re-asked with incremented ask_count."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    # Veto
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/veto',
+        headers=_headers(hider.client_id),
+    )
+
+    # Re-ask same slot
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+    assert resp.json()['ask_count'] == 2
+    assert resp.json()['status'] == 'answerable'
+
+
+def test_veto_non_answerable(client: TestClient, session: Session):
+    """Vetoing an already-answered question returns 409."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    # Answer first
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+
+    # Try to veto an answered question
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/veto',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 409
+
+
+def test_veto_as_seeker(client: TestClient, session: Session):
+    """Seekers cannot veto — returns 403."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/veto',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 403
+
+
+def test_veto_no_exclusion_generated(client: TestClient, session: Session):
+    """Vetoed question should not appear in exclusions list."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/veto',
+        headers=_headers(hider.client_id),
+    )
+
+    # Exclusions endpoint should have no entries
+    resp = client.get(
+        f'/games/{game.id}/exclusions',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()['exclusions']) == 0
+    assert resp.json()['total_exclusion'] is None
+
+
 # ── Imperial convention tests ──────────────────────────────────────────────
 
 
