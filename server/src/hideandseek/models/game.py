@@ -1,72 +1,67 @@
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
-from typing import Optional
+from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from hideandseek.models.base import Base
 from hideandseek.models.types import GameStatus, PlayerRole, StationElectionStatus
 
+if TYPE_CHECKING:
+    from hideandseek.models.game_map import GameMap
+    from hideandseek.models.inventory import InventorySlot
+    from hideandseek.models.location import LocationUpdate
+    from hideandseek.models.question import Question
+    from hideandseek.models.transit import Stop
 
-class Game(SQLModel, table=True):
-    __tablename__ = 'game'  # type: ignore[assignment]
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    map_id: uuid.UUID = Field(foreign_key='game_map.id')
-    host_client_id: uuid.UUID
-    status: GameStatus = GameStatus.lobby
-    join_code: str | None = Field(default=None, sa_column_kwargs={'unique': True, 'index': True})
-    hiding_time_min: int = 60
-    base_question_delay_min: int = 5
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    hiding_started_at: datetime | None = None
-    seeking_started_at: datetime | None = None
-    hider_station_id: uuid.UUID | None = Field(default=None, foreign_key='stop.id')
-    station_election_status: StationElectionStatus = StationElectionStatus.pending
-    excluded_stop_ids: list = Field(default_factory=list, sa_type=sa.JSON)
-    excluded_route_ids: list = Field(default_factory=list, sa_type=sa.JSON)
-    hiding_zone_radius_override: float | None = None
+class Game(Base):
+    __tablename__ = 'game'
 
-    game_map: 'GameMap' = Relationship(back_populates='games')  # noqa: F821
-    hider_station: Optional['Stop'] = Relationship()  # noqa: F821
-    players: list['Player'] = Relationship(back_populates='game')
-    questions: list['Question'] = Relationship(back_populates='game')  # noqa: F821
-    inventory_slots: list['InventorySlot'] = Relationship(  # noqa: F821
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    map_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game_map.id'))
+    host_client_id: Mapped[uuid.UUID]
+    status: Mapped[GameStatus] = mapped_column(default=GameStatus.lobby)
+    join_code: Mapped[str | None] = mapped_column(unique=True, index=True, default=None)
+    hiding_time_min: Mapped[int] = mapped_column(default=60)
+    base_question_delay_min: Mapped[int] = mapped_column(default=5)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+    hiding_started_at: Mapped[datetime | None] = mapped_column(default=None)
+    seeking_started_at: Mapped[datetime | None] = mapped_column(default=None)
+    hider_station_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('stop.id'), default=None)
+    station_election_status: Mapped[StationElectionStatus] = mapped_column(
+        default=StationElectionStatus.pending
+    )
+    excluded_stop_ids: Mapped[list] = mapped_column(sa.JSON, default=list)
+    excluded_route_ids: Mapped[list] = mapped_column(sa.JSON, default=list)
+    hiding_zone_radius_override: Mapped[float | None] = mapped_column(default=None)
+
+    game_map: Mapped[GameMap] = relationship(back_populates='games')
+    hider_station: Mapped[Stop | None] = relationship()
+    players: Mapped[list[Player]] = relationship(back_populates='game')
+    questions: Mapped[list[Question]] = relationship(back_populates='game')
+    inventory_slots: Mapped[list[InventorySlot]] = relationship(
         back_populates='game',
-        sa_relationship_kwargs={'order_by': 'InventorySlot.slot_index'},
+        order_by='InventorySlot.slot_index',
     )
 
 
-class Player(SQLModel, table=True):
-    __tablename__ = 'player'  # type: ignore[assignment]
+class Player(Base):
+    __tablename__ = 'player'
     __table_args__ = (sa.UniqueConstraint('client_id', 'game_id'),)
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    client_id: uuid.UUID
-    game_id: uuid.UUID = Field(foreign_key='game.id')
-    name: str
-    color: str
-    role: PlayerRole | None = None
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID]
+    game_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game.id'))
+    name: Mapped[str]
+    color: Mapped[str]
+    role: Mapped[PlayerRole | None] = mapped_column(default=None)
 
-    game: Game = Relationship(back_populates='players')
-    location_updates: list['LocationUpdate'] = Relationship(  # noqa: F821
+    game: Mapped[Game] = relationship(back_populates='players')
+    location_updates: Mapped[list[LocationUpdate]] = relationship(
         back_populates='player',
     )
-
-
-# Avoid circular imports — resolved at runtime by SQLModel.
-from hideandseek.models.game_map import GameMap  # noqa: E402
-from hideandseek.models.inventory import InventorySlot  # noqa: E402
-from hideandseek.models.location import LocationUpdate  # noqa: E402
-from hideandseek.models.question import Question  # noqa: E402
-from hideandseek.models.transit import Stop  # noqa: E402
-
-__all__ = [
-    'Game',
-    'GameMap',
-    'InventorySlot',
-    'LocationUpdate',
-    'Player',
-    'Question',
-    'Stop',
-]

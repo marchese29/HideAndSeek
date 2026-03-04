@@ -14,6 +14,8 @@ class ShapelyGeometry(Geometry):
     Read path: raw DB value → parent result processor → WKBElement → to_shape() → shapely
     """
 
+    cache_ok = True
+
     def bind_processor(self, dialect):  # type: ignore[override]  # noqa: ANN001, ANN201
         parent_processor = super().bind_processor(dialect)
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from shapely.geometry import Point, Polygon
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from hideandseek.models.types import FeatureCategory
 from hideandseek.resolution import (

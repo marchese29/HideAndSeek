@@ -1,11 +1,19 @@
+from __future__ import annotations
+
 import uuid
+from typing import TYPE_CHECKING
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from hideandseek.models.base import Base
 from hideandseek.models.types import FeatureCategory, QuestionType
 
+if TYPE_CHECKING:
+    from hideandseek.models.game import Game
 
-class InventorySlot(SQLModel, table=True):
+
+class InventorySlot(Base):
     """A question slot in a game's inventory.
 
     Pre-populated at game creation from the map's default_inventory (radar/thermometer)
@@ -13,21 +21,15 @@ class InventorySlot(SQLModel, table=True):
     how many times the slot has been used.
     """
 
-    __tablename__ = 'inventory_slot'  # type: ignore[assignment]
+    __tablename__ = 'inventory_slot'
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    game_id: uuid.UUID = Field(foreign_key='game.id', index=True)
-    question_type: QuestionType
-    slot_index: int
-    distance: float | None = None
-    category: FeatureCategory | None = None
-    feature_class: int | None = None
-    ask_count: int = 0
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    game_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game.id'), index=True)
+    question_type: Mapped[QuestionType]
+    slot_index: Mapped[int]
+    distance: Mapped[float | None] = mapped_column(default=None)
+    category: Mapped[FeatureCategory | None] = mapped_column(default=None)
+    feature_class: Mapped[int | None] = mapped_column(default=None)
+    ask_count: Mapped[int] = mapped_column(default=0)
 
-    game: 'Game' = Relationship(back_populates='inventory_slots')  # noqa: F821
-
-
-# Avoid circular imports — resolved at runtime by SQLModel.
-from hideandseek.models.game import Game  # noqa: E402
-
-__all__ = ['Game', 'InventorySlot']
+    game: Mapped[Game] = relationship(back_populates='inventory_slots')

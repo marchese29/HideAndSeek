@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlmodel import Session, select
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from hideandseek.db import db_read
 from hideandseek.models.game_map import GameMap
@@ -16,11 +17,11 @@ def list_maps(session: Session, *, offset: int = 0, limit: int = 100) -> list[tu
     """Return maps with their region, paginated by offset/limit."""
     stmt = (
         select(GameMap, TransitDataset.region)
-        .join(TransitDataset, GameMap.transit_dataset_id == TransitDataset.id)  # type: ignore[arg-type]
+        .join(TransitDataset, GameMap.transit_dataset_id == TransitDataset.id)
         .offset(offset)
         .limit(limit)
     )
-    return list(session.exec(stmt).all())
+    return [row._tuple() for row in session.execute(stmt)]
 
 
 @db_read

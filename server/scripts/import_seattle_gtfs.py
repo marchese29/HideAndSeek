@@ -88,14 +88,14 @@ def main() -> None:
     create_db_and_tables()
 
     # Check idempotency
-    from sqlmodel import select
+    from sqlalchemy import select
 
     from hideandseek.db import current_session
 
     with session_scope():
         existing = (
             current_session()
-            .exec(select(TransitDataset).where(TransitDataset.region == 'Seattle'))
+            .scalars(select(TransitDataset).where(TransitDataset.region == 'Seattle'))
             .one_or_none()
         )
         if existing:

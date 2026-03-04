@@ -5,7 +5,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from sqlmodel import Session, col, select
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from hideandseek.db import db_read
 from hideandseek.models.game import Game
@@ -40,28 +41,22 @@ def get_effective_map_data(session: Session, game: Game) -> EffectiveMapData:
     excluded_route_set = set(str(rid) for rid in game.excluded_route_ids)
 
     # Load stops, excluding excluded ones
-    all_stops = list(
-        session.exec(
-            select(Stop).where(
-                Stop.dataset_id == game_map.transit_dataset_id,
-                ~col(Stop.id).in_(excluded_stop_set) if excluded_stop_set else True,  # type: ignore[arg-type]
-            )
-        ).all()
-    )
+    stop_stmt = select(Stop).where(Stop.dataset_id == game_map.transit_dataset_id)
+    if excluded_stop_set:
+        stop_stmt = stop_stmt.where(~Stop.id.in_(excluded_stop_set))
+    all_stops = list(session.scalars(stop_stmt).all())
     stop_id_set = {s.id for s in all_stops}
 
     # Load routes with their ordered stop IDs
-    all_routes = session.exec(
-        select(Route).where(
-            Route.dataset_id == game_map.transit_dataset_id,
-            ~col(Route.id).in_(excluded_route_set) if excluded_route_set else True,  # type: ignore[arg-type]
-        )
-    ).all()
+    route_stmt = select(Route).where(Route.dataset_id == game_map.transit_dataset_id)
+    if excluded_route_set:
+        route_stmt = route_stmt.where(~Route.id.in_(excluded_route_set))
+    all_routes = session.scalars(route_stmt).all()
 
     routes_with_stops: list[RouteWithStops] = []
     for route in all_routes:
-        route_stops = session.exec(
-            select(RouteStop).where(RouteStop.route_id == route.id).order_by(RouteStop.sequence)  # type: ignore[arg-type]
+        route_stops = session.scalars(
+            select(RouteStop).where(RouteStop.route_id == route.id).order_by(RouteStop.sequence)
         ).all()
         stop_ids = [rs.stop_id for rs in route_stops if rs.stop_id in stop_id_set]
         routes_with_stops.append(RouteWithStops(route=route, stop_ids=stop_ids))

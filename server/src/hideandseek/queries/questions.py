@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
-from sqlmodel import Session, select
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from hideandseek.db import db_read, db_write
 from hideandseek.models.inventory import InventorySlot
@@ -29,10 +30,10 @@ from hideandseek.resolution import MATCHING_CATEGORIES, MEASURING_CATEGORIES
 def has_unanswered_question(session: Session, game_id: uuid.UUID) -> bool:
     """Return True if the game has any question not in a terminal status."""
     return (
-        session.exec(
+        session.scalars(
             select(Question.id).where(
                 Question.game_id == game_id,
-                Question.status.not_in([QuestionStatus.answered, QuestionStatus.vetoed]),  # type: ignore[union-attr]
+                Question.status.not_in([QuestionStatus.answered, QuestionStatus.vetoed]),
             )
         ).first()
         is not None
@@ -42,7 +43,7 @@ def has_unanswered_question(session: Session, game_id: uuid.UUID) -> bool:
 @db_read
 def get_question_count(session: Session, game_id: uuid.UUID) -> int:
     """Return the number of questions asked in a game (for sequencing)."""
-    return len(session.exec(select(Question.id).where(Question.game_id == game_id)).all())
+    return len(session.scalars(select(Question.id).where(Question.game_id == game_id)).all())
 
 
 @db_write
@@ -120,13 +121,13 @@ def create_feature_params(
 @db_read
 def get_latest_total_exclusion(session: Session, game_id: uuid.UUID) -> BaseGeometry | None:
     """Return the most recent answered question's total_exclusion for a game."""
-    question = session.exec(
+    question = session.scalars(
         select(Question)
         .where(
             Question.game_id == game_id,
             Question.status == QuestionStatus.answered,
         )
-        .order_by(Question.sequence.desc())  # type: ignore[arg-type]
+        .order_by(Question.sequence.desc())
         .limit(1)
     ).first()
     return question.total_exclusion if question else None
@@ -144,14 +145,14 @@ def list_answered_questions_after_sequence(
 ) -> list[Question]:
     """Return answered questions with sequence > after_sequence, ordered by sequence."""
     return list(
-        session.exec(
+        session.scalars(
             select(Question)
             .where(
                 Question.game_id == game_id,
                 Question.status == QuestionStatus.answered,
                 Question.sequence > after_sequence,
             )
-            .order_by(Question.sequence)  # type: ignore[arg-type]
+            .order_by(Question.sequence)
         ).all()
     )
 
@@ -160,8 +161,8 @@ def list_answered_questions_after_sequence(
 def list_questions(session: Session, game_id: uuid.UUID) -> list[Question]:
     """Return all questions for a game, chronologically."""
     return list(
-        session.exec(
-            select(Question).where(Question.game_id == game_id).order_by(Question.sequence)  # type: ignore[arg-type]
+        session.scalars(
+            select(Question).where(Question.game_id == game_id).order_by(Question.sequence)
         ).all()
     )
 
@@ -184,10 +185,10 @@ def update_question(session: Session, question: Question, updates: dict) -> Ques
 def get_inventory_slots(session: Session, game_id: uuid.UUID) -> list[InventorySlot]:
     """Return all inventory slots for a game, ordered by question_type then slot_index."""
     return list(
-        session.exec(
+        session.scalars(
             select(InventorySlot)
             .where(InventorySlot.game_id == game_id)
-            .order_by(InventorySlot.question_type, InventorySlot.slot_index)  # type: ignore[arg-type]
+            .order_by(InventorySlot.question_type, InventorySlot.slot_index)
         ).all()
     )
 
@@ -197,7 +198,7 @@ def get_slot_by_index(
     session: Session, game_id: uuid.UUID, question_type: QuestionType, slot_index: int
 ) -> InventorySlot | None:
     """Return a specific slot by its type and index."""
-    return session.exec(
+    return session.scalars(
         select(InventorySlot).where(
             InventorySlot.game_id == game_id,
             InventorySlot.question_type == question_type,

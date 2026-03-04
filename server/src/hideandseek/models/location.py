@@ -1,27 +1,27 @@
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-import sqlalchemy as sa
 from shapely.geometry import Point
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from hideandseek.models.base import Base
 from hideandseek.models.geo_types import ShapelyGeometry
 
-
-class LocationUpdate(SQLModel, table=True):
-    model_config = {'arbitrary_types_allowed': True}  # type: ignore[assignment]
-    __tablename__ = 'location_update'  # type: ignore[assignment]
-
-    id: int | None = Field(default=None, primary_key=True)
-    player_id: uuid.UUID = Field(foreign_key='player.id')
-    game_id: uuid.UUID = Field(foreign_key='game.id')
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    coordinates: Point = Field(sa_column=sa.Column(ShapelyGeometry('POINT', srid=4326)))
-
-    player: 'Player' = Relationship(back_populates='location_updates')  # noqa: F821
+if TYPE_CHECKING:
+    from hideandseek.models.game import Player
 
 
-# Avoid circular imports — resolved at runtime by SQLModel.
-from hideandseek.models.game import Player  # noqa: E402
+class LocationUpdate(Base):
+    __tablename__ = 'location_update'
 
-__all__ = ['LocationUpdate', 'Player']
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    player_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('player.id'))
+    game_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game.id'))
+    timestamp: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+    coordinates: Mapped[Point] = mapped_column(ShapelyGeometry('POINT', srid=4326))
+
+    player: Mapped[Player] = relationship(back_populates='location_updates')

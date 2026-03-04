@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from hideandseek.models.device_token import DeviceToken
 from hideandseek.models.types import PlayerRole, PushEventType

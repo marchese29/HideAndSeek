@@ -228,9 +228,9 @@ src/hideandseek/
   gtfs.py                                # Reusable GTFS feed parser (pure data, no DB deps)
   config.py, push.py, utils.py          # Push config, APNS service, shared utils
   celery_app.py, celery_config.py       # Celery instance + broker config
-  models/                               # SQLModel table models (types, geo_types, transit,
-                                        #   game_map, map_feature, game, inventory, location,
-                                        #   question, question_params, device_token)
+  models/                               # SQLAlchemy declarative models (base, types, geo_types,
+                                        #   transit, game_map, map_feature, game, inventory,
+                                        #   location, question, question_params, device_token)
   schemas/                              # Pydantic request/response schemas + common utils
   queries/                              # DB query functions by domain (games, maps, questions,
                                         #   location, features, stops, effective_map, device_tokens)
@@ -254,7 +254,7 @@ data/                                   # SQLite DB file (gitignored)
 
 ## Architecture Patterns
 
-- **Schema vs Model separation**: SQLModel table models (`models/`) own the DB schema. Pydantic schemas (`schemas/`) control the API surface. Response schemas have `from_model()` static methods for transformation.
+- **Schema vs Model separation**: SQLAlchemy declarative models (`models/`) own the DB schema. Pydantic schemas (`schemas/`) control the API surface. Response schemas have `from_model()` static methods for transformation.
 - **Dependency injection**: `dependencies.py` provides reusable FastAPI `Depends()` — `get_client_id` (from `X-Client-Id` header), `get_game` (uses `current_session()`, 404 if missing), `get_player_in_game` (composes `get_game` + `get_client_id`, 403 if not found), `get_hider_in_game` / `get_seeker_in_game` (compose `get_player_in_game` + role check, 403 if wrong role), `get_optional_client_id` (returns `None` when header absent), `get_optional_player_in_game` (returns `None` instead of 403). Role gating is declarative via dependency — use `get_hider_in_game` or `get_seeker_in_game` instead of manual `player.role` checks. Dependencies use `current_session()` instead of `Depends(get_session)` — the router-level dependency ensures the ContextVar is already set.
 - **Transactional boundaries**: `get_session()` is an async generator that commits once after the handler succeeds and sets a `ContextVar` so query-layer decorators can access the session. Must be async so the ContextVar is set in the event-loop context (sync handler threads copy that context). If the handler raises, commit is never called and `Session.__exit__` rolls back. All writes in a request succeed or fail together.
 - **ContextVar session injection**: A `ContextVar[Session]` (`_session_var`) is set by `get_session()` and read by `current_session()`. Query functions declare `session: Session` as their first parameter for explicitness and testability, but callers never pass it — decorators inject it automatically.
@@ -326,13 +326,13 @@ Questions cannot be answered while status is `ambiguous`. The auto-answer timer 
 
 ## Data Model Conventions
 
-- SQLModel for all table models (wraps SQLAlchemy + Pydantic).
-- **Do NOT use `from __future__ import annotations` in model files or `db.py`** — it breaks SQLModel relationship resolution and PEP 695 generics. Use quoted string forward references instead (e.g., `game_map: 'GameMap' = Relationship(...)`).
+- SQLAlchemy 2.0 declarative ORM (`Mapped[]` + `mapped_column()`) for all table models. All models inherit from `Base` in `models/base.py`.
+- `from __future__ import annotations` in all model files. Cross-model references use `TYPE_CHECKING` imports — SQLAlchemy resolves relationship targets from its class registry at mapper configuration time.
 - Geometry uses the three-layer pattern (see Architecture Patterns): GeoJSON at API, shapely in Python, native spatial in DB. System dep: `brew install libspatialite` (auto-detected; `SPATIALITE_LIBRARY_PATH` override if non-standard).
 - Game timing uses two int columns on `Game`: `hiding_time_min` and `base_question_delay_min`. Resolved at game creation with a three-level fallback: request override → map default → code default. Code defaults: `get_default_hiding_time_min(size)` (small=30, medium=60, large=180) and 5 min for question delay. `GameMap` has optional `default_hiding_time_min` and `default_base_question_delay_min` columns for per-map overrides. Game inventory and question parameters use proper relational tables (see Architecture Patterns). `DistrictClass` is stored as a JSON column value object.
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int).
-- Relationships use bottom-of-file imports and quoted forward references to avoid circular dependencies.
-- Enums are `StrEnum` — stored as VARCHAR, human-readable in DB.
+- Enums are `StrEnum` — stored as VARCHAR via `type_annotation_map` on `Base` (not native ENUM).
+- Query layer uses `session.scalars()` for single-entity selects, `session.execute()` for multi-entity/column selects.
 - **Active development — no migration or backwards-compatibility concerns.** There is no production data. Schema changes go directly in the models and `create_all` recreates tables on startup. To reset: delete `server/data/` (local SQLite) or `docker compose down -v` (Docker PostgreSQL). Alembic will be added when the schema stabilizes and real data exists.
 - Tests use in-memory SQLite + SpatiaLite with `StaticPool` via the `session` and `client` fixtures in `conftest.py`. Requires `SPATIALITE_LIBRARY_PATH` env var.
 
@@ -357,12 +357,12 @@ Questions cannot be answered while status is `ambiguous`. The auto-answer timer 
 Enforced by ruff (lint + format) and pyright (type checking). The pre-commit hook runs all checks automatically.
 
 - Single quotes for strings.
-- `from __future__ import annotations` at the top of every module **except** SQLModel table model files and `db.py` (which use PEP 695 generics).
+- `from __future__ import annotations` at the top of every module (**except** `db.py` which uses PEP 695 generics).
 - All imports at the top of the file, never inline.
 - Type annotations required on all function arguments and return types (except `-> None`).
 - Max line length: 100 characters.
 - Lint rules: pyflakes, pycodestyle, isort, pyupgrade, flake8-bugbear, flake8-simplify, flake8-future-annotations, flake8-annotations, flake8-datetimez.
 - B008 exemption for FastAPI's `Depends`, `Header`, `Path`, `Query`, `Body` (configured in `pyproject.toml`).
-- SQLModel/pyright `type: ignore` comments on `.join()`, `.order_by()`, `.group_by()` clauses (known SQLAlchemy typing gaps).
+- SQLAlchemy's `Mapped[]` annotations provide full type coverage — no `type: ignore` needed on `.join()`, `.order_by()`, `.group_by()`.
 - Celery `type: ignore[attr-defined]` on `.delay()` and `.apply_async()` calls (Celery task decorator adds these dynamically).
 - pyright in `standard` mode.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from shapely.geometry import LineString, Point, Polygon
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from hideandseek.geo import distance_to_feature
 from hideandseek.models.types import FeatureCategory

@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from shapely.geometry import Point
-from sqlalchemy import func
-from sqlmodel import Session, select
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from hideandseek.db import db_read, db_write
 from hideandseek.models.game import Game, Player
@@ -59,14 +59,14 @@ def get_visible_players(session: Session, game: Game, caller: Player) -> list[Vi
             func.max(LocationUpdate.id).label('max_id'),
         )
         .where(LocationUpdate.game_id == game.id)
-        .group_by(LocationUpdate.player_id)  # type: ignore[arg-type]
+        .group_by(LocationUpdate.player_id)
         .subquery()
     )
 
     stmt = (
         select(LocationUpdate, Player)
-        .join(latest_sq, LocationUpdate.id == latest_sq.c.max_id)  # type: ignore[arg-type]
-        .join(Player, LocationUpdate.player_id == Player.id)  # type: ignore[arg-type]
+        .join(latest_sq, LocationUpdate.id == latest_sq.c.max_id)
+        .join(Player, LocationUpdate.player_id == Player.id)
         .where(Player.id != caller.id)
     )
 
@@ -75,7 +75,7 @@ def get_visible_players(session: Session, game: Game, caller: Player) -> list[Vi
         stmt = stmt.where(Player.role == PlayerRole.seeker)
 
     results: list[VisiblePlayerData] = []
-    for lu, player in session.exec(stmt).all():
+    for lu, player in session.execute(stmt).all():
         results.append(
             VisiblePlayerData(
                 player=player,
@@ -90,10 +90,10 @@ def get_visible_players(session: Session, game: Game, caller: Player) -> list[Vi
 def get_location_history(session: Session, game_id: uuid.UUID) -> list[LocationUpdate]:
     """Return all location updates for a game, chronologically."""
     return list(
-        session.exec(
+        session.scalars(
             select(LocationUpdate)
             .where(LocationUpdate.game_id == game_id)
-            .order_by(LocationUpdate.id)  # type: ignore[arg-type]
+            .order_by(LocationUpdate.id)
         ).all()
     )
 
@@ -103,12 +103,12 @@ def get_latest_location_for_player(
     session: Session, player_id: uuid.UUID, game_id: uuid.UUID
 ) -> LocationUpdate | None:
     """Return the most recent location update for a player in a game."""
-    return session.exec(
+    return session.scalars(
         select(LocationUpdate)
         .where(
             LocationUpdate.player_id == player_id,
             LocationUpdate.game_id == game_id,
         )
-        .order_by(LocationUpdate.id.desc())  # type: ignore[union-attr]
+        .order_by(LocationUpdate.id.desc())
         .limit(1)
     ).first()

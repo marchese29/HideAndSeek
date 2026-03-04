@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from hideandseek.conventions import (
     format_distance_label,

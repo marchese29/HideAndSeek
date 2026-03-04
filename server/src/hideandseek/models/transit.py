@@ -1,65 +1,66 @@
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
 
-import sqlalchemy as sa
 from shapely.geometry import LineString, Point
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from hideandseek.models.base import Base
 from hideandseek.models.geo_types import ShapelyGeometry
 from hideandseek.models.types import RouteType
 
 
-class TransitDataset(SQLModel, table=True):
-    __tablename__ = 'transit_dataset'  # type: ignore[assignment]
+class TransitDataset(Base):
+    __tablename__ = 'transit_dataset'
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    name: str
-    region: str
-    source_url: str | None = None
-    imported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str]
+    region: Mapped[str]
+    source_url: Mapped[str | None] = mapped_column(default=None)
+    imported_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
-    stops: list['Stop'] = Relationship(back_populates='dataset')
-    routes: list['Route'] = Relationship(back_populates='dataset')
-
-
-class Stop(SQLModel, table=True):
-    model_config = {'arbitrary_types_allowed': True}  # type: ignore[assignment]
-    __tablename__ = 'stop'  # type: ignore[assignment]
-    __table_args__ = (sa.UniqueConstraint('stable_id', 'dataset_id'),)
-
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    stable_id: str
-    dataset_id: uuid.UUID = Field(foreign_key='transit_dataset.id')
-    name: str
-    coordinates: Point = Field(sa_column=sa.Column(ShapelyGeometry('POINT', srid=4326)))
-
-    dataset: TransitDataset = Relationship(back_populates='stops')
-    route_stops: list['RouteStop'] = Relationship(back_populates='stop')
+    stops: Mapped[list[Stop]] = relationship(back_populates='dataset')
+    routes: Mapped[list[Route]] = relationship(back_populates='dataset')
 
 
-class Route(SQLModel, table=True):
-    model_config = {'arbitrary_types_allowed': True}  # type: ignore[assignment]
-    __tablename__ = 'route'  # type: ignore[assignment]
-    __table_args__ = (sa.UniqueConstraint('stable_id', 'dataset_id'),)
+class Stop(Base):
+    __tablename__ = 'stop'
+    __table_args__ = (UniqueConstraint('stable_id', 'dataset_id'),)
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    stable_id: str
-    dataset_id: uuid.UUID = Field(foreign_key='transit_dataset.id')
-    name: str
-    color: str
-    route_type: RouteType
-    shape: LineString = Field(sa_column=sa.Column(ShapelyGeometry('LINESTRING', srid=4326)))
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    stable_id: Mapped[str]
+    dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('transit_dataset.id'))
+    name: Mapped[str]
+    coordinates: Mapped[Point] = mapped_column(ShapelyGeometry('POINT', srid=4326))
 
-    dataset: TransitDataset = Relationship(back_populates='routes')
-    route_stops: list['RouteStop'] = Relationship(back_populates='route')
+    dataset: Mapped[TransitDataset] = relationship(back_populates='stops')
+    route_stops: Mapped[list[RouteStop]] = relationship(back_populates='stop')
 
 
-class RouteStop(SQLModel, table=True):
-    __tablename__ = 'route_stop'  # type: ignore[assignment]
+class Route(Base):
+    __tablename__ = 'route'
+    __table_args__ = (UniqueConstraint('stable_id', 'dataset_id'),)
 
-    route_id: uuid.UUID = Field(foreign_key='route.id', primary_key=True)
-    stop_id: uuid.UUID = Field(foreign_key='stop.id', primary_key=True)
-    sequence: int = Field(primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    stable_id: Mapped[str]
+    dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('transit_dataset.id'))
+    name: Mapped[str]
+    color: Mapped[str]
+    route_type: Mapped[RouteType]
+    shape: Mapped[LineString] = mapped_column(ShapelyGeometry('LINESTRING', srid=4326))
 
-    route: Route = Relationship(back_populates='route_stops')
-    stop: Stop = Relationship(back_populates='route_stops')
+    dataset: Mapped[TransitDataset] = relationship(back_populates='routes')
+    route_stops: Mapped[list[RouteStop]] = relationship(back_populates='route')
+
+
+class RouteStop(Base):
+    __tablename__ = 'route_stop'
+
+    route_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('route.id'), primary_key=True)
+    stop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('stop.id'), primary_key=True)
+    sequence: Mapped[int] = mapped_column(primary_key=True)
+
+    route: Mapped[Route] = relationship(back_populates='route_stops')
+    stop: Mapped[Stop] = relationship(back_populates='route_stops')

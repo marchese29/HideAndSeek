@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from hideandseek.models.types import GameStatus, PlayerRole
 from tests.conftest import create_game, create_player

@@ -1,38 +1,38 @@
+from __future__ import annotations
+
 import uuid
+from typing import TYPE_CHECKING
 
-import sqlalchemy as sa
 from shapely.geometry import Polygon
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import JSON, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from hideandseek.models.base import Base
 from hideandseek.models.geo_types import ShapelyGeometry
 from hideandseek.models.types import DistanceConvention, MapSize
 
-
-class GameMap(SQLModel, table=True):
-    model_config = {'arbitrary_types_allowed': True}  # type: ignore[assignment]
-    __tablename__ = 'game_map'  # type: ignore[assignment]
-
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    name: str
-    size: MapSize
-    convention: DistanceConvention = DistanceConvention.metric
-    transit_dataset_id: uuid.UUID = Field(foreign_key='transit_dataset.id')
-    boundary: Polygon = Field(sa_column=sa.Column(ShapelyGeometry('POLYGON', srid=4326)))
-    districts: list = Field(default_factory=list, sa_type=sa.JSON)
-    district_classes: list = Field(default_factory=list, sa_type=sa.JSON)
-    default_inventory: dict = Field(default_factory=dict, sa_type=sa.JSON)
-    default_hiding_time_min: int | None = None
-    default_base_question_delay_min: int | None = None
-    hiding_zone_radius: float | None = None
-    notes: str | None = None
-
-    transit_dataset: 'TransitDataset' = Relationship()  # noqa: F821
-
-    games: list['Game'] = Relationship(back_populates='game_map')  # noqa: F821
+if TYPE_CHECKING:
+    from hideandseek.models.game import Game
+    from hideandseek.models.transit import TransitDataset
 
 
-# Avoid circular imports — these are resolved at runtime by SQLModel.
-from hideandseek.models.game import Game  # noqa: E402
-from hideandseek.models.transit import TransitDataset  # noqa: E402
+class GameMap(Base):
+    __tablename__ = 'game_map'
 
-__all__ = ['GameMap', 'Game', 'TransitDataset']
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str]
+    size: Mapped[MapSize]
+    convention: Mapped[DistanceConvention] = mapped_column(default=DistanceConvention.metric)
+    transit_dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('transit_dataset.id'))
+    boundary: Mapped[Polygon] = mapped_column(ShapelyGeometry('POLYGON', srid=4326))
+    districts: Mapped[list] = mapped_column(JSON, default=list)
+    district_classes: Mapped[list] = mapped_column(JSON, default=list)
+    default_inventory: Mapped[dict] = mapped_column(JSON, default=dict)
+    default_hiding_time_min: Mapped[int | None] = mapped_column(default=None)
+    default_base_question_delay_min: Mapped[int | None] = mapped_column(default=None)
+    hiding_zone_radius: Mapped[float | None] = mapped_column(default=None)
+    notes: Mapped[str | None] = mapped_column(default=None)
+
+    transit_dataset: Mapped[TransitDataset] = relationship()
+
+    games: Mapped[list[Game]] = relationship(back_populates='game_map')

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 from shapely.geometry import Point
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from hideandseek.models.game import Game
 from hideandseek.models.location import LocationUpdate

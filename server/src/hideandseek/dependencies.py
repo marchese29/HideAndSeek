@@ -6,7 +6,7 @@ import uuid
 
 import structlog
 from fastapi import Depends, Header, HTTPException, Path, Request
-from sqlmodel import select
+from sqlalchemy import select
 
 from hideandseek.db import current_session
 from hideandseek.models.game import Game, Player
@@ -46,7 +46,7 @@ def get_player_in_game(
     ``dependencies=[Depends(get_session)]``).
     """
     session = current_session()
-    player = session.exec(
+    player = session.scalars(
         select(Player).where(Player.client_id == client_id, Player.game_id == game.id)
     ).one_or_none()
     if not player:
@@ -92,6 +92,6 @@ def get_optional_player_in_game(
     if client_id is None:
         return None
     session = current_session()
-    return session.exec(
+    return session.scalars(
         select(Player).where(Player.client_id == client_id, Player.game_id == game.id)
     ).one_or_none()

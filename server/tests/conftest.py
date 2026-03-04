@@ -9,12 +9,14 @@ import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from geoalchemy2 import load_spatialite
 from shapely.geometry import Point, Polygon
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
 
 import hideandseek.models  # noqa: F401 — registers all tables on metadata
 from hideandseek.db import _session_var, get_session
 from hideandseek.main import app
+from hideandseek.models.base import Base
 from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.inventory import InventorySlot
@@ -32,7 +34,7 @@ def session() -> Generator[Session, None, None]:
         poolclass=StaticPool,
     )
     sa.event.listen(engine, 'connect', load_spatialite)  # type: ignore[attr-defined]
-    SQLModel.metadata.create_all(engine)
+    Base.metadata.create_all(engine)
     with Session(engine) as session:
         token = _session_var.set(session)
         try:

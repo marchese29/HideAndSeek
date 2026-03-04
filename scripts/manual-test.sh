@@ -37,11 +37,11 @@ VALUES ('$DS_ID', 'London Transit', 'London', NOW())
 ON CONFLICT DO NOTHING;
 
 INSERT INTO game_map (id, name, size, convention, transit_dataset_id, boundary,
-                      districts, district_classes, feature_classes, default_inventory)
+                      districts, district_classes, default_inventory)
 VALUES (
   '$MAP_ID', 'Central London', 'medium', 'metric', '$DS_ID',
   ST_GeomFromText('POLYGON((-0.2 51.4, 0.1 51.4, 0.1 51.6, -0.2 51.6, -0.2 51.4))', 4326),
-  '[]', '[]', '{}',
+  '[]', '[]',
   '{"radars":[{"distance":3000},{"distance":5000},{"distance":null}],
     "thermometers":[{"distance":500},{"distance":null}]}'
 ) ON CONFLICT DO NOTHING;
@@ -94,9 +94,9 @@ echo ""
 echo "=== Verify static inventory ==="
 RADAR_0=$(echo "$GAME" | jq_val "['inventory']['radar_slots'][0]")
 echo "  radar_slots[0]: $RADAR_0"
-# Should have categories list
-CATS=$(echo "$GAME" | jq_val "['inventory']['categories']")
-echo "  categories: $CATS"
+# Should have matching_slots
+MATCHING=$(echo "$GAME" | jq_val "['inventory']['matching_slots']")
+echo "  matching_slots: $MATCHING"
 # Should NOT have hider_station_id
 HAS_STATION=$(echo "$GAME" | python3 -c "import sys,json; print('hider_station_id' in json.load(sys.stdin))")
 assert_eq "no hider_station_id on shared endpoint" "$HAS_STATION" "False"

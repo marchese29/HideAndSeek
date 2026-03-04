@@ -4,7 +4,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 from shapely.geometry import Point
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import DistanceConvention, GameStatus, PlayerRole

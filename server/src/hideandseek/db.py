@@ -8,8 +8,9 @@ from typing import Concatenate
 
 import sqlalchemy as sa
 import structlog
+from sqlalchemy import create_engine, event
 from sqlalchemy.exc import OperationalError
-from sqlmodel import Session, SQLModel, create_engine
+from sqlalchemy.orm import Session
 
 from hideandseek.utils import find_server_root
 
@@ -40,7 +41,7 @@ if DATABASE_URL.startswith('sqlite'):
                 os.environ['SPATIALITE_LIBRARY_PATH'] = str(p)
                 break
 
-    sa.event.listen(engine, 'connect', load_spatialite)  # type: ignore[attr-defined]
+    event.listen(engine, 'connect', load_spatialite)
 
 _session_var: ContextVar[Session] = ContextVar('_session_var')
 
@@ -68,7 +69,9 @@ def create_db_and_tables(*, max_retries: int = 10) -> None:
                     raise
                 logger.warning('db_connect_retry', attempt=attempt + 1, max_retries=max_retries)
                 time.sleep(1)
-    SQLModel.metadata.create_all(engine)
+    from hideandseek.models.base import Base
+
+    Base.metadata.create_all(engine)
 
 
 @contextmanager

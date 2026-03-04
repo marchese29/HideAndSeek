@@ -7,7 +7,8 @@ import string
 import uuid
 from datetime import UTC, datetime
 
-from sqlmodel import Session, select
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from hideandseek.conventions import get_default_inventory
 from hideandseek.db import db_read, db_write
@@ -27,7 +28,7 @@ def generate_join_code(session: Session, *, length: int = 4, max_attempts: int =
     """Generate a unique random alphanumeric join code."""
     for _ in range(max_attempts):
         code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
-        existing = session.exec(select(Game).where(Game.join_code == code)).first()
+        existing = session.scalars(select(Game).where(Game.join_code == code)).first()
         if not existing:
             return code
     msg = f'Failed to generate unique join code after {max_attempts} attempts'
@@ -80,7 +81,7 @@ def get_game_by_id(session: Session, game_id: uuid.UUID) -> Game | None:
 @db_read
 def find_game_by_join_code(session: Session, join_code: str) -> Game | None:
     """Find a game by its join code."""
-    return session.exec(select(Game).where(Game.join_code == join_code.upper())).first()
+    return session.scalars(select(Game).where(Game.join_code == join_code.upper())).first()
 
 
 @db_write

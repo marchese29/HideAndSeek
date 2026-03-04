@@ -14,7 +14,7 @@ from itertools import combinations
 
 from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
-from sqlmodel import select
+from sqlalchemy import select
 
 from hideandseek.conventions import get_default_inventory
 from hideandseek.db import create_db_and_tables, current_session, session_scope
@@ -571,7 +571,7 @@ def main() -> None:
     with session_scope():
         dataset = (
             current_session()
-            .exec(select(TransitDataset).where(TransitDataset.region == 'Seattle'))
+            .scalars(select(TransitDataset).where(TransitDataset.region == 'Seattle'))
             .one_or_none()
         )
         if not dataset:
@@ -581,7 +581,7 @@ def main() -> None:
         # Check idempotency
         existing_map = (
             current_session()
-            .exec(select(GameMap).where(GameMap.transit_dataset_id == dataset.id))
+            .scalars(select(GameMap).where(GameMap.transit_dataset_id == dataset.id))
             .one_or_none()
         )
         if existing_map:

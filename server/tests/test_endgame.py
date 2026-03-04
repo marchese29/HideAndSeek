@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from shapely import Point, Polygon
 from shapely.geometry.base import BaseGeometry
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from hideandseek.exclusion import _buffer, compute_endgame_exclusions, exclude_radar
 from hideandseek.models.question import Question

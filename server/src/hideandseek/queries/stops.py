@@ -9,7 +9,8 @@ from geoalchemy2 import Geography, Geometry
 from shapely import wkb
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
-from sqlmodel import Session, col, select
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from hideandseek.db import db_read
 from hideandseek.models.game import Game
@@ -54,15 +55,9 @@ def get_candidate_stations(
 
         conditions.append(~sa.func.ST_Covers(total_exclusion_wkb, hiding_circle))
 
-    stmt = (
-        select(Stop)
-        .where(*conditions)
-        .order_by(Stop.name)  # type: ignore[arg-type]
-        .offset(offset)
-        .limit(limit)
-    )
+    stmt = select(Stop).where(*conditions).order_by(Stop.name).offset(offset).limit(limit)
 
-    return list(session.exec(stmt).all())
+    return list(session.scalars(stmt).all())
 
 
 def _playable_conditions(game: Game) -> list:
@@ -82,7 +77,7 @@ def _playable_conditions(game: Game) -> list:
     ]
 
     if game.excluded_stop_ids:
-        conditions.append(~col(Stop.id).in_([str(sid) for sid in game.excluded_stop_ids]))
+        conditions.append(~Stop.id.in_([str(sid) for sid in game.excluded_stop_ids]))
 
     return conditions
 
@@ -108,8 +103,8 @@ def get_stops_near_point(
         )
     )
 
-    stmt = select(Stop).where(*conditions).order_by(Stop.name)  # type: ignore[arg-type]
-    return list(session.exec(stmt).all())
+    stmt = select(Stop).where(*conditions).order_by(Stop.name)
+    return list(session.scalars(stmt).all())
 
 
 @db_read
@@ -149,10 +144,8 @@ def get_stops_within_radius_of_all(
         )
     max_dist = sa.func.greatest(*max_dist_exprs) if len(max_dist_exprs) > 1 else max_dist_exprs[0]
 
-    stmt = (
-        select(Stop).where(*conditions).order_by(max_dist)  # type: ignore[arg-type]
-    )
-    return list(session.exec(stmt).all())
+    stmt = select(Stop).where(*conditions).order_by(max_dist)
+    return list(session.scalars(stmt).all())
 
 
 @db_read
@@ -193,10 +186,8 @@ def get_stops_within_radius_of_any(
         )
     min_dist = sa.func.least(*min_dist_exprs) if len(min_dist_exprs) > 1 else min_dist_exprs[0]
 
-    stmt = (
-        select(Stop).where(*conditions).order_by(min_dist)  # type: ignore[arg-type]
-    )
-    return list(session.exec(stmt).all())
+    stmt = select(Stop).where(*conditions).order_by(min_dist)
+    return list(session.scalars(stmt).all())
 
 
 @db_read
@@ -222,13 +213,8 @@ def get_closest_stop_to_any(
         )
     min_dist = sa.func.least(*min_dist_exprs) if len(min_dist_exprs) > 1 else min_dist_exprs[0]
 
-    stmt = (
-        select(Stop)
-        .where(*conditions)
-        .order_by(min_dist)  # type: ignore[arg-type]
-        .limit(1)
-    )
-    return session.exec(stmt).one_or_none()
+    stmt = select(Stop).where(*conditions).order_by(min_dist).limit(1)
+    return session.scalars(stmt).one_or_none()
 
 
 @db_read
@@ -237,7 +223,7 @@ def validate_stop_playable(session: Session, game: Game, stop_id: uuid.UUID) -> 
     conditions = _playable_conditions(game)
     conditions.append(Stop.id == stop_id)
     stmt = select(Stop).where(*conditions)
-    return session.exec(stmt).one_or_none()
+    return session.scalars(stmt).one_or_none()
 
 
 @db_read
@@ -253,7 +239,7 @@ def all_hiders_within_radius(
 
     for loc in hider_locations:
         loc_wkb = sa.func.ST_GeomFromWKB(wkb.dumps(loc, include_srid=False), 4326)
-        within = session.exec(
+        within = session.scalars(
             select(
                 sa.func.ST_DWithin(
                     sa.cast(Stop.coordinates, Geography(srid=4326)),
@@ -283,8 +269,8 @@ def get_nearest_playable_stop(session: Session, game: Game, location: Point) -> 
     stmt = (
         select(Stop)
         .where(*conditions)
-        .order_by(sa.func.ST_Distance(Stop.coordinates, location_wkb))  # type: ignore[arg-type]
+        .order_by(sa.func.ST_Distance(Stop.coordinates, location_wkb))
         .limit(1)
     )
 
-    return session.exec(stmt).first()
+    return session.scalars(stmt).first()

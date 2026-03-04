@@ -1,73 +1,66 @@
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-import sqlalchemy as sa
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from hideandseek.models.base import Base
 from hideandseek.models.geo_types import ShapelyGeometry
 from hideandseek.models.types import QuestionStatus, QuestionType
 
-
-class Question(SQLModel, table=True):
-    model_config = {'arbitrary_types_allowed': True}  # type: ignore[assignment]
-    __tablename__ = 'question'  # type: ignore[assignment]
-
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    game_id: uuid.UUID = Field(foreign_key='game.id', index=True)
-    sequence: int
-    question_type: QuestionType
-    status: QuestionStatus = QuestionStatus.asked
-    asked_by: uuid.UUID = Field(foreign_key='player.id')
-    asked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    seeker_location_start: Point = Field(sa_column=sa.Column(ShapelyGeometry('POINT', srid=4326)))
-    seeker_location_end: Point | None = Field(
-        default=None, sa_column=sa.Column(ShapelyGeometry('POINT', srid=4326), nullable=True)
-    )
-    answerable_at: datetime | None = None
-    answered_at: datetime | None = None
-    hider_location: Point | None = Field(
-        default=None, sa_column=sa.Column(ShapelyGeometry('POINT', srid=4326), nullable=True)
-    )
-    ask_count: int = 1
-    scheduled_veto: bool = False
-    answer: str | None = None
-    exclusion: BaseGeometry | None = Field(
-        default=None, sa_column=sa.Column(ShapelyGeometry('GEOMETRY', srid=4326), nullable=True)
-    )
-    total_exclusion: BaseGeometry | None = Field(
-        default=None,
-        sa_column=sa.Column(ShapelyGeometry('GEOMETRY', srid=4326), nullable=True),
+if TYPE_CHECKING:
+    from hideandseek.models.game import Game
+    from hideandseek.models.question_params import (
+        FeatureQuestionParams,
+        RadarParams,
+        ThermometerParams,
     )
 
-    game: 'Game' = Relationship(back_populates='questions')  # noqa: F821
-    radar_params: 'RadarParams' = Relationship(  # noqa: F821
+
+class Question(Base):
+    __tablename__ = 'question'
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    game_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game.id'), index=True)
+    sequence: Mapped[int]
+    question_type: Mapped[QuestionType]
+    status: Mapped[QuestionStatus] = mapped_column(default=QuestionStatus.asked)
+    asked_by: Mapped[uuid.UUID] = mapped_column(ForeignKey('player.id'))
+    asked_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+    seeker_location_start: Mapped[Point] = mapped_column(ShapelyGeometry('POINT', srid=4326))
+    seeker_location_end: Mapped[Point | None] = mapped_column(
+        ShapelyGeometry('POINT', srid=4326), nullable=True, default=None
+    )
+    answerable_at: Mapped[datetime | None] = mapped_column(default=None)
+    answered_at: Mapped[datetime | None] = mapped_column(default=None)
+    hider_location: Mapped[Point | None] = mapped_column(
+        ShapelyGeometry('POINT', srid=4326), nullable=True, default=None
+    )
+    ask_count: Mapped[int] = mapped_column(default=1)
+    scheduled_veto: Mapped[bool] = mapped_column(default=False)
+    answer: Mapped[str | None] = mapped_column(default=None)
+    exclusion: Mapped[BaseGeometry | None] = mapped_column(
+        ShapelyGeometry('GEOMETRY', srid=4326), nullable=True, default=None
+    )
+    total_exclusion: Mapped[BaseGeometry | None] = mapped_column(
+        ShapelyGeometry('GEOMETRY', srid=4326), nullable=True, default=None
+    )
+
+    game: Mapped[Game] = relationship(back_populates='questions')
+    radar_params: Mapped[RadarParams | None] = relationship(
         back_populates='question',
-        sa_relationship_kwargs={'uselist': False},
+        uselist=False,
     )
-    thermometer_params: 'ThermometerParams' = Relationship(  # noqa: F821
+    thermometer_params: Mapped[ThermometerParams | None] = relationship(
         back_populates='question',
-        sa_relationship_kwargs={'uselist': False},
+        uselist=False,
     )
-    feature_params: 'FeatureQuestionParams' = Relationship(  # noqa: F821
+    feature_params: Mapped[FeatureQuestionParams | None] = relationship(
         back_populates='question',
-        sa_relationship_kwargs={'uselist': False},
+        uselist=False,
     )
-
-
-# Avoid circular imports — resolved at runtime by SQLModel.
-from hideandseek.models.game import Game  # noqa: E402
-from hideandseek.models.question_params import (  # noqa: E402
-    FeatureQuestionParams,
-    RadarParams,
-    ThermometerParams,
-)
-
-__all__ = [
-    'FeatureQuestionParams',
-    'Game',
-    'Question',
-    'RadarParams',
-    'ThermometerParams',
-]

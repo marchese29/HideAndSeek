@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlalchemy.orm import Session
 
 from tests.conftest import create_game_map, create_transit_dataset
 

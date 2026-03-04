@@ -5,7 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlmodel import Session, select
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from hideandseek.db import db_read, db_write
 from hideandseek.models.device_token import DeviceToken
@@ -49,12 +50,12 @@ def get_device_tokens_for_game(
     """Look up device tokens for players in a game, optionally filtered by role."""
     stmt = (
         select(DeviceToken)
-        .join(Player, DeviceToken.client_id == Player.client_id)  # type: ignore[arg-type]
+        .join(Player, DeviceToken.client_id == Player.client_id)
         .where(Player.game_id == game_id)
     )
     if role_filter is not None:
         stmt = stmt.where(Player.role == role_filter)
-    return list(session.exec(stmt).all())
+    return list(session.scalars(stmt).all())
 
 
 @db_write
