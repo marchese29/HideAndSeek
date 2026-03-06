@@ -8,11 +8,12 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from hideandseek.conventions import get_default_inventory
-from hideandseek.db import db_read, db_write
+from hideandseek.db import get_session
 from hideandseek.models.game import Game, Player
+from hideandseek.models.game_map import GameMap
+from hideandseek.models.transit import Stop
 from hideandseek.models.types import (
     DistanceConvention,
     GameStatus,
@@ -23,23 +24,21 @@ from hideandseek.models.types import (
 from hideandseek.queries.questions import create_inventory_slots
 
 
-@db_read
-def generate_join_code(session: Session, *, length: int = 4, max_attempts: int = 10) -> str:
+def generate_join_code(*, length: int = 4, max_attempts: int = 10) -> str:
     """Generate a unique random alphanumeric join code."""
+    session = get_session()
     for _ in range(max_attempts):
         code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
-        existing = session.scalars(select(Game).where(Game.join_code == code)).first()
+        existing = session.scalars(select(Game).where(Game.join_code == code)).one_or_none()
         if not existing:
             return code
     msg = f'Failed to generate unique join code after {max_attempts} attempts'
     raise RuntimeError(msg)
 
 
-@db_write
 def create_game(
-    session: Session,
     *,
-    map_id: uuid.UUID,
+    game_map: GameMap,
     host_client_id: uuid.UUID,
     hiding_time_min: int,
     base_question_delay_min: int,
@@ -54,8 +53,9 @@ def create_game(
     When default_inventory is empty, falls back to code-level defaults
     based on the map's convention and size.
     """
+    session = get_session()
     game = Game(
-        map_id=map_id,
+        game_map=game_map,
         host_client_id=host_client_id,
         join_code=generate_join_code(),
         hiding_time_min=hiding_time_min,
@@ -67,26 +67,24 @@ def create_game(
     session.flush()  # Materialize game.id for FK references
 
     inventory = default_inventory if default_inventory else get_default_inventory(convention, size)
-    create_inventory_slots(game.id, inventory, map_id)
+    create_inventory_slots(game, inventory)
 
     return game
 
 
-@db_read
-def get_game_by_id(session: Session, game_id: uuid.UUID) -> Game | None:
+def get_game_by_id(game_id: uuid.UUID) -> Game | None:
     """Return a game by ID."""
+    session = get_session()
     return session.get(Game, game_id)
 
 
-@db_read
-def find_game_by_join_code(session: Session, join_code: str) -> Game | None:
+def find_game_by_join_code(join_code: str) -> Game | None:
     """Find a game by its join code."""
-    return session.scalars(select(Game).where(Game.join_code == join_code.upper())).first()
+    session = get_session()
+    return session.scalars(select(Game).where(Game.join_code == join_code.upper())).one_or_none()
 
 
-@db_write
 def add_player(
-    session: Session,
     game: Game,
     *,
     client_id: uuid.UUID,
@@ -95,29 +93,22 @@ def add_player(
     role: PlayerRole | None = None,
 ) -> Player:
     """Create a player in a game via relationship append."""
-    player = Player(client_id=client_id, game_id=game.id, name=name, color=color, role=role)
+    session = get_session()
+    player = Player(client_id=client_id, name=name, color=color, role=role)
     game.players.append(player)
+    session.flush()
     return player
 
 
-@db_read
-def get_player(session: Session, player_id: uuid.UUID) -> Player | None:
+def get_player(player_id: uuid.UUID) -> Player | None:
     """Return a single player by ID."""
+    session = get_session()
     return session.get(Player, player_id)
 
 
-@db_write
-def update_player(session: Session, player: Player, updates: dict) -> Player:
-    """Apply partial updates to a player."""
-    for key, value in updates.items():
-        setattr(player, key, value)
-    session.add(player)
-    return player
-
-
-@db_write
-def update_game_status(session: Session, game: Game, status: GameStatus) -> Game:
+def update_game_status(game: Game, status: GameStatus) -> Game:
     """Update a game's status. Clears join_code when entering hiding."""
+    session = get_session()
     game.status = status
     if status == GameStatus.hiding:
         game.hiding_started_at = datetime.now(UTC)
@@ -125,24 +116,26 @@ def update_game_status(session: Session, game: Game, status: GameStatus) -> Game
     elif status == GameStatus.seeking:
         game.seeking_started_at = datetime.now(UTC)
     session.add(game)
+    session.flush()
     return game
 
 
-@db_write
 def set_hider_station(
-    session: Session,
     game: Game,
-    station_id: uuid.UUID,
+    station: Stop,
     status: StationElectionStatus,
 ) -> None:
     """Set the hider's station and election status on the game."""
-    game.hider_station_id = station_id
+    session = get_session()
+    game.hider_station = station
     game.station_election_status = status
     session.add(game)
+    session.flush()
 
 
-@db_write
-def set_station_ambiguous(session: Session, game: Game) -> None:
+def set_station_ambiguous(game: Game) -> None:
     """Mark station election as ambiguous (0 or 2+ valid candidates)."""
+    session = get_session()
     game.station_election_status = StationElectionStatus.ambiguous
     session.add(game)
+    session.flush()

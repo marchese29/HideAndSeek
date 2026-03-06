@@ -13,7 +13,7 @@ import uuid
 from fastapi import HTTPException
 from shapely.geometry import Point
 
-from hideandseek.models.game import Game
+from hideandseek.models.game import Game, Player
 from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.question import Question
 from hideandseek.models.transit import Stop
@@ -38,7 +38,7 @@ def validate_slot_request(
     For radar/thermometer: validates custom_distance when slot.distance is None.
     For matching/measuring: slot lookup is sufficient (category is on the slot).
     """
-    slot = get_slot_by_index(game.id, question_type, slot_index)
+    slot = get_slot_by_index(game, question_type, slot_index)
 
     if slot is None:
         raise HTTPException(status_code=422, detail='Invalid slot index.')
@@ -56,10 +56,10 @@ def validate_slot_request(
 
 
 def validate_answer_request(
-    question_id: uuid.UUID, game: Game, player_id: uuid.UUID, player_role: str | None
+    question_id: uuid.UUID, game: Game, player: Player
 ) -> tuple[Question, Point]:
     """Validate an answer request. Returns (question, hider_location)."""
-    if player_role != 'hider':
+    if player.role != 'hider':
         raise HTTPException(status_code=403, detail='Only the hider can answer questions.')
 
     if game.station_election_status == StationElectionStatus.ambiguous:
@@ -69,14 +69,38 @@ def validate_answer_request(
         )
 
     question = get_question(question_id)
-    if not question or question.game_id != game.id:
+    if not question or question.game != game:
         raise HTTPException(status_code=404, detail='Question not found.')
     if question.status != QuestionStatus.answerable:
         raise HTTPException(status_code=409, detail='Question is not answerable.')
 
-    latest = get_latest_location_for_player(player_id, game.id)
+    latest = get_latest_location_for_player(player, game)
     if not latest:
         raise HTTPException(status_code=409, detail='No hider location available.')
+
+    return question, latest.coordinates
+
+
+# ── Lock-in validation ─────────────────────────────────────────────────
+
+
+def validate_lock_in_request(
+    question_id: uuid.UUID, game: Game, player: Player
+) -> tuple[Question, Point]:
+    """Validate a thermometer lock-in request. Returns (question, seeker_end_location)."""
+    question = get_question(question_id)
+    if not question or question.game != game:
+        raise HTTPException(status_code=404, detail='Question not found.')
+    if question.question_type != QuestionType.thermometer:
+        raise HTTPException(status_code=409, detail='Only thermometer questions can be locked in.')
+    if question.status != QuestionStatus.in_progress:
+        raise HTTPException(status_code=409, detail='Question is not in progress.')
+    if question.asked_by_player != player:
+        raise HTTPException(status_code=403, detail='Only the asking seeker can lock in.')
+
+    latest = get_latest_location_for_player(player, game)
+    if not latest:
+        raise HTTPException(status_code=409, detail='No location reported yet.')
 
     return question, latest.coordinates
 

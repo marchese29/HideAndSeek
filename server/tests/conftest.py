@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 import hideandseek.models  # noqa: F401 — registers all tables on metadata
-from hideandseek.db import _session_var, get_session
+from hideandseek.db import _session_var, session_dependency
 from hideandseek.main import app
 from hideandseek.models.base import Base
 from hideandseek.models.game import Game, Player
@@ -22,8 +22,16 @@ from hideandseek.models.game_map import GameMap
 from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.map_feature import GameMapFeature, MapFeature
 from hideandseek.models.transit import TransitDataset
-from hideandseek.models.types import FeatureCategory, GameStatus, MapSize, QuestionType
-from hideandseek.resolution import MATCHING_CATEGORIES, MEASURING_CATEGORIES
+from hideandseek.models.types import (
+    MATCHING_CATEGORIES,
+    MEASURING_CATEGORIES,
+    FeatureCategory,
+    GameStatus,
+    MapSize,
+    QuestionType,
+    category_key,
+)
+from hideandseek.queries.features import get_map_feature_categories
 
 
 @pytest.fixture
@@ -53,7 +61,7 @@ def client(session: Session) -> Generator[TestClient, None, None]:
         finally:
             _session_var.reset(token)
 
-    app.dependency_overrides[get_session] = _override_get_session
+    app.dependency_overrides[session_dependency] = _override_get_session
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
@@ -126,9 +134,6 @@ def create_game(session: Session, **overrides: Any) -> Game:
 
 def _create_inventory_slots(session: Session, game: Game, template: dict[str, Any]) -> None:
     """Create InventorySlot rows from a default_inventory template and map features."""
-    from hideandseek.queries.features import get_map_feature_categories
-    from hideandseek.resolution import category_key
-
     # Radar and thermometer slots from template
     for type_key, question_type in (
         ('radars', QuestionType.radar),
@@ -144,7 +149,7 @@ def _create_inventory_slots(session: Session, game: Game, template: dict[str, An
             session.add(slot)
 
     # Matching and measuring slots from map feature categories
-    map_cats = get_map_feature_categories(game_map_id=game.map_id)
+    map_cats = get_map_feature_categories(game_map=game.game_map)
     sorted_cats = sorted(map_cats, key=lambda pair: category_key(pair[0], pair[1]))
 
     for question_type, type_categories in (

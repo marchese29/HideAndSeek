@@ -6,29 +6,28 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from hideandseek.db import db_read, db_write
+from hideandseek.db import get_session
 from hideandseek.models.device_token import DeviceToken
 from hideandseek.models.game import Player
 from hideandseek.models.types import PlayerRole
 
 
-@db_write
 def upsert_device_token(
-    session: Session,
     *,
     client_id: uuid.UUID,
     token: str,
     environment: str = 'production',
 ) -> DeviceToken:
     """Insert or update a device token for a client_id."""
+    session = get_session()
     existing = session.get(DeviceToken, client_id)
     if existing:
         existing.token = token
         existing.environment = environment
         existing.updated_at = datetime.now(UTC)
         session.add(existing)
+        session.flush()
         return existing
 
     dt = DeviceToken(
@@ -37,17 +36,17 @@ def upsert_device_token(
         environment=environment,
     )
     session.add(dt)
+    session.flush()
     return dt
 
 
-@db_read
 def get_device_tokens_for_game(
-    session: Session,
     game_id: uuid.UUID,
     *,
     role_filter: PlayerRole | None = None,
 ) -> list[DeviceToken]:
     """Look up device tokens for players in a game, optionally filtered by role."""
+    session = get_session()
     stmt = (
         select(DeviceToken)
         .join(Player, DeviceToken.client_id == Player.client_id)
@@ -58,9 +57,10 @@ def get_device_tokens_for_game(
     return list(session.scalars(stmt).all())
 
 
-@db_write
-def delete_device_token(session: Session, client_id: uuid.UUID) -> None:
+def delete_device_token(client_id: uuid.UUID) -> None:
     """Delete a device token by client_id (for stale token cleanup)."""
+    session = get_session()
     dt = session.get(DeviceToken, client_id)
     if dt:
         session.delete(dt)
+        session.flush()

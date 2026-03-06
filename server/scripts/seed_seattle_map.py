@@ -17,7 +17,7 @@ from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
 
 from hideandseek.conventions import get_default_inventory
-from hideandseek.db import create_db_and_tables, current_session, session_scope
+from hideandseek.db import create_db_and_tables, get_session, session_scope
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.map_feature import GameMapFeature, MapFeature
 from hideandseek.models.transit import TransitDataset
@@ -570,7 +570,7 @@ def main() -> None:
     # Look up existing Seattle TransitDataset
     with session_scope():
         dataset = (
-            current_session()
+            get_session()
             .scalars(select(TransitDataset).where(TransitDataset.region == 'Seattle'))
             .one_or_none()
         )
@@ -580,7 +580,7 @@ def main() -> None:
 
         # Check idempotency
         existing_map = (
-            current_session()
+            get_session()
             .scalars(select(GameMap).where(GameMap.transit_dataset_id == dataset.id))
             .one_or_none()
         )

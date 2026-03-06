@@ -33,7 +33,7 @@ def test_nearest_feature_returns_closest(session: Session) -> None:
     result = resolve_nearest_feature(
         category=FeatureCategory.hospital,
         location=Point(0.4, 0.4),
-        game_map_id=gm.id,
+        game_map=gm,
     )
     assert result is not None
     assert result.id == near.id
@@ -45,7 +45,7 @@ def test_nearest_feature_no_features(session: Session) -> None:
     result = resolve_nearest_feature(
         category=FeatureCategory.hospital,
         location=Point(0.5, 0.5),
-        game_map_id=gm.id,
+        game_map=gm,
     )
     assert result is None
 
@@ -62,7 +62,7 @@ def test_nearest_feature_map_scoping(session: Session) -> None:
         resolve_nearest_feature(
             category=FeatureCategory.hospital,
             location=Point(0.5, 0.5),
-            game_map_id=gm_a.id,
+            game_map=gm_a,
         )
         is not None
     )
@@ -71,7 +71,7 @@ def test_nearest_feature_map_scoping(session: Session) -> None:
         resolve_nearest_feature(
             category=FeatureCategory.hospital,
             location=Point(0.5, 0.5),
-            game_map_id=gm_b.id,
+            game_map=gm_b,
         )
         is None
     )
@@ -100,7 +100,7 @@ def test_nearest_feature_class_filtering(session: Session) -> None:
     result = resolve_nearest_feature(
         category=FeatureCategory.administrative_area,
         location=Point(0.5, 0.5),
-        game_map_id=gm.id,
+        game_map=gm,
         feature_class=1,
     )
     assert result is not None
@@ -125,7 +125,7 @@ def test_containing_feature_point_inside(session: Session) -> None:
     result = resolve_containing_feature(
         category=FeatureCategory.administrative_area,
         location=Point(0.5, 0.5),
-        game_map_id=gm.id,
+        game_map=gm,
     )
     assert result is not None
     assert result.id == poly.id
@@ -145,7 +145,7 @@ def test_containing_feature_point_outside(session: Session) -> None:
     result = resolve_containing_feature(
         category=FeatureCategory.administrative_area,
         location=Point(5.0, 5.0),
-        game_map_id=gm.id,
+        game_map=gm,
     )
     assert result is None
 
@@ -174,7 +174,7 @@ def test_containing_feature_class_filtering(session: Session) -> None:
     result = resolve_containing_feature(
         category=FeatureCategory.administrative_area,
         location=Point(0.5, 0.5),
-        game_map_id=gm.id,
+        game_map=gm,
         feature_class=1,
     )
     assert result is not None
@@ -204,7 +204,7 @@ def test_get_map_feature_categories(session: Session) -> None:
     create_game_map_feature(session, gm.id, area1.id)
     create_game_map_feature(session, gm.id, area2.id)
 
-    cats = get_map_feature_categories(game_map_id=gm.id)
+    cats = get_map_feature_categories(game_map=gm)
     cats_set = set(cats)
     assert (FeatureCategory.hospital, None) in cats_set
     assert (FeatureCategory.administrative_area, 1) in cats_set
@@ -215,7 +215,7 @@ def test_get_map_feature_categories(session: Session) -> None:
 def test_get_map_feature_categories_empty(session: Session) -> None:
     """Returns empty list when map has no features."""
     gm = create_game_map(session)
-    assert get_map_feature_categories(game_map_id=gm.id) == []
+    assert get_map_feature_categories(game_map=gm) == []
 
 
 # ── distance_to_feature ─────────────────────────────────────────────────────

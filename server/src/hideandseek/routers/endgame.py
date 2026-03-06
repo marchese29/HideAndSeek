@@ -6,15 +6,17 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from hideandseek.db import get_session
+from hideandseek.db import session_dependency
 from hideandseek.dependencies import get_game, get_seeker_in_game
-from hideandseek.logic import get_endgame_exclusions
+from hideandseek.logic.endgame import get_endgame_exclusions
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus
 from hideandseek.schemas.response import EndgameExclusionsResponse
 from hideandseek.validators import validate_endgame_station
 
-router = APIRouter(prefix='/games/{game_id}', tags=['endgame'], dependencies=[Depends(get_session)])
+router = APIRouter(
+    prefix='/games/{game_id}', tags=['endgame'], dependencies=[Depends(session_dependency)]
+)
 
 
 @router.get('/endgame-exclusions', response_model=EndgameExclusionsResponse)

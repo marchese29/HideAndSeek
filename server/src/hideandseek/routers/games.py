@@ -10,7 +10,7 @@ from shapely.geometry import Point
 
 from hideandseek.celery_app import app as celery_app
 from hideandseek.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
-from hideandseek.db import get_session
+from hideandseek.db import session_dependency
 from hideandseek.dependencies import (
     get_client_id,
     get_game,
@@ -18,12 +18,12 @@ from hideandseek.dependencies import (
     get_player_in_game,
     get_seeker_in_game,
 )
-from hideandseek.logic import (
+from hideandseek.logic.endgame import (
     compute_hiding_zone_for_station,
     effective_hiding_zone_radius_m,
     get_candidate_stations,
-    validate_station_election,
 )
+from hideandseek.logic.station import validate_station_election
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType, StationElectionStatus
 from hideandseek.queries.device_tokens import upsert_device_token
@@ -37,9 +37,6 @@ from hideandseek.queries.games import (
 )
 from hideandseek.queries.games import (
     create_game as query_create_game,
-)
-from hideandseek.queries.games import (
-    update_player as query_update_player,
 )
 from hideandseek.queries.location import create_location_update
 from hideandseek.queries.maps import get_map
@@ -65,7 +62,7 @@ from hideandseek.schemas.response import (
 from hideandseek.tasks.game_timers import transition_hiding_to_seeking
 from hideandseek.tasks.push import send_push
 
-router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(get_session)])
+router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(session_dependency)])
 
 # States from which a game can be ended.
 _ACTIVE_STATES = {GameStatus.hiding, GameStatus.seeking}
@@ -99,7 +96,7 @@ def create_game(
     )
 
     game = query_create_game(
-        map_id=game_map.id,
+        game_map=game_map,
         host_client_id=client_id,
         hiding_time_min=hiding_time,
         base_question_delay_min=question_delay,
@@ -156,7 +153,7 @@ def get_inventory(
     game: Game = Depends(get_game),
 ) -> InventoryResponse:
     """Current question inventory — all slots grouped by type."""
-    slots = get_inventory_slots(game.id)
+    slots = get_inventory_slots(game)
     return InventoryResponse.from_slots(slots)
 
 
@@ -174,7 +171,13 @@ def patch_player(
     if not player or player.game_id != game.id:
         raise HTTPException(status_code=404, detail='Player not found in this game.')
 
-    player = query_update_player(player, body.model_dump(exclude_unset=True))
+    updates = body.model_dump(exclude_unset=True)
+    if 'name' in updates:
+        player.name = updates['name']
+    if 'color' in updates:
+        player.color = updates['color']
+    if 'role' in updates:
+        player.role = updates['role']
     return PlayerResponse.from_model(player)
 
 
@@ -271,8 +274,8 @@ def elect_hider_station(
     # Store caller's location update
     coords = Point(body.location.coordinates[0], body.location.coordinates[1])
     create_location_update(
-        player_id=player.id,
-        game_id=game.id,
+        player=player,
+        game=game,
         coordinates=coords,
         timestamp=datetime.now(UTC),
     )
@@ -282,7 +285,7 @@ def elect_hider_station(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    set_hider_station(game, stop.id, StationElectionStatus.elected)
+    set_hider_station(game, stop, StationElectionStatus.elected)
     zone = compute_hiding_zone_for_station(game, stop)
 
     send_push.delay(  # type: ignore[attr-defined]

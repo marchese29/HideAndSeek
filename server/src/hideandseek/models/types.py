@@ -67,6 +67,68 @@ class FeatureCategory(StrEnum):
     foreign_consulate = 'foreign_consulate'
 
 
+# ── Feature category classification ───────────────────────────────────────────
+
+MATCHING_CATEGORIES: set[FeatureCategory] = {
+    FeatureCategory.transit_line,
+    FeatureCategory.administrative_area,
+    FeatureCategory.landmass,
+    FeatureCategory.commercial_airport,
+    FeatureCategory.mountain,
+    FeatureCategory.park,
+    FeatureCategory.amusement_park,
+    FeatureCategory.zoo,
+    FeatureCategory.aquarium,
+    FeatureCategory.golf_course,
+    FeatureCategory.museum,
+    FeatureCategory.movie_theater,
+    FeatureCategory.hospital,
+    FeatureCategory.library,
+    FeatureCategory.foreign_consulate,
+}
+
+MEASURING_CATEGORIES: set[FeatureCategory] = {
+    FeatureCategory.high_speed_train_line,
+    FeatureCategory.rail_station,
+    FeatureCategory.international_border,
+    FeatureCategory.admin_division_border,
+    FeatureCategory.coastline,
+    FeatureCategory.commercial_airport,
+    FeatureCategory.mountain,
+    FeatureCategory.park,
+    FeatureCategory.amusement_park,
+    FeatureCategory.zoo,
+    FeatureCategory.aquarium,
+    FeatureCategory.golf_course,
+    FeatureCategory.museum,
+    FeatureCategory.movie_theater,
+    FeatureCategory.hospital,
+    FeatureCategory.library,
+    FeatureCategory.foreign_consulate,
+}
+
+# Matching uses ST_Contains for these polygon categories (non-tiling — may return None)
+CONTAINMENT_CATEGORIES: set[FeatureCategory] = {
+    FeatureCategory.administrative_area,
+    FeatureCategory.landmass,
+}
+
+# Categories that require a feature_class to disambiguate tiers
+CLASSED_CATEGORIES: set[FeatureCategory] = {
+    FeatureCategory.administrative_area,
+}
+
+
+def category_key(category: FeatureCategory, feature_class: int | None) -> str:
+    """Build inventory key like 'hospital' or 'administrative_area:1'."""
+    if feature_class is not None:
+        return f'{category}:{feature_class}'
+    return str(category)
+
+
+# ── Question types ────────────────────────────────────────────────────────────
+
+
 class QuestionType(StrEnum):
     radar = 'radar'
     thermometer = 'thermometer'

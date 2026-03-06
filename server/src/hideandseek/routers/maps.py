@@ -6,13 +6,13 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from hideandseek.db import get_session
+from hideandseek.db import session_dependency
 from hideandseek.queries.maps import get_map as query_get_map
 from hideandseek.queries.maps import list_maps as query_list_maps
 from hideandseek.schemas.common import pagination_params
 from hideandseek.schemas.response import MapDetail, MapSummary
 
-router = APIRouter(prefix='/maps', tags=['maps'], dependencies=[Depends(get_session)])
+router = APIRouter(prefix='/maps', tags=['maps'], dependencies=[Depends(session_dependency)])
 
 
 @router.get('', response_model=list[MapSummary])

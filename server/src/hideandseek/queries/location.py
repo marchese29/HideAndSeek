@@ -2,37 +2,36 @@
 
 from __future__ import annotations
 
-import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from shapely.geometry import Point
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
-from hideandseek.db import db_read, db_write
+from hideandseek.db import get_session
 from hideandseek.models.game import Game, Player
 from hideandseek.models.location import LocationUpdate
 from hideandseek.models.types import PlayerRole
 
 
-@db_write
 def create_location_update(
-    session: Session,
     *,
-    player_id: uuid.UUID,
-    game_id: uuid.UUID,
+    player: Player,
+    game: Game,
     coordinates: Point,
     timestamp: datetime,
 ) -> LocationUpdate:
     """Store a location update."""
+    session = get_session()
     lu = LocationUpdate(
-        player_id=player_id,
-        game_id=game_id,
+        player=player,
+        game=game,
         coordinates=coordinates,
         timestamp=timestamp,
     )
     session.add(lu)
+    session.flush()
     return lu
 
 
@@ -45,20 +44,20 @@ class VisiblePlayerData:
     timestamp: datetime
 
 
-@db_read
-def get_visible_players(session: Session, game: Game, caller: Player) -> list[VisiblePlayerData]:
+def get_visible_players(game: Game, caller: Player) -> list[VisiblePlayerData]:
     """Return the latest location of each player visible to the caller.
 
     Hiders see everyone (all hiders + all seekers) except themselves.
     Seekers see other seekers only — hiders are hidden from seekers.
     """
+    session = get_session()
     # Subquery: latest location update per player in this game
     latest_sq = (
         select(
             LocationUpdate.player_id,
             func.max(LocationUpdate.id).label('max_id'),
         )
-        .where(LocationUpdate.game_id == game.id)
+        .where(LocationUpdate.game == game)
         .group_by(LocationUpdate.player_id)
         .subquery()
     )
@@ -86,29 +85,23 @@ def get_visible_players(session: Session, game: Game, caller: Player) -> list[Vi
     return results
 
 
-@db_read
-def get_location_history(session: Session, game_id: uuid.UUID) -> list[LocationUpdate]:
+def get_location_history(game: Game) -> Sequence[LocationUpdate]:
     """Return all location updates for a game, chronologically."""
-    return list(
-        session.scalars(
-            select(LocationUpdate)
-            .where(LocationUpdate.game_id == game_id)
-            .order_by(LocationUpdate.id)
-        ).all()
-    )
+    session = get_session()
+    return session.scalars(
+        select(LocationUpdate).where(LocationUpdate.game == game).order_by(LocationUpdate.id)
+    ).all()
 
 
-@db_read
-def get_latest_location_for_player(
-    session: Session, player_id: uuid.UUID, game_id: uuid.UUID
-) -> LocationUpdate | None:
+def get_latest_location_for_player(player: Player, game: Game) -> LocationUpdate | None:
     """Return the most recent location update for a player in a game."""
+    session = get_session()
     return session.scalars(
         select(LocationUpdate)
         .where(
-            LocationUpdate.player_id == player_id,
-            LocationUpdate.game_id == game_id,
+            LocationUpdate.player == player,
+            LocationUpdate.game == game,
         )
         .order_by(LocationUpdate.id.desc())
         .limit(1)
-    ).first()
+    ).one_or_none()

@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
 import structlog
 
 from hideandseek.celery_app import app
 from hideandseek.db import session_scope
-from hideandseek.logic import (
+from hideandseek.logic.answer import (
     answer_matching,
     answer_measuring,
     answer_radar,
     answer_thermometer,
+    veto_immediate,
+)
+from hideandseek.logic.station import (
     resolve_station_at_transition,
     resolve_station_fallback,
 )
@@ -32,7 +34,7 @@ from hideandseek.queries.games import (
     update_game_status,
 )
 from hideandseek.queries.location import get_latest_location_for_player
-from hideandseek.queries.questions import get_question, update_question
+from hideandseek.queries.questions import get_question
 from hideandseek.tasks.push import send_push
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -56,7 +58,7 @@ def transition_hiding_to_seeking(game_id: str) -> None:
         # Resolve station election
         stop, status = resolve_station_at_transition(game)
         if status == StationElectionStatus.auto_assigned and stop:
-            set_hider_station(game, stop.id, StationElectionStatus.auto_assigned)
+            set_hider_station(game, stop, StationElectionStatus.auto_assigned)
             logger.info('station_auto_assigned', game_id=game_id, stop_id=str(stop.id))
             send_push.delay(  # type: ignore[attr-defined]
                 game_id,
@@ -107,10 +109,7 @@ def auto_answer_question(question_id: str) -> None:
 
         # Scheduled veto: veto instead of computing an answer
         if question.scheduled_veto:
-            update_question(
-                question,
-                {'status': QuestionStatus.vetoed, 'answered_at': datetime.now(UTC)},
-            )
+            veto_immediate(question)
             game_id = str(question.game_id)
             logger.info('scheduled_veto_executed', question_id=question_id, game_id=game_id)
             send_push.delay(  # type: ignore[attr-defined]
@@ -126,7 +125,7 @@ def auto_answer_question(question_id: str) -> None:
         # Resolve ambiguous station before computing the answer
         if game.station_election_status == StationElectionStatus.ambiguous:
             stop = resolve_station_fallback(game)
-            set_hider_station(game, stop.id, StationElectionStatus.auto_assigned)
+            set_hider_station(game, stop, StationElectionStatus.auto_assigned)
             logger.info(
                 'station_auto_resolved',
                 game_id=str(game.id),
@@ -144,13 +143,13 @@ def auto_answer_question(question_id: str) -> None:
         if not hiders:
             logger.error('auto_answer_no_hider', game_id=str(game.id))
             return
-        latest = get_latest_location_for_player(hiders[0].id, game.id)
+        latest = get_latest_location_for_player(hiders[0], game)
         if not latest:
             logger.error('auto_answer_no_hider_location', game_id=str(game.id))
             return
 
         # Set hider location, compute answer + exclusion, persist
-        update_question(question, {'hider_location': latest.coordinates})
+        question.hider_location = latest.coordinates
 
         if question.question_type == QuestionType.radar:
             answer_radar(question, game)

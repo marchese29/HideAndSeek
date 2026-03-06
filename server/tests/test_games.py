@@ -7,7 +7,10 @@ from shapely.geometry import LineString, Point
 from sqlalchemy.orm import Session
 
 from hideandseek.models.game import Game
+from hideandseek.models.game_map import GameMap
+from hideandseek.models.transit import Route, RouteStop, Stop
 from hideandseek.models.types import GameStatus, PlayerRole, RouteType, StationElectionStatus
+from hideandseek.queries.games import set_hider_station
 from tests.conftest import create_game, create_game_map, create_player
 
 
@@ -154,13 +157,7 @@ def test_get_game_not_found(client: TestClient):
 
 
 def test_set_hider_station(session: Session):
-    from hideandseek.models.transit import Stop
-    from hideandseek.queries.games import set_hider_station
-
     game = create_game(session, status=GameStatus.seeking)
-
-    from hideandseek.models.game_map import GameMap
-
     game_map = session.get(GameMap, game.map_id)
     assert game_map is not None
 
@@ -174,7 +171,7 @@ def test_set_hider_station(session: Session):
     session.commit()
     session.refresh(stop)
 
-    set_hider_station(game, stop.id, StationElectionStatus.auto_assigned)
+    set_hider_station(game, stop, StationElectionStatus.auto_assigned)
     session.refresh(game)
     assert game.hider_station_id == stop.id
     assert game.station_election_status == StationElectionStatus.auto_assigned
@@ -190,8 +187,6 @@ def _set_hider_station(session: Session, game: Game, stop_id: uuid.UUID):
 
 
 def _create_stop(session: Session, dataset_id: uuid.UUID) -> uuid.UUID:
-    from hideandseek.models.transit import Stop
-
     stop = Stop(
         stable_id=f'stop-{uuid.uuid4().hex[:8]}',
         dataset_id=dataset_id,
@@ -206,8 +201,6 @@ def _create_stop(session: Session, dataset_id: uuid.UUID) -> uuid.UUID:
 
 def test_hider_station_endpoint_hider_sees_station(client: TestClient, session: Session):
     """GET /hider-station as hider returns the station UUID."""
-    from hideandseek.models.game_map import GameMap
-
     game = create_game(session, status=GameStatus.seeking)
     hider = create_player(session, game.id, role=PlayerRole.hider)
     game_map = session.get(GameMap, game.map_id)
@@ -224,8 +217,6 @@ def test_hider_station_endpoint_hider_sees_station(client: TestClient, session: 
 
 def test_hider_station_endpoint_seeker_403(client: TestClient, session: Session):
     """GET /hider-station as seeker returns 403."""
-    from hideandseek.models.game_map import GameMap
-
     game = create_game(session, status=GameStatus.seeking)
     create_player(session, game.id, role=PlayerRole.hider)
     seeker = create_player(session, game.id, role=PlayerRole.seeker)
@@ -240,8 +231,6 @@ def test_hider_station_endpoint_seeker_403(client: TestClient, session: Session)
 
 def test_hider_station_not_in_shared_game_state(client: TestClient, session: Session):
     """GET /games/{id} does not include hider_station_id."""
-    from hideandseek.models.game_map import GameMap
-
     game = create_game(session, status=GameStatus.seeking)
     game_map = session.get(GameMap, game.map_id)
     assert game_map is not None
@@ -411,15 +400,11 @@ def test_end_game_already_finished(client: TestClient, session: Session):
 
 
 def test_get_effective_map(client: TestClient, session: Session):
-    from hideandseek.models.transit import Route, RouteStop, Stop
-
     game = create_game(session)
     game_map = session.get(type(game), game.id)
     assert game_map is not None
 
     # Add some transit data
-    from hideandseek.models.game_map import GameMap
-
     gm = session.get(GameMap, game.map_id)
     assert gm is not None
     ds_id = gm.transit_dataset_id
@@ -496,8 +481,6 @@ def test_elect_station_wrong_phase_409(client: TestClient, session: Session):
 
 def test_elect_station_already_elected_409(client: TestClient, session: Session):
     """POST /hider-station when already elected returns 409."""
-    from hideandseek.models.game_map import GameMap
-
     game = create_game(session, status=GameStatus.hiding)
     hider = create_player(session, game.id, role=PlayerRole.hider)
     game_map = session.get(GameMap, game.map_id)
@@ -518,8 +501,6 @@ def test_elect_station_already_elected_409(client: TestClient, session: Session)
 
 def test_elect_station_during_ambiguity(client: TestClient, session: Session):
     """POST /hider-station allowed when status is ambiguous (even in seeking)."""
-    from hideandseek.models.game_map import GameMap
-
     game = create_game(
         session,
         status=GameStatus.seeking,

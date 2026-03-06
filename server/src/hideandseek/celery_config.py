@@ -26,7 +26,7 @@ def _resolve_broker() -> str:
         return explicit
 
     try:
-        import redis
+        import redis  # noqa: PLC0415
 
         conn = redis.Redis.from_url(_LOCAL_REDIS_URL, socket_connect_timeout=0.5)
         conn.ping()

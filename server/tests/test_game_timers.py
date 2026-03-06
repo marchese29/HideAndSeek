@@ -10,9 +10,11 @@ from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
 from hideandseek.models.game import Game
+from hideandseek.models.game_map import GameMap
 from hideandseek.models.location import LocationUpdate
 from hideandseek.models.question import Question
 from hideandseek.models.question_params import FeatureQuestionParams, RadarParams
+from hideandseek.models.transit import Stop
 from hideandseek.models.types import (
     FeatureCategory,
     GameStatus,
@@ -55,9 +57,6 @@ def test_transition_hiding_to_seeking(session: Session):
 
 def test_transition_preserves_early_election(session: Session):
     """If station was elected during hiding, transition leaves it alone."""
-    from hideandseek.models.game_map import GameMap
-    from hideandseek.models.transit import Stop
-
     game = create_game(
         session,
         status=GameStatus.hiding,

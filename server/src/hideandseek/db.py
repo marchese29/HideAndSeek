@@ -1,10 +1,8 @@
 import os
 import time
-from collections.abc import AsyncGenerator, Callable, Generator
+from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from functools import wraps
-from typing import Concatenate
 
 import sqlalchemy as sa
 import structlog
@@ -46,13 +44,25 @@ if DATABASE_URL.startswith('sqlite'):
 _session_var: ContextVar[Session] = ContextVar('_session_var')
 
 
-def current_session() -> Session:
+def get_session() -> Session:
     """Return the active request-scoped session."""
     return _session_var.get()
 
 
+def register[T](*objects: T) -> T:
+    """Add new ORM objects to the session, flush, and return the last object.
+
+    Enables inline usage: ``question = register(Question(...))``
+    """
+    session = get_session()
+    for obj in objects:
+        session.add(obj)
+    session.flush()
+    return objects[-1]
+
+
 def create_db_and_tables(*, max_retries: int = 10) -> None:
-    import hideandseek.models  # noqa: F401 — registers all tables on metadata
+    import hideandseek.models  # noqa: F401, PLC0415 — registers all tables on metadata
 
     if DATABASE_URL.startswith('sqlite'):
         _db_dir = find_server_root() / 'data'
@@ -69,7 +79,7 @@ def create_db_and_tables(*, max_retries: int = 10) -> None:
                     raise
                 logger.warning('db_connect_retry', attempt=attempt + 1, max_retries=max_retries)
                 time.sleep(1)
-    from hideandseek.models.base import Base
+    from hideandseek.models.base import Base  # noqa: PLC0415
 
     Base.metadata.create_all(engine)
 
@@ -78,7 +88,7 @@ def create_db_and_tables(*, max_retries: int = 10) -> None:
 def session_scope() -> Generator[Session, None, None]:
     """Sync session with ContextVar — for background tasks and scripts.
 
-    Sets the ContextVar so @db_read/@db_write query functions work naturally.
+    Sets the ContextVar so query functions using get_session() work naturally.
     Commits on success, rolls back on exception (via Session.__exit__).
     """
     with Session(engine) as session:
@@ -90,7 +100,7 @@ def session_scope() -> Generator[Session, None, None]:
             _session_var.reset(token)
 
 
-async def get_session() -> AsyncGenerator[Session, None]:
+async def session_dependency() -> AsyncGenerator[Session, None]:
     """Yield a session that commits on successful completion.
 
     Must be async so the ContextVar is set in the event-loop context — sync
@@ -108,36 +118,3 @@ async def get_session() -> AsyncGenerator[Session, None]:
             logger.debug('session_committed')
         finally:
             _session_var.reset(token)
-
-
-def db_read[T, **P](
-    fn: Callable[Concatenate[Session, P], T],
-) -> Callable[P, T]:
-    """Inject the current session as the first argument."""
-
-    @wraps(fn)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        return fn(current_session(), *args, **kwargs)
-
-    return wrapper
-
-
-def db_write[T, **P](
-    fn: Callable[Concatenate[Session, P], T],
-) -> Callable[P, T]:
-    """Inject session and flush after the function runs.
-
-    Decorated functions should session.add() their objects and return them.
-    The decorator flushes to materialize the writes within the transaction
-    (making them visible to subsequent queries in the same request).
-    The boundary commit in get_session() finalizes everything.
-    """
-
-    @wraps(fn)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        session = current_session()
-        result = fn(session, *args, **kwargs)
-        session.flush()
-        return result
-
-    return wrapper

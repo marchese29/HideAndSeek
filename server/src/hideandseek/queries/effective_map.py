@@ -6,9 +6,8 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from hideandseek.db import db_read
+from hideandseek.db import get_session
 from hideandseek.models.game import Game
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.transit import Route, RouteStop, Stop
@@ -31,24 +30,21 @@ class EffectiveMapData:
     routes: list[RouteWithStops]
 
 
-@db_read
-def get_effective_map_data(session: Session, game: Game) -> EffectiveMapData:
+def get_effective_map_data(game: Game) -> EffectiveMapData:
     """Load map + transit data, filtering by exclusions."""
-    game_map = session.get(GameMap, game.map_id)
-    assert game_map is not None
-
+    session = get_session()
     excluded_stop_set = set(str(sid) for sid in game.excluded_stop_ids)
     excluded_route_set = set(str(rid) for rid in game.excluded_route_ids)
 
     # Load stops, excluding excluded ones
-    stop_stmt = select(Stop).where(Stop.dataset_id == game_map.transit_dataset_id)
+    stop_stmt = select(Stop).where(Stop.dataset_id == game.game_map.transit_dataset_id)
     if excluded_stop_set:
         stop_stmt = stop_stmt.where(~Stop.id.in_(excluded_stop_set))
     all_stops = list(session.scalars(stop_stmt).all())
     stop_id_set = {s.id for s in all_stops}
 
     # Load routes with their ordered stop IDs
-    route_stmt = select(Route).where(Route.dataset_id == game_map.transit_dataset_id)
+    route_stmt = select(Route).where(Route.dataset_id == game.game_map.transit_dataset_id)
     if excluded_route_set:
         route_stmt = route_stmt.where(~Route.id.in_(excluded_route_set))
     all_routes = session.scalars(route_stmt).all()
@@ -61,4 +57,4 @@ def get_effective_map_data(session: Session, game: Game) -> EffectiveMapData:
         stop_ids = [rs.stop_id for rs in route_stops if rs.stop_id in stop_id_set]
         routes_with_stops.append(RouteWithStops(route=route, stop_ids=stop_ids))
 
-    return EffectiveMapData(game_map=game_map, stops=all_stops, routes=routes_with_stops)
+    return EffectiveMapData(game_map=game.game_map, stops=all_stops, routes=routes_with_stops)

@@ -19,8 +19,9 @@ from dataclasses import dataclass
 from math import asin, cos, radians, sin, sqrt
 
 from shapely.geometry import LineString, Point
+from sqlalchemy import select
 
-from hideandseek.db import create_db_and_tables, session_scope
+from hideandseek.db import create_db_and_tables, get_session, session_scope
 from hideandseek.gtfs import parse_gtfs
 from hideandseek.models.transit import Route, RouteStop, Stop, TransitDataset
 from hideandseek.models.types import RouteType
@@ -88,13 +89,9 @@ def main() -> None:
     create_db_and_tables()
 
     # Check idempotency
-    from sqlalchemy import select
-
-    from hideandseek.db import current_session
-
     with session_scope():
         existing = (
-            current_session()
+            get_session()
             .scalars(select(TransitDataset).where(TransitDataset.region == 'Seattle'))
             .one_or_none()
         )

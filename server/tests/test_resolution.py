@@ -5,13 +5,13 @@ from __future__ import annotations
 from shapely.geometry import Point, Polygon
 from sqlalchemy.orm import Session
 
-from hideandseek.models.types import FeatureCategory
-from hideandseek.resolution import (
-    category_key,
+from hideandseek.logic.resolution import (
     compute_matching_answer,
     compute_measuring_answer,
-    resolve_feature_for_player,
+    resolve_matching_feature,
+    resolve_measuring_feature,
 )
+from hideandseek.models.types import FeatureCategory, category_key
 from tests.conftest import (
     create_game_map,
     create_game_map_feature,
@@ -29,7 +29,7 @@ def test_category_key_with_class():
     assert category_key(FeatureCategory.administrative_area, 1) == 'administrative_area:1'
 
 
-# ── resolve_feature_for_player ───────────────────────────────────────────────
+# ── resolve_measuring_feature ────────────────────────────────────────────────
 
 
 def test_resolve_nearest_for_measuring(session: Session):
@@ -38,15 +38,17 @@ def test_resolve_nearest_for_measuring(session: Session):
     hosp = create_map_feature(session, geometry=Point(0.5, 0.5))
     create_game_map_feature(session, gm.id, hosp.id)
 
-    feature, dist = resolve_feature_for_player(
+    feature, dist = resolve_measuring_feature(
         category=FeatureCategory.hospital,
         location=Point(0.51, 0.51),
-        game_map_id=gm.id,
-        for_matching=False,
+        game_map=gm,
+        feature_class=None,
     )
-    assert feature is not None
     assert feature.id == hosp.id
     assert dist > 0
+
+
+# ── resolve_matching_feature ────────────────────────────────────────────────
 
 
 def test_resolve_containment_for_matching(session: Session):
@@ -63,34 +65,33 @@ def test_resolve_containment_for_matching(session: Session):
     create_game_map_feature(session, gm.id, area.id)
 
     # Inside polygon
-    feature, dist = resolve_feature_for_player(
+    feature, dist = resolve_matching_feature(
         category=FeatureCategory.administrative_area,
         location=Point(0.5, 0.5),
-        game_map_id=gm.id,
+        game_map=gm,
         feature_class=1,
-        for_matching=True,
     )
     assert feature is not None
     assert feature.id == area.id
 
     # Outside polygon
-    feature, dist = resolve_feature_for_player(
+    feature, dist = resolve_matching_feature(
         category=FeatureCategory.administrative_area,
         location=Point(5.0, 5.0),
-        game_map_id=gm.id,
+        game_map=gm,
         feature_class=1,
-        for_matching=True,
     )
     assert feature is None
 
 
-def test_resolve_no_features(session: Session):
-    """Returns (None, 0.0) when no features exist."""
+def test_resolve_no_features_matching(session: Session):
+    """Returns (None, 0.0) when no features exist for matching."""
     gm = create_game_map(session)
-    feature, dist = resolve_feature_for_player(
+    feature, dist = resolve_matching_feature(
         category=FeatureCategory.hospital,
         location=Point(0.5, 0.5),
-        game_map_id=gm.id,
+        game_map=gm,
+        feature_class=None,
     )
     assert feature is None
     assert dist == 0.0

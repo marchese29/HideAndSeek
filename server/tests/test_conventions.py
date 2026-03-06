@@ -12,7 +12,9 @@ from hideandseek.conventions import (
     get_default_inventory,
     to_meters,
 )
+from hideandseek.logic.endgame import effective_hiding_zone_radius_m
 from hideandseek.models.types import DistanceConvention, MapSize
+from tests.conftest import create_game, create_game_map
 
 # ── to_meters / from_meters ─────────────────────────────────────────────
 
@@ -144,9 +146,6 @@ def test_hiding_zone_special_raises():
 
 def test_effective_radius_game_override_takes_precedence(session: Session):
     """Game-level hiding_zone_radius_override beats map-level and code-level defaults."""
-    from hideandseek.logic import effective_hiding_zone_radius_m
-    from tests.conftest import create_game, create_game_map
-
     gm = create_game_map(session, hiding_zone_radius=750)
     game = create_game(session, map_id=gm.id, hiding_zone_radius_override=999)
     result = effective_hiding_zone_radius_m(game)
@@ -156,9 +155,6 @@ def test_effective_radius_game_override_takes_precedence(session: Session):
 
 def test_effective_radius_map_override_used_without_game_override(session: Session):
     """Map-level hiding_zone_radius used when game-level override is None."""
-    from hideandseek.logic import effective_hiding_zone_radius_m
-    from tests.conftest import create_game, create_game_map
-
     gm = create_game_map(session, hiding_zone_radius=750)
     game = create_game(session, map_id=gm.id)
     result = effective_hiding_zone_radius_m(game)
@@ -167,9 +163,6 @@ def test_effective_radius_map_override_used_without_game_override(session: Sessi
 
 def test_effective_radius_falls_back_to_code_default(session: Session):
     """Code-level default used when both overrides are None."""
-    from hideandseek.logic import effective_hiding_zone_radius_m
-    from tests.conftest import create_game, create_game_map
-
     gm = create_game_map(session)  # hiding_zone_radius defaults to None
     game = create_game(session, map_id=gm.id)
     result = effective_hiding_zone_radius_m(game)

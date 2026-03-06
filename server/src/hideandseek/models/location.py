@@ -12,7 +12,7 @@ from hideandseek.models.base import Base
 from hideandseek.models.geo_types import ShapelyGeometry
 
 if TYPE_CHECKING:
-    from hideandseek.models.game import Player
+    from hideandseek.models.game import Game, Player
 
 
 class LocationUpdate(Base):
@@ -25,3 +25,4 @@ class LocationUpdate(Base):
     coordinates: Mapped[Point] = mapped_column(ShapelyGeometry('POINT', srid=4326))
 
     player: Mapped[Player] = relationship(back_populates='location_updates')
+    game: Mapped[Game] = relationship()

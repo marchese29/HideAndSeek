@@ -8,7 +8,7 @@ import structlog
 from fastapi import Depends, Header, HTTPException, Path, Request
 from sqlalchemy import select
 
-from hideandseek.db import current_session
+from hideandseek.db import get_session
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import PlayerRole
 
@@ -26,9 +26,9 @@ def get_game(
     """Resolve game_id path param to a Game, or 404.
 
     Requires the session ContextVar to be set (via router-level
-    ``dependencies=[Depends(get_session)]``).
+    ``dependencies=[Depends(session_dependency)]``).
     """
-    session = current_session()
+    session = get_session()
     game = session.get(Game, game_id)
     if not game:
         logger.warning('game_not_found', game_id=str(game_id))
@@ -43,11 +43,11 @@ def get_player_in_game(
     """Resolve the calling player via client_id + game, or 403.
 
     Requires the session ContextVar to be set (via router-level
-    ``dependencies=[Depends(get_session)]``).
+    ``dependencies=[Depends(session_dependency)]``).
     """
-    session = current_session()
+    session = get_session()
     player = session.scalars(
-        select(Player).where(Player.client_id == client_id, Player.game_id == game.id)
+        select(Player).where(Player.client_id == client_id, Player.game == game)
     ).one_or_none()
     if not player:
         logger.warning('player_not_in_game', client_id=str(client_id), game_id=str(game.id))
@@ -91,7 +91,7 @@ def get_optional_player_in_game(
     """Resolve the calling player if X-Client-Id is present, otherwise None."""
     if client_id is None:
         return None
-    session = current_session()
+    session = get_session()
     return session.scalars(
-        select(Player).where(Player.client_id == client_id, Player.game_id == game.id)
+        select(Player).where(Player.client_id == client_id, Player.game == game)
     ).one_or_none()

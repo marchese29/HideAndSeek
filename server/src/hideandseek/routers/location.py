@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from geojson_pydantic import Point as GeoJSONPoint
 from shapely.geometry import Point, mapping
 
-from hideandseek.db import get_session
+from hideandseek.db import session_dependency
 from hideandseek.dependencies import get_game, get_player_in_game
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus
@@ -23,7 +23,7 @@ from hideandseek.schemas.response import (
 )
 
 router = APIRouter(
-    prefix='/games/{game_id}', tags=['location'], dependencies=[Depends(get_session)]
+    prefix='/games/{game_id}', tags=['location'], dependencies=[Depends(session_dependency)]
 )
 
 
@@ -38,8 +38,8 @@ def report_location(
     point = Point(float(coords[0]), float(coords[1]))
 
     create_location_update(
-        player_id=player.id,
-        game_id=game.id,
+        player=player,
+        game=game,
         coordinates=point,
         timestamp=body.timestamp,
     )
@@ -70,5 +70,5 @@ def location_history(
             status_code=409,
             detail='Location history is only available after the game ends.',
         )
-    updates = get_location_history(game.id)
+    updates = get_location_history(game)
     return [LocationHistoryEntry.from_model(lu) for lu in updates]

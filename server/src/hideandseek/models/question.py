@@ -14,7 +14,7 @@ from hideandseek.models.geo_types import ShapelyGeometry
 from hideandseek.models.types import QuestionStatus, QuestionType
 
 if TYPE_CHECKING:
-    from hideandseek.models.game import Game
+    from hideandseek.models.game import Game, Player
     from hideandseek.models.question_params import (
         FeatureQuestionParams,
         RadarParams,
@@ -52,6 +52,7 @@ class Question(Base):
     )
 
     game: Mapped[Game] = relationship(back_populates='questions')
+    asked_by_player: Mapped[Player] = relationship(foreign_keys=[asked_by])
     radar_params: Mapped[RadarParams | None] = relationship(
         back_populates='question',
         uselist=False,
