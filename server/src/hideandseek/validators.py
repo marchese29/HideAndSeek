@@ -81,6 +81,23 @@ def validate_answer_request(
     return question, latest.coordinates
 
 
+# ── Abandon validation ────────────────────────────────────────────────
+
+
+def validate_abandon_request(question_id: uuid.UUID, game: Game, player: Player) -> Question:
+    """Validate an abandon request. Returns the question."""
+    if player.role != 'seeker':
+        raise HTTPException(status_code=403, detail='Only the seeker can abandon questions.')
+
+    question = get_question(question_id)
+    if not question or question.game != game:
+        raise HTTPException(status_code=404, detail='Question not found.')
+    if question.status not in (QuestionStatus.answerable, QuestionStatus.in_progress):
+        raise HTTPException(status_code=409, detail='Question cannot be abandoned.')
+
+    return question
+
+
 # ── Lock-in validation ─────────────────────────────────────────────────
 
 

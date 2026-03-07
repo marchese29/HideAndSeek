@@ -150,6 +150,12 @@ curl -s -X POST "localhost:8000/games/<game_id>/questions/<question_id>/veto?sch
   -H "X-Client-Id: $HIDER"
 # → question stays answerable, veto triggers at timer expiry
 # → hider can still answer normally before the timer to override
+
+# Abandon (seeker) — drop an unwanted question, no answer or exclusion
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/abandon \
+  -H "X-Client-Id: $SEEKER"
+# → status: "abandoned", answer: null, no exclusion
+# → ask is consumed (ask_count stays incremented), seeker can ask a new question
 ```
 
 ### Thermometer question
@@ -227,7 +233,7 @@ src/hideandseek/
   celery_app.py, celery_config.py       # Celery instance + broker config
   logic/                                # Business logic (session-free)
     ask.py                              # Question creation (radar, thermometer, matching, measuring)
-    answer.py                           # Answer computation, exclusion accumulation, veto
+    answer.py                           # Answer computation, exclusion accumulation, veto, abandon
     resolution.py                       # Feature resolution strategy, answer computation helpers
     endgame.py                          # Hiding zone radius, endgame exclusions, candidate stations
     station.py                          # Station election, transition, fallback, hider centroid
@@ -274,7 +280,7 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
   - **Database** — PostGIS spatial columns. The `ShapelyGeometry(Geometry)` column type in `models/geo_types.py` transparently converts between shapely and WKB — model code never touches WKB directly.
 
   Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column type bridges Python↔DB automatically.
-- **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic/` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns, no session access) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic/`. Logic submodules: `logic/ask.py` (question creation + `lock_in_thermometer`), `logic/answer.py` (answer computation + `veto_immediate` + `schedule_veto`). Question status: `asked` → `in_progress` (thermometer only) → `answerable` → `answered` or `vetoed`. Veto is a hider action (`POST /questions/{qid}/veto`) that skips answer computation — no exclusion zone, no hider location snapshot. Vetoed questions don't block new questions. Scheduled veto (`?scheduled=true`) sets a flag instead of vetoing immediately — the auto-answer task checks `scheduled_veto` and vetoes at timer expiry. The hider can still answer normally before the timer to override. The `scheduled_veto` field is server-only (not in any response schema) so seekers never see it.
+- **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic/` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns, no session access) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic/`. Logic submodules: `logic/ask.py` (question creation + `lock_in_thermometer`), `logic/answer.py` (answer computation + `veto_immediate` + `schedule_veto` + `abandon_question`). Question status: `asked` → `in_progress` (thermometer only) → `answerable` → `answered`, `vetoed`, or `abandoned`. Veto is a hider action (`POST /questions/{qid}/veto`) that skips answer computation — no exclusion zone, no hider location snapshot. Vetoed questions don't block new questions. Scheduled veto (`?scheduled=true`) sets a flag instead of vetoing immediately — the auto-answer task checks `scheduled_veto` and vetoes at timer expiry. The hider can still answer normally before the timer to override. The `scheduled_veto` field is server-only (not in any response schema) so seekers never see it. Abandon is a seeker action (`POST /questions/{qid}/abandon`) — the seeker drops an unwanted question immediately. No answer, no exclusion zone, no hider location needed. Can abandon `answerable` or `in_progress` questions. The ask is consumed (ask_count stays incremented).
 - **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All use a unified `AskQuestionRequest` body (`slot_index`, `location`, optional `custom_distance`). The URL path determines `question_type`; `slot_index` identifies the inventory slot. Seeker `location` is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer and list endpoints remain unified.
 - **Role-gated endpoint split**: Endpoints are split by role (see `design/game-state-split.md`). Principles: role = access control only (determines *whether* you can call an endpoint, never *what* you get back), fixed response shapes (no conditional field nulling), default-deny on shared endpoints. The split:
   - **Shared** (any player): `GET /games/{id}` (slim game state with inventory — slots grouped by type with ask counts, no `hider_station_id`), `GET /games/{id}/questions` (whitelist summary — no parameters, locations, or geometry).

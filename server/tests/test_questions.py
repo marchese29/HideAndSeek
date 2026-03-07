@@ -1162,3 +1162,112 @@ def test_inventory_includes_feature_slots(client: TestClient, session: Session):
     measuring_cats = {s['category'] for s in inv['measuring_slots']}
     assert 'hospital' in matching_cats
     assert 'hospital' in measuring_cats
+
+
+# ── POST /games/{game_id}/questions/{question_id}/abandon ─────────────────────
+
+
+def test_abandon_answerable_question(client: TestClient, session: Session):
+    """Seeker can abandon an answerable question — status becomes abandoned."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/abandon',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['status'] == 'abandoned'
+    assert data['answer'] is None
+    assert data['hider_location'] is None
+    assert data['answered_at'] is not None
+
+
+def test_abandon_in_progress_thermometer(client: TestClient, session: Session):
+    """Seeker can abandon an in_progress thermometer before lock-in."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/thermometer',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.json()['status'] == 'in_progress'
+    question_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/abandon',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()['status'] == 'abandoned'
+
+
+def test_abandon_as_hider_forbidden(client: TestClient, session: Session):
+    """Hider cannot abandon — returns 403."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/abandon',
+        headers=_headers(hider.client_id),
+    )
+    assert resp.status_code == 403
+
+
+def test_abandon_already_answered(client: TestClient, session: Session):
+    """Cannot abandon an already-answered question — returns 409."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    # Answer first
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/answer',
+        headers=_headers(hider.client_id),
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/abandon',
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 409
+
+
+def test_abandon_then_reask(client: TestClient, session: Session):
+    """After abandon, seeker can ask a new question (not blocked by one-at-a-time rule)."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    question_id = resp.json()['id']
+
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/abandon',
+        headers=_headers(seeker.client_id),
+    )
+
+    # Should be able to ask a new question
+    resp = client.post(
+        f'/games/{game.id}/questions/radar',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.client_id),
+    )
+    assert resp.status_code == 201
+    assert resp.json()['ask_count'] == 2

@@ -29,7 +29,13 @@ def has_unanswered_question(game: Game) -> bool:
         session.scalars(
             select(Question.id).where(
                 Question.game == game,
-                Question.status.not_in([QuestionStatus.answered, QuestionStatus.vetoed]),
+                Question.status.not_in(
+                    [
+                        QuestionStatus.answered,
+                        QuestionStatus.vetoed,
+                        QuestionStatus.abandoned,
+                    ]
+                ),
             )
         ).first()
         is not None

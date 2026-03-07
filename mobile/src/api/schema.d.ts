@@ -472,6 +472,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/questions/{question_id}/abandon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abandon Question Endpoint
+         * @description Seeker abandons a question — no answer, no exclusion zone.
+         */
+        post: operations["abandon_question_endpoint_games__game_id__questions__question_id__abandon_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/questions": {
         parameters: {
             query?: never;
@@ -1465,7 +1485,7 @@ export interface components {
          * QuestionStatus
          * @enum {string}
          */
-        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed";
+        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned";
         /**
          * QuestionSummaryResponse
          * @description Lightweight question summary — whitelist of safe fields for shared polling.
@@ -2483,6 +2503,40 @@ export interface operations {
             query?: {
                 scheduled?: boolean;
             };
+            header: {
+                "x-client-id": string;
+            };
+            path: {
+                question_id: string;
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    abandon_question_endpoint_games__game_id__questions__question_id__abandon_post: {
+        parameters: {
+            query?: never;
             header: {
                 "x-client-id": string;
             };

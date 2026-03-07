@@ -939,6 +939,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}/abandon:
+    post:
+      tags:
+      - questions
+      summary: Abandon Question Endpoint
+      description: "Seeker abandons a question \u2014 no answer, no exclusion zone."
+      operationId: abandon_question_endpoint_games__game_id__questions__question_id__abandon_post
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/questions:
     get:
       tags:
@@ -2451,6 +2493,7 @@ components:
       - answerable
       - answered
       - vetoed
+      - abandoned
       title: QuestionStatus
     QuestionSummaryResponse:
       properties:

@@ -142,6 +142,7 @@ class QuestionStatus(StrEnum):
     answerable = 'answerable'
     answered = 'answered'
     vetoed = 'vetoed'
+    abandoned = 'abandoned'
 
 
 class StationElectionStatus(StrEnum):
@@ -162,6 +163,7 @@ class PushEventType(StrEnum):
     station_ambiguous = 'station_ambiguous'
     station_elected = 'station_elected'
     question_vetoed = 'question_vetoed'
+    question_abandoned = 'question_abandoned'
     station_auto_resolved = 'station_auto_resolved'
 
 

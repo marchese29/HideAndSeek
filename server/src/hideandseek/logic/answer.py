@@ -182,6 +182,12 @@ def veto_immediate(question: Question) -> None:
     question.answered_at = datetime.now(UTC)
 
 
+def abandon_question(question: Question) -> None:
+    """Seeker abandons a question — no answer, no exclusion zone."""
+    question.status = QuestionStatus.abandoned
+    question.answered_at = datetime.now(UTC)
+
+
 def schedule_veto(question: Question) -> None:
     """Schedule a veto to fire when the auto-answer timer expires."""
     question.scheduled_veto = True

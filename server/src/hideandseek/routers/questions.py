@@ -19,6 +19,7 @@ from hideandseek.dependencies import (
     get_seeker_in_game,
 )
 from hideandseek.logic.answer import (
+    abandon_question,
     answer_matching,
     answer_measuring,
     answer_radar,
@@ -58,6 +59,7 @@ from hideandseek.schemas.response import (
 from hideandseek.tasks.game_timers import auto_answer_question
 from hideandseek.tasks.push import send_push
 from hideandseek.validators import (
+    validate_abandon_request,
     validate_answer_request,
     validate_lock_in_request,
     validate_slot_request,
@@ -347,6 +349,39 @@ def veto_question(
         PushEventType.question_vetoed,
         role_filter='seeker',
         alert='The hider used a veto!',
+        question_id=str(question.id),
+        question_type=question.question_type,
+    )
+
+    return QuestionDetailResponse.from_model(question)
+
+
+# ── Abandon ───────────────────────────────────────────────────────────
+
+
+@router.post(
+    '/questions/{question_id}/abandon',
+    response_model=QuestionDetailResponse,
+)
+def abandon_question_endpoint(
+    question_id: uuid.UUID,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> QuestionDetailResponse:
+    """Seeker abandons a question — no answer, no exclusion zone."""
+    question = validate_abandon_request(question_id, game, player)
+
+    # Revoke auto-answer timer if one exists (answerable questions have one)
+    if question.status == QuestionStatus.answerable and not celery_app.conf.task_always_eager:
+        celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
+
+    abandon_question(question)
+
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.question_abandoned,
+        role_filter='hider',
+        alert='The seeker abandoned a question!',
         question_id=str(question.id),
         question_type=question.question_type,
     )
