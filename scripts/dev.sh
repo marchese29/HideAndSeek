@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Launch API server + Celery worker together for local development.
-# Redis auto-detected on localhost:6379 (install: brew install redis && brew services start redis).
-# Uses SQLite by default (no DATABASE_URL needed).
+# Requires: docker compose up -d postgres redis
 set -euo pipefail
 
 cd "$(dirname "$0")/../server"
+
+# Default to the docker-compose PostgreSQL if DATABASE_URL is not set.
+export DATABASE_URL="${DATABASE_URL:-postgresql+psycopg://hideandseek:hideandseek@localhost:5432/hideandseek}"
 
 # macOS reports SC_OPEN_MAX as 2^63-1, which makes billiard's close_open_fds()
 # overflow a C int. Cap the fd limit so Celery Beat can start.

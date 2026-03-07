@@ -3,43 +3,30 @@ import time
 from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from functools import cache
 
 import sqlalchemy as sa
 import structlog
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from hideandseek.utils import find_server_root
-
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-_default_db_url = f'sqlite:///{find_server_root() / "data" / "hideandseek.db"}'
-DATABASE_URL = os.environ.get('DATABASE_URL', _default_db_url)
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
-_connect_args: dict[str, bool] = {}
-if DATABASE_URL.startswith('sqlite'):
-    _connect_args['check_same_thread'] = False
 
-engine = create_engine(DATABASE_URL, connect_args=_connect_args)
+@cache
+def get_engine() -> sa.Engine:
+    """Return the shared engine, creating it on first call.
 
-if DATABASE_URL.startswith('sqlite'):
-    from pathlib import Path
+    Requires DATABASE_URL to be set. Cached so all callers share one engine.
+    """
+    if not DATABASE_URL:
+        msg = 'DATABASE_URL environment variable is required'
+        raise RuntimeError(msg)
+    return create_engine(DATABASE_URL)
 
-    from geoalchemy2 import load_spatialite
-
-    if 'SPATIALITE_LIBRARY_PATH' not in os.environ:
-        _candidates = [
-            Path('/opt/homebrew/lib/mod_spatialite.dylib'),  # macOS ARM
-            Path('/usr/local/lib/mod_spatialite.dylib'),  # macOS Intel
-            Path('/usr/lib/x86_64-linux-gnu/mod_spatialite.so'),  # Debian/Ubuntu
-        ]
-        for p in _candidates:
-            if p.exists():
-                os.environ['SPATIALITE_LIBRARY_PATH'] = str(p)
-                break
-
-    event.listen(engine, 'connect', load_spatialite)
 
 _session_var: ContextVar[Session] = ContextVar('_session_var')
 
@@ -64,21 +51,19 @@ def register[T](*objects: T) -> T:
 def create_db_and_tables(*, max_retries: int = 10) -> None:
     import hideandseek.models  # noqa: F401, PLC0415 — registers all tables on metadata
 
-    if DATABASE_URL.startswith('sqlite'):
-        _db_dir = find_server_root() / 'data'
-        _db_dir.mkdir(parents=True, exist_ok=True)
-    elif DATABASE_URL.startswith('postgresql'):
-        for attempt in range(max_retries):
-            try:
-                with engine.connect() as conn:
-                    conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
-                    conn.commit()
-                break
-            except OperationalError:
-                if attempt == max_retries - 1:
-                    raise
-                logger.warning('db_connect_retry', attempt=attempt + 1, max_retries=max_retries)
-                time.sleep(1)
+    engine = get_engine()
+    for attempt in range(max_retries):
+        try:
+            with engine.connect() as conn:
+                conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
+                conn.commit()
+            break
+        except OperationalError:
+            if attempt == max_retries - 1:
+                raise
+            logger.warning('db_connect_retry', attempt=attempt + 1, max_retries=max_retries)
+            time.sleep(1)
+
     from hideandseek.models.base import Base  # noqa: PLC0415
 
     Base.metadata.create_all(engine)
@@ -91,7 +76,7 @@ def session_scope() -> Generator[Session, None, None]:
     Sets the ContextVar so query functions using get_session() work naturally.
     Commits on success, rolls back on exception (via Session.__exit__).
     """
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         token = _session_var.set(session)
         try:
             yield session
@@ -109,7 +94,7 @@ async def session_dependency() -> AsyncGenerator[Session, None]:
     If the handler raises, the yield never resumes, commit() is never called,
     and Session.__exit__ rolls back. Every request is atomic by default.
     """
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         token = _session_var.set(session)
         logger.debug('session_opened')
         try:

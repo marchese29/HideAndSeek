@@ -510,8 +510,6 @@ def test_elect_station_during_ambiguity(client: TestClient, session: Session):
     game_map = session.get(GameMap, game.map_id)
     assert game_map is not None
 
-    # The stop_id won't be playable (SpatiaLite doesn't support the PostGIS
-    # queries in validate_station_election), so we expect a 422, not a 409.
     resp = client.post(
         f'/games/{game.id}/hider-station',
         json={
@@ -520,7 +518,8 @@ def test_elect_station_during_ambiguity(client: TestClient, session: Session):
         },
         headers=_headers(hider.client_id),
     )
-    assert resp.status_code == 422  # validation error, not 409
+    # Stop doesn't exist / isn't playable → 422
+    assert resp.status_code == 422
 
 
 # ── GET /games/{game_id}/hiding-zone ────────────────────────────────────

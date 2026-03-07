@@ -6,8 +6,7 @@ Python FastAPI backend for the HideAndSeek game.
 
 ```bash
 uv sync                    # Install/update dependencies
-uv run uvicorn hideandseek.main:app --reload  # Run dev server (localhost:8000, SQLite)
-uv run pytest              # Run tests (in-memory SQLite)
+uv run pytest              # Run tests (requires Docker — testcontainers spins up PostGIS)
 uv run ruff check .        # Lint
 uv run ruff format .       # Format
 uv run pyright             # Type check
@@ -20,24 +19,22 @@ docker compose up --build  # Start PostgreSQL + API + Redis + Celery worker (loc
 docker compose down        # Stop services (data preserved in pgdata volume)
 docker compose down -v     # Stop services and wipe database
 
-# Full-fidelity local dev (requires local Redis: brew services start redis)
+# Local dev (requires: docker compose up -d postgres redis)
 scripts/dev.sh             # Launches uvicorn + Celery worker together
 ```
 
 ## Running the Server
 
-Three modes — all serve on `localhost:8000`:
+Two modes — both serve on `localhost:8000`, both use PostgreSQL:
 
-| | **Docker (preferred)** | **Local + worker** | **Local bare** |
-|---|---|---|---|
-| Start | `docker compose up --build` | `scripts/dev.sh` | `uv run uvicorn hideandseek.main:app --reload` |
-| Database | PostGIS (PostgreSQL 16) | SQLite + SpatiaLite | SQLite + SpatiaLite |
-| Celery | Redis + worker container | Redis + worker process | Auto-detects Redis; eager fallback |
-| Timers | Real (countdown delays) | Real (countdown delays) | Real if Redis running; immediate if eager |
-| Reset DB | `docker compose down -v` | Delete `server/data/` | Delete `server/data/` |
-| `ENV` | `development` | `local` (default) | `local` (default) |
-
-**Local Redis recommended**: `brew install redis && brew services start redis`. Without Redis, the local server falls back to eager mode (tasks fire synchronously, countdown delays are ignored).
+| | **Docker (preferred)** | **Local + worker** |
+|---|---|---|
+| Start | `docker compose up --build` | `docker compose up -d postgres redis` then `scripts/dev.sh` |
+| Database | PostGIS (PostgreSQL 16) | PostGIS via docker-compose |
+| Celery | Redis + worker container | Redis via docker-compose + worker process |
+| Timers | Real (countdown delays) | Real (countdown delays) |
+| Reset DB | `docker compose down -v` | `docker compose down -v` |
+| `ENV` | `development` | `local` (default) |
 
 In production (`ENV=production`): INFO level, JSON renderer, stderr only.
 
@@ -46,7 +43,7 @@ In production (`ENV=production`): INFO level, JSON renderer, stderr only.
 Always verify server changes with **both** automated checks and manual API calls before committing.
 
 1. **Automated**: `uv run pytest && uv run ruff check . && uv run pyright`
-2. **Manual**: Prefer Docker (`docker compose up --build`) — it runs PostGIS, Redis, and the Celery worker, matching the eventual production stack. Run `scripts/manual-test.sh` for a full end-to-end game flow (seeds data, exercises all endpoints). For ad-hoc testing, seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created, timer tasks in worker logs). To reset: `docker compose down -v` (Docker) or delete `server/data/` (local).
+2. **Manual**: Prefer Docker (`docker compose up --build`) — it runs PostGIS, Redis, and the Celery worker, matching production. Run `scripts/manual-test.sh` for a full end-to-end game flow (seeds data, exercises all endpoints). For ad-hoc testing, seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created, timer tasks in worker logs). To reset: `docker compose down -v`.
 
 Manual testing catches wiring and serialization issues that unit tests miss.
 
@@ -247,7 +244,6 @@ tests/                                  # pytest (one file per router + features
 scripts/generate_openapi.py             # OpenAPI spec regeneration
 scripts/import_seattle_gtfs.py          # Seattle GTFS transit data import
 scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + districts)
-data/                                   # SQLite DB file (gitignored)
 ```
 
 **Key callouts** (things that aren't obvious from file names):
@@ -257,7 +253,7 @@ data/                                   # SQLite DB file (gitignored)
 - `logic/resolution.py` owns feature resolution strategy (containment vs nearest) and answer computation helpers. Category classification constants (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`, `category_key`) live in `models/types.py` alongside `FeatureCategory` — both `logic/` and `queries/` can import them without layer violations.
 - `models/__init__.py` re-exports all models — import it to register tables on metadata.
 - `celery_app.py` uses an explicit `include` list for task modules (not autodiscover — new task modules must be added manually).
-- `queries/stops.py` has PostGIS-only functions (`get_candidate_stations`, `get_nearest_playable_stop`) that don't work with SQLite.
+- `queries/stops.py` has spatial query functions (`get_candidate_stations`, `get_nearest_playable_stop`) using PostGIS.
 
 ## Architecture Patterns
 
@@ -275,7 +271,7 @@ data/                                   # SQLite DB file (gitignored)
 - **Geometry — three layers**: Geometry flows through three representations:
   - **API boundary** — GeoJSON via `geojson-pydantic` types (`Point`, `Polygon`, `LineString`). Requests accept GeoJSON; responses return GeoJSON.
   - **Python** — shapely objects (`Point`, `Polygon`, `LineString`). All model attributes, query params, and business logic use shapely. Convert with `shapely.geometry.mapping()` (shapely→GeoJSON) and `shapely.geometry.shape()` (GeoJSON→shapely).
-  - **Database** — native spatial columns (PostGIS for Docker/production, SpatiaLite for local/tests). The `ShapelyGeometry(Geometry)` column type in `models/geo_types.py` transparently converts between shapely and WKB — model code never touches WKB directly.
+  - **Database** — PostGIS spatial columns. The `ShapelyGeometry(Geometry)` column type in `models/geo_types.py` transparently converts between shapely and WKB — model code never touches WKB directly.
 
   Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column type bridges Python↔DB automatically.
 - **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic/` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns, no session access) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic/`. Logic submodules: `logic/ask.py` (question creation + `lock_in_thermometer`), `logic/answer.py` (answer computation + `veto_immediate` + `schedule_veto`). Question status: `asked` → `in_progress` (thermometer only) → `answerable` → `answered` or `vetoed`. Veto is a hider action (`POST /questions/{qid}/veto`) that skips answer computation — no exclusion zone, no hider location snapshot. Vetoed questions don't block new questions. Scheduled veto (`?scheduled=true`) sets a flag instead of vetoing immediately — the auto-answer task checks `scheduled_veto` and vetoes at timer expiry. The hider can still answer normally before the timer to override. The `scheduled_veto` field is server-only (not in any response schema) so seekers never see it.
@@ -334,13 +330,13 @@ Questions cannot be answered while status is `ambiguous`. The auto-answer timer 
 
 - SQLAlchemy 2.0 declarative ORM (`Mapped[]` + `mapped_column()`) for all table models. All models inherit from `Base` in `models/base.py`.
 - `from __future__ import annotations` in all model files. Cross-model references use `TYPE_CHECKING` imports — SQLAlchemy resolves relationship targets from its class registry at mapper configuration time.
-- Geometry uses the three-layer pattern (see Architecture Patterns): GeoJSON at API, shapely in Python, native spatial in DB. System dep: `brew install libspatialite` (auto-detected; `SPATIALITE_LIBRARY_PATH` override if non-standard).
+- Geometry uses the three-layer pattern (see Architecture Patterns): GeoJSON at API, shapely in Python, PostGIS in DB.
 - Game timing uses two int columns on `Game`: `hiding_time_min` and `base_question_delay_min`. Resolved at game creation with a three-level fallback: request override → map default → code default. Code defaults: `get_default_hiding_time_min(size)` (small=30, medium=60, large=180) and 5 min for question delay. `GameMap` has optional `default_hiding_time_min` and `default_base_question_delay_min` columns for per-map overrides. Game inventory and question parameters use proper relational tables (see Architecture Patterns). `DistrictClass` is stored as a JSON column value object.
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int).
 - Enums are `StrEnum` — stored as VARCHAR via `type_annotation_map` on `Base` (not native ENUM).
 - Query layer uses `session.scalars()` for single-entity selects, `session.execute()` for multi-entity/column selects.
-- **Active development — no migration or backwards-compatibility concerns.** There is no production data. Schema changes go directly in the models and `create_all` recreates tables on startup. To reset: delete `server/data/` (local SQLite) or `docker compose down -v` (Docker PostgreSQL). Alembic will be added when the schema stabilizes and real data exists.
-- Tests use in-memory SQLite + SpatiaLite with `StaticPool` via the `session` and `client` fixtures in `conftest.py`. Requires `SPATIALITE_LIBRARY_PATH` env var.
+- **Active development — no migration or backwards-compatibility concerns.** There is no production data. Schema changes go directly in the models and `create_all` recreates tables on startup. To reset: `docker compose down -v`. Alembic will be added when the schema stabilizes and real data exists.
+- Tests use `testcontainers` to spin up a disposable PostGIS container (session-scoped). Per-test isolation via transaction rollback — no table recreation between tests. Requires Docker.
 
 ## Conventions
 
@@ -354,7 +350,7 @@ Questions cannot be answered while status is `ambiguous`. The auto-answer timer 
 - Pagination uses offset/limit query params (`schemas/common.py`).
 - `device_token` is required on `POST /games/join`, optional on `POST /games`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
 - Push notification env vars: `APNS_KEY_PATH`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_USE_SANDBOX`. All optional — when missing, PushService runs in no-op mode.
-- Database env vars: `DATABASE_URL` (default: SQLite at `server/data/hideandseek.db`). Docker Compose sets `postgresql+psycopg://...`.
+- Database env vars: `DATABASE_URL` (required — no default). Docker Compose sets `postgresql+psycopg://...`. `scripts/dev.sh` defaults to the docker-compose PostgreSQL.
 - Celery env vars: `CELERY_BROKER_URL` (auto-detects `redis://localhost:6379/0` when unset; set to empty string to force eager mode). Docker Compose sets `redis://redis:6379/0`. `CELERY_RESULT_BACKEND` (default: same as broker URL).
 - Logging env vars: `ENV` (`local`/`development`/`production`, default `local`), `LOG_FORMAT` (`json` to force JSON output). Use `structlog.get_logger(__name__)` for all new loggers — never use stdlib `logging.getLogger()` directly.
 

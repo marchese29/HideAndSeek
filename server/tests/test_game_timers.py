@@ -36,7 +36,7 @@ from tests.conftest import (
 @pytest.fixture(autouse=True)
 def _patch_engine(session: Session, monkeypatch: pytest.MonkeyPatch):
     """Point session_scope at the test session's engine."""
-    monkeypatch.setattr('hideandseek.db.engine', session.get_bind())
+    monkeypatch.setattr('hideandseek.db.get_engine', lambda: session.get_bind())
 
 
 # ── transition_hiding_to_seeking ─────────────────────────────────────────────

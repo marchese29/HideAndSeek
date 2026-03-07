@@ -53,7 +53,7 @@ bd sync               # Sync with git
 When server code changes, verify with **both** automated and manual checks before committing:
 
 1. **Automated**: `uv run pytest`, `uv run ruff check .`, `uv run pyright`
-2. **Manual**: Prefer Docker (`docker compose up --build`) for manual testing — it runs PostgreSQL, Redis, and the Celery worker, matching the eventual production stack. Local SQLite mode works for quick iteration but differs from prod (SQLite vs PostgreSQL, no control over Redis version, eager mode if Redis isn't installed). Seed test data if needed, and exercise new/changed endpoints with `curl`. Verify request/response shapes, error cases, and side effects.
+2. **Manual**: Prefer Docker (`docker compose up --build`) for manual testing — it runs PostgreSQL, Redis, and the Celery worker, matching production. Seed test data if needed, and exercise new/changed endpoints with `curl`. Verify request/response shapes, error cases, and side effects.
 
 Manual testing catches issues that unit tests miss: serialization quirks, middleware interactions, dependency wiring, and real request flow.
 
@@ -76,9 +76,6 @@ When ending a work session, complete ALL steps below. Work is NOT complete until
 ## Setup (after fresh clone)
 
 ```bash
-# System dependencies
-brew install libspatialite
-
 # Hooks: install beads shims, then symlink our pre-commit over theirs
 bd hooks install
 ln -sf ../../hooks/pre-commit .git/hooks/pre-commit  # target is relative to symlink location
@@ -88,18 +85,15 @@ ln -sf ../../hooks/pre-commit .git/hooks/pre-commit  # target is relative to sym
 
 ```bash
 
-# Server (Docker — preferred for manual testing, closest to prod — uses PostGIS)
+# Server (Docker — preferred, runs PostGIS + Redis + Celery worker)
 docker compose up --build          # Start all 4 services (localhost:8000)
 docker compose down                # Stop (data preserved in pgdata volume)
 docker compose down -v             # Stop and wipe database
 
-# Server (local + Celery worker — requires local Redis: brew install redis && brew services start redis)
-scripts/dev.sh                     # Launches uvicorn + Celery worker together (SQLite + Redis)
+# Server (local + Celery worker — requires: docker compose up -d postgres redis)
+scripts/dev.sh                     # Launches uvicorn + Celery worker together
 
-# Server (local, bare — auto-detects Redis for real timers, eager fallback without it)
-cd server && uv sync && uv run uvicorn hideandseek.main:app --reload
-
-# Run server tests
+# Run server tests (requires Docker — testcontainers spins up PostGIS automatically)
 cd server && uv run pytest
 
 # Regenerate OpenAPI spec

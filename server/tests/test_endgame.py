@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-import pytest
 from fastapi.testclient import TestClient
 from shapely import Point, Polygon
 from shapely.geometry.base import BaseGeometry
@@ -15,6 +14,7 @@ from hideandseek.exclusion import _buffer, compute_endgame_exclusions, exclude_r
 from hideandseek.models.question import Question
 from hideandseek.models.transit import Stop
 from hideandseek.models.types import GameStatus, PlayerRole, QuestionStatus, QuestionType
+from hideandseek.queries.stops import get_nearest_playable_stop
 
 from .conftest import create_game, create_game_map, create_player, create_transit_dataset
 
@@ -313,17 +313,52 @@ def test_candidate_stations_hider_403(session: Session, client: TestClient) -> N
     assert resp.status_code == 403
 
 
-@pytest.mark.skipif(
-    True,  # SpatiaLite doesn't support ST_Distance for spatial ordering
-    reason='get_nearest_playable_stop requires PostGIS (uses ST_Distance).',
-)
 def test_nearest_playable_stop(session: Session) -> None:
-    """get_nearest_playable_stop returns the closest eligible stop (PostGIS only)."""
+    """get_nearest_playable_stop returns the closest eligible stop."""
+    gm = create_game_map(session, boundary=GAME_MAP)
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+
+    # Create two stops inside the boundary at different distances from the query point
+    near_stop = Stop(
+        stable_id='near',
+        dataset_id=gm.transit_dataset_id,
+        name='Near Stop',
+        coordinates=Point(0.01, 0.01),
+    )
+    far_stop = Stop(
+        stable_id='far',
+        dataset_id=gm.transit_dataset_id,
+        name='Far Stop',
+        coordinates=Point(0.05, 0.05),
+    )
+    session.add_all([near_stop, far_stop])
+    session.flush()
+
+    result = get_nearest_playable_stop(game, Point(0.0, 0.0))
+    assert result is not None
+    assert result.id == near_stop.id
 
 
-@pytest.mark.skipif(
-    True,  # SpatiaLite doesn't support ST_Buffer on geography
-    reason='Candidate stations query requires PostGIS (uses geography ST_Buffer).',
-)
 def test_candidate_stations_returns_stops(session: Session, client: TestClient) -> None:
-    """GET /candidate-stations returns playable stops (PostGIS only)."""
+    """GET /candidate-stations returns playable stops."""
+    gm = create_game_map(session, boundary=GAME_MAP)
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
+
+    stop = Stop(
+        stable_id='cand',
+        dataset_id=gm.transit_dataset_id,
+        name='Candidate Stop',
+        coordinates=Point(0.0, 0.0),
+    )
+    session.add(stop)
+    session.flush()
+
+    resp = client.get(
+        f'/games/{game.id}/candidate-stations',
+        headers={'X-Client-Id': str(seeker.client_id)},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) >= 1
+    assert any(s['id'] == str(stop.id) for s in data)

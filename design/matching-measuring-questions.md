@@ -466,7 +466,7 @@ This is expected to be rare for most categories but is a legitimate game outcome
 
 Spatial resolution for map-data categories splits responsibility between the database and Python:
 
-- **Database** — spatial filtering and sorting. Uses spatial indexes to find the containing polygon or nearest feature without loading bulk geometry into memory. PostGIS uses the `<->` KNN operator for indexed nearest-neighbor lookups; SpatiaLite falls back to a full scan (fine for test data sizes).
+- **Database** — spatial filtering and sorting. Uses spatial indexes to find the containing polygon or nearest feature without loading bulk geometry into memory. PostGIS uses the `<->` KNN operator for indexed nearest-neighbor lookups.
 - **Python** — distance computation. Once the DB returns the relevant feature(s), Python computes geodesic distance in meters using `nearest_points` + haversine, consistent with how radar and thermometer already compute answers.
 
 **Core distance pattern** — given a feature returned by the DB, compute distance in meters:
@@ -668,7 +668,7 @@ Place results can be cached briefly (15–60 minutes) keyed by `(category, lat_r
 - **Admin areas vs borders**: Administrative areas (`administrative_area`) support matching only (polygon containment). Admin division borders (`admin_division_border`) and international borders (`international_border`) support measuring only (distance to LineString). Borders are explicit geometry — shared edges between adjacent areas, not derived from polygon boundaries (which include coastlines and map edges).
 - **Mountains are map-defined**: Peak datasets are readily available as public data. Stored as Points in `MapFeature`. No Google fallback.
 - **Null answers**: The game provides for a `null` answer ("question not answerable"). Rare but legitimate — the question is still consumed.
-- **Split spatial responsibility**: The database handles spatial filtering and sorting (containment checks, nearest-neighbor via spatial index), Python handles distance computation (shapely `nearest_points` + haversine for meters). PostGIS uses the `<->` KNN operator; SpatiaLite falls back to full scan in tests.
+- **Split spatial responsibility**: The database handles spatial filtering and sorting (containment checks, nearest-neighbor via spatial index), Python handles distance computation (shapely `nearest_points` + haversine for meters). PostGIS uses the `<->` KNN operator.
 - **Tiered exclusion zones**: Map-defined categories support exclusion zones (sync for small datasets, background job for large). Google fallback only supports exclusion in endgame. Calculation and scheduling details deferred to a separate design.
 
 ## Implementation Plan

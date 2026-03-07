@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+import os
+import subprocess
 import uuid
+import warnings
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
-from geoalchemy2 import load_spatialite
 from shapely.geometry import Point, Polygon
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
+from testcontainers.postgres import PostgresContainer
 
-import hideandseek.models  # noqa: F401 — registers all tables on metadata
+import hideandseek.db as db_module
 from hideandseek.db import _session_var, session_dependency
 from hideandseek.main import app
 from hideandseek.models.base import Base
@@ -34,21 +36,69 @@ from hideandseek.models.types import (
 from hideandseek.queries.features import get_map_feature_categories
 
 
-@pytest.fixture
-def session() -> Generator[Session, None, None]:
-    engine = create_engine(
-        'sqlite://',
-        connect_args={'check_same_thread': False},
-        poolclass=StaticPool,
+def pytest_configure() -> None:
+    """Auto-detect Docker socket and configure testcontainers.
+
+    Runs before test collection. Uses ``docker context inspect`` to find the
+    active Docker socket, handling colima and other non-default setups.
+    Disables Ryuk only when the socket is non-default (Ryuk can't mount
+    non-standard socket paths inside its container).
+    """
+    if os.environ.get('DOCKER_HOST'):
+        return
+
+    try:
+        result = subprocess.run(
+            ['docker', 'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        host = result.stdout.strip()
+        if result.returncode == 0 and host:
+            os.environ['DOCKER_HOST'] = host
+            # Non-default sockets (e.g., colima) can't be mounted into Ryuk
+            if host != 'unix:///var/run/docker.sock':
+                os.environ.setdefault('TESTCONTAINERS_RYUK_DISABLED', 'true')
+            return
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    warnings.warn(
+        'Could not detect Docker socket. Set DOCKER_HOST if tests fail to connect.',
+        stacklevel=1,
     )
-    sa.event.listen(engine, 'connect', load_spatialite)  # type: ignore[attr-defined]
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        token = _session_var.set(session)
-        try:
-            yield session
-        finally:
-            _session_var.reset(token)
+
+
+@pytest.fixture(scope='session')
+def _pg_engine() -> Generator[sa.Engine, None, None]:
+    with PostgresContainer('postgis/postgis:16-3.4-alpine') as pg:
+        url = pg.get_connection_url().replace('psycopg2', 'psycopg')
+        # Set DATABASE_URL so the app lifespan's create_db_and_tables() works
+        db_module.DATABASE_URL = url
+        db_module.get_engine.cache_clear()
+        engine = create_engine(url)
+        with engine.connect() as conn:
+            conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
+            conn.commit()
+        Base.metadata.create_all(engine)
+        yield engine
+        engine.dispose()
+
+
+@pytest.fixture
+def session(_pg_engine: sa.Engine) -> Generator[Session, None, None]:
+    connection = _pg_engine.connect()
+    transaction = connection.begin()
+    sess = Session(bind=connection)
+    token = _session_var.set(sess)
+    try:
+        yield sess
+    finally:
+        _session_var.reset(token)
+        sess.close()
+        transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture
@@ -57,7 +107,7 @@ def client(session: Session) -> Generator[TestClient, None, None]:
         token = _session_var.set(session)
         try:
             yield session
-            session.commit()
+            session.flush()
         finally:
             _session_var.reset(token)
 
@@ -83,7 +133,7 @@ def create_transit_dataset(session: Session, **overrides: Any) -> TransitDataset
     defaults.update(overrides)
     ds = TransitDataset(**defaults)
     session.add(ds)
-    session.commit()
+    session.flush()
     session.refresh(ds)
     return ds
 
@@ -103,7 +153,7 @@ def create_game_map(session: Session, **overrides: Any) -> GameMap:
     defaults.update(overrides)
     gm = GameMap(**defaults)
     session.add(gm)
-    session.commit()
+    session.flush()
     session.refresh(gm)
     return gm
 
@@ -123,7 +173,7 @@ def create_game(session: Session, **overrides: Any) -> Game:
     defaults.update(overrides)
     game = Game(**defaults)
     session.add(game)
-    session.commit()
+    session.flush()
     session.refresh(game)
 
     # Create InventorySlot rows from the template + map features
@@ -170,7 +220,7 @@ def _create_inventory_slots(session: Session, game: Game, template: dict[str, An
             session.add(slot)
             idx += 1
 
-    session.commit()
+    session.flush()
 
 
 def create_inventory_slot(
@@ -191,7 +241,7 @@ def create_inventory_slot(
     defaults.update(overrides)
     slot = InventorySlot(**defaults)
     session.add(slot)
-    session.commit()
+    session.flush()
     session.refresh(slot)
     return slot
 
@@ -207,7 +257,7 @@ def create_player(session: Session, game_id: uuid.UUID, **overrides: Any) -> Pla
     defaults.update(overrides)
     player = Player(**defaults)
     session.add(player)
-    session.commit()
+    session.flush()
     session.refresh(player)
     return player
 
@@ -222,7 +272,7 @@ def create_map_feature(session: Session, **overrides: Any) -> MapFeature:
     defaults.update(overrides)
     feature = MapFeature(**defaults)
     session.add(feature)
-    session.commit()
+    session.flush()
     session.refresh(feature)
     return feature
 
@@ -232,6 +282,6 @@ def create_game_map_feature(
 ) -> GameMapFeature:
     link = GameMapFeature(game_map_id=game_map_id, map_feature_id=map_feature_id)
     session.add(link)
-    session.commit()
+    session.flush()
     session.refresh(link)
     return link

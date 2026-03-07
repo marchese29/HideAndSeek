@@ -106,8 +106,6 @@ A convenience endpoint returns the playable stops that haven't been fully exclud
 
 A station is eliminated only when the exclusion zone completely covers the entire hiding zone circle around it — because the hider could be anywhere in that circle, not just at the station point. In PostGIS terms: a stop is still a candidate when `NOT ST_Covers(total_exclusion, ST_Buffer(stop.coordinates::geography, hiding_zone_radius_m)::geometry)`. The `::geography` cast produces an accurate metric circle at any latitude; casting back to `::geometry` allows the `ST_Covers` check against the stored exclusion zone. This runs entirely in PostGIS — no Python-side projection needed.
 
-Note: this query requires PostGIS (not SpatiaLite). Candidate stations is a seeking-phase query for real games, so this is acceptable.
-
 As more questions are answered and the exclusion zone grows, the candidate list shrinks.
 
 ---

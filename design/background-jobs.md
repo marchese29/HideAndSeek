@@ -365,7 +365,7 @@ brew services start redis
 scripts/dev.sh
 ```
 
-`scripts/dev.sh` launches both uvicorn and the Celery worker as child processes, tailing their output together. It sets `CELERY_BROKER_URL=redis://localhost:6379/0` so eager mode is disabled. Uses SQLite (no `DATABASE_URL` needed). Ctrl+C stops both.
+`scripts/dev.sh` launches both uvicorn and the Celery worker as child processes, tailing their output together. It sets `CELERY_BROKER_URL=redis://localhost:6379/0` so eager mode is disabled. Ctrl+C stops both.
 
 ```bash
 #!/usr/bin/env bash
