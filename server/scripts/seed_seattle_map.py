@@ -645,7 +645,7 @@ def main() -> None:
                 category=FeatureCategory.admin_division_border,
                 stable_id=stable_id,
                 name=name,
-                geometry=geom,
+                shape=geom,
             )
             session.add(feature)
             session.flush()

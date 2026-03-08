@@ -176,13 +176,13 @@ def test_auto_answer_matching_question(session: Session):
         session,
         stable_id='hosp_a',
         name='Hospital A',
-        geometry=Point(-0.1, 51.5),
+        shape=Point(-0.1, 51.5),
     )
     hosp_b = create_map_feature(
         session,
         stable_id='hosp_b',
         name='Hospital B',
-        geometry=Point(0.0, 51.0),
+        shape=Point(0.0, 51.0),
     )
     create_game_map_feature(session, gm.id, hosp_a.id)
     create_game_map_feature(session, gm.id, hosp_b.id)
@@ -240,7 +240,7 @@ def test_auto_answer_measuring_question(session: Session):
         session,
         stable_id='hosp_1',
         name='Hospital',
-        geometry=Point(-0.1, 51.5),
+        shape=Point(-0.1, 51.5),
     )
     create_game_map_feature(session, gm.id, hosp.id)
 

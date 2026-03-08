@@ -63,7 +63,7 @@ VALUES (
 ) ON CONFLICT DO NOTHING;
 
 -- Two hospitals for matching/measuring tests
-INSERT INTO map_feature (id, category, stable_id, name, geometry)
+INSERT INTO map_feature (id, category, stable_id, name, shape)
 VALUES
   ('$FEAT_SEEKER', 'hospital', 'imp_hosp_seeker', 'Imperial Seeker Hospital',
    ST_GeomFromText('POINT(-0.11 51.51)', 4326)),

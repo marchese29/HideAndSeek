@@ -9,7 +9,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeometry
+from hideandseek.models.geo_types import ShapelyGeography
 
 if TYPE_CHECKING:
     from hideandseek.models.game import Game, Player
@@ -22,7 +22,7 @@ class LocationUpdate(Base):
     player_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('player.id'))
     game_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game.id'))
     timestamp: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
-    coordinates: Mapped[Point] = mapped_column(ShapelyGeometry('POINT', srid=4326))
+    coordinates: Mapped[Point] = mapped_column(ShapelyGeography('POINT', srid=4326))
 
     player: Mapped[Player] = relationship(back_populates='location_updates')
     game: Mapped[Game] = relationship()

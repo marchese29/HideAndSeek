@@ -7,7 +7,7 @@ from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeometry
+from hideandseek.models.geo_types import ShapelyGeography
 from hideandseek.models.types import FeatureCategory
 
 
@@ -20,7 +20,7 @@ class MapFeature(Base):
     stable_id: Mapped[str]
     name: Mapped[str]
     feature_class: Mapped[int | None] = mapped_column(default=None)
-    geometry: Mapped[BaseGeometry] = mapped_column(ShapelyGeometry('GEOMETRY', srid=4326))
+    shape: Mapped[BaseGeometry] = mapped_column(ShapelyGeography('GEOMETRY', srid=4326))
 
 
 class GameMapFeature(Base):

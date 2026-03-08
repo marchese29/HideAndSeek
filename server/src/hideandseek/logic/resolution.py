@@ -26,7 +26,7 @@ def resolve_matching_feature(
 ) -> tuple[MapFeature | None, float]:
     """Resolve the relevant feature for matching.
 
-    Containment categories use ST_Contains (may return None if player is outside
+    Containment categories use ST_Covers (may return None if player is outside
     all polygons). Other categories use nearest-feature resolution.
     Returns (feature, distance_m). distance_m is 0.0 when contained.
     """
@@ -48,7 +48,7 @@ def resolve_matching_feature(
     if feature is None:
         return None, 0.0
 
-    dist = distance_to_feature(location, feature.geometry)
+    dist = distance_to_feature(location, feature.shape)
     return feature, dist
 
 
@@ -71,7 +71,7 @@ def resolve_measuring_feature(
     )
     assert feature is not None  # slot exists → map has features for this category
 
-    dist = distance_to_feature(location, feature.geometry)
+    dist = distance_to_feature(location, feature.shape)
     return feature, dist
 
 

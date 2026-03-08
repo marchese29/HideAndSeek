@@ -46,7 +46,7 @@ VALUES (
     "thermometers":[{"distance":500},{"distance":null}]}'
 ) ON CONFLICT DO NOTHING;
 -- Seed two hospital features: one near the seeker, one near the hider
-INSERT INTO map_feature (id, category, stable_id, name, geometry)
+INSERT INTO map_feature (id, category, stable_id, name, shape)
 VALUES
   ('$FEAT_SEEKER', 'hospital', 'hosp_near_seeker', 'Seeker Hospital',
    ST_GeomFromText('POINT(-0.11 51.51)', 4326)),

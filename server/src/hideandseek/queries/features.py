@@ -46,7 +46,7 @@ def resolve_nearest_feature(
             GameMapFeature.game_map_id == game_map.id,
             MapFeature.category == category,
         )
-        .order_by(func.ST_Distance(MapFeature.geometry, point_wkb))
+        .order_by(func.ST_Distance(MapFeature.shape, point_wkb))
         .limit(1)
     )
     if feature_class is not None:
@@ -69,7 +69,7 @@ def resolve_containing_feature(
         .where(
             GameMapFeature.game_map_id == game_map.id,
             MapFeature.category == category,
-            func.ST_Contains(MapFeature.geometry, point_wkb),
+            func.ST_Covers(MapFeature.shape, point_wkb),
         )
         .limit(1)
     )

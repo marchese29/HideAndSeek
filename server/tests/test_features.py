@@ -25,8 +25,8 @@ def test_nearest_feature_returns_closest(session: Session) -> None:
     """With multiple features of the same category, the closest is returned."""
     gm = create_game_map(session)
     # Near feature at (0.5, 0.5), far feature at (2.0, 2.0)
-    near = create_map_feature(session, name='Near Hospital', geometry=Point(0.5, 0.5))
-    far = create_map_feature(session, name='Far Hospital', geometry=Point(2.0, 2.0))
+    near = create_map_feature(session, name='Near Hospital', shape=Point(0.5, 0.5))
+    far = create_map_feature(session, name='Far Hospital', shape=Point(2.0, 2.0))
     create_game_map_feature(session, gm.id, near.id)
     create_game_map_feature(session, gm.id, far.id)
 
@@ -85,14 +85,14 @@ def test_nearest_feature_class_filtering(session: Session) -> None:
         category=FeatureCategory.administrative_area,
         name='State A',
         feature_class=1,
-        geometry=Point(0.5, 0.5),
+        shape=Point(0.5, 0.5),
     )
     class2 = create_map_feature(
         session,
         category=FeatureCategory.administrative_area,
         name='County A',
         feature_class=2,
-        geometry=Point(0.5, 0.5),
+        shape=Point(0.5, 0.5),
     )
     create_game_map_feature(session, gm.id, class1.id)
     create_game_map_feature(session, gm.id, class2.id)
@@ -118,7 +118,7 @@ def test_containing_feature_point_inside(session: Session) -> None:
         session,
         category=FeatureCategory.administrative_area,
         name='Test State',
-        geometry=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+        shape=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
     )
     create_game_map_feature(session, gm.id, poly.id)
 
@@ -138,7 +138,7 @@ def test_containing_feature_point_outside(session: Session) -> None:
         session,
         category=FeatureCategory.administrative_area,
         name='Test State',
-        geometry=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+        shape=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
     )
     create_game_map_feature(session, gm.id, poly.id)
 
@@ -158,14 +158,14 @@ def test_containing_feature_class_filtering(session: Session) -> None:
         category=FeatureCategory.administrative_area,
         name='State',
         feature_class=1,
-        geometry=Polygon([(0, 0), (2, 0), (2, 2), (0, 2), (0, 0)]),
+        shape=Polygon([(0, 0), (2, 0), (2, 2), (0, 2), (0, 0)]),
     )
     county = create_map_feature(
         session,
         category=FeatureCategory.administrative_area,
         name='County',
         feature_class=2,
-        geometry=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+        shape=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
     )
     create_game_map_feature(session, gm.id, state.id)
     create_game_map_feature(session, gm.id, county.id)
@@ -192,13 +192,13 @@ def test_get_map_feature_categories(session: Session) -> None:
         session,
         category=FeatureCategory.administrative_area,
         feature_class=1,
-        geometry=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+        shape=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
     )
     area2 = create_map_feature(
         session,
         category=FeatureCategory.administrative_area,
         feature_class=2,
-        geometry=Polygon([(0, 0), (2, 0), (2, 2), (0, 2), (0, 0)]),
+        shape=Polygon([(0, 0), (2, 0), (2, 2), (0, 2), (0, 0)]),
     )
     create_game_map_feature(session, gm.id, hosp.id)
     create_game_map_feature(session, gm.id, area1.id)

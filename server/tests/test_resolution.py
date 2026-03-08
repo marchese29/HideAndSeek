@@ -35,7 +35,7 @@ def test_category_key_with_class():
 def test_resolve_nearest_for_measuring(session: Session):
     """Non-containment category uses nearest resolution."""
     gm = create_game_map(session)
-    hosp = create_map_feature(session, geometry=Point(0.5, 0.5))
+    hosp = create_map_feature(session, shape=Point(0.5, 0.5))
     create_game_map_feature(session, gm.id, hosp.id)
 
     feature, dist = resolve_measuring_feature(
@@ -60,7 +60,7 @@ def test_resolve_containment_for_matching(session: Session):
         stable_id='area-1',
         name='Test Area',
         feature_class=1,
-        geometry=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+        shape=Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
     )
     create_game_map_feature(session, gm.id, area.id)
 

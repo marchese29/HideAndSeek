@@ -267,7 +267,7 @@ def create_map_feature(session: Session, **overrides: Any) -> MapFeature:
         'category': FeatureCategory.hospital,
         'stable_id': f'test-feature-{uuid.uuid4().hex[:8]}',
         'name': 'Test Hospital',
-        'geometry': Point(0.5, 0.5),
+        'shape': Point(0.5, 0.5),
     }
     defaults.update(overrides)
     feature = MapFeature(**defaults)

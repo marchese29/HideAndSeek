@@ -118,9 +118,9 @@ def answer_matching(question: Question, game: Game) -> None:
         other_pois: list[BaseGeometry] = []
         for f in features:
             if f.stable_id == params.seeker_feature_id:
-                seeker_poi = f.geometry
+                seeker_poi = f.shape
             else:
-                other_pois.append(f.geometry)
+                other_pois.append(f.shape)
 
         if seeker_poi is not None and other_pois:
             exclusion = exclude_matching(boundary, seeker_poi, other_pois, same=answer == 'yes')
@@ -162,7 +162,7 @@ def answer_measuring(question: Question, game: Game) -> None:
     features = get_features_by_category(
         game, category=params.category, feature_class=params.feature_class
     )
-    pois = [f.geometry for f in features]
+    pois = [f.shape for f in features]
 
     seeker_distance_m = to_meters(params.seeker_distance, convention)
     exclusion = exclude_measuring(

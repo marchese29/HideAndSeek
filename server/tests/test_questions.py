@@ -488,13 +488,13 @@ def _setup_feature_game(client: TestClient, session: Session) -> tuple[Game, Pla
         session,
         name='Near Seeker Hospital',
         stable_id='hosp_near_seeker',
-        geometry=Point(-0.117, 51.498),
+        shape=Point(-0.117, 51.498),
     )
     near_hider = create_map_feature(
         session,
         name='Near Hider Hospital',
         stable_id='hosp_near_hider',
-        geometry=Point(-0.059, 51.518),
+        shape=Point(-0.059, 51.518),
     )
     create_game_map_feature(session, gm.id, near_seeker.id)
     create_game_map_feature(session, gm.id, near_hider.id)
@@ -576,7 +576,7 @@ def test_answer_matching_yes(client: TestClient, session: Session):
         session,
         name='Shared Hospital',
         stable_id='hosp_shared',
-        geometry=Point(-0.1, 51.5),
+        shape=Point(-0.1, 51.5),
     )
     create_game_map_feature(session, gm.id, hosp.id)
 
@@ -712,7 +712,7 @@ def test_answer_measuring_closer(client: TestClient, session: Session):
         session,
         name='Central Hospital',
         stable_id='hosp_central',
-        geometry=Point(-0.1, 51.5),
+        shape=Point(-0.1, 51.5),
     )
     create_game_map_feature(session, gm.id, hosp.id)
 
@@ -1106,7 +1106,7 @@ def test_imperial_measuring_distances_in_miles(client: TestClient, session: Sess
         session,
         name='Hospital',
         stable_id='hosp_imp',
-        geometry=Point(-0.1, 51.5),
+        shape=Point(-0.1, 51.5),
     )
     create_game_map_feature(session, gm.id, hosp.id)
 

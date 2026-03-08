@@ -8,7 +8,7 @@ from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeometry
+from hideandseek.models.geo_types import ShapelyGeography
 from hideandseek.models.types import RouteType
 
 
@@ -33,7 +33,7 @@ class Stop(Base):
     stable_id: Mapped[str]
     dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('transit_dataset.id'))
     name: Mapped[str]
-    coordinates: Mapped[Point] = mapped_column(ShapelyGeometry('POINT', srid=4326))
+    coordinates: Mapped[Point] = mapped_column(ShapelyGeography('POINT', srid=4326))
 
     dataset: Mapped[TransitDataset] = relationship(back_populates='stops')
     route_stops: Mapped[list[RouteStop]] = relationship(back_populates='stop')
@@ -49,7 +49,7 @@ class Route(Base):
     name: Mapped[str]
     color: Mapped[str]
     route_type: Mapped[RouteType]
-    shape: Mapped[LineString] = mapped_column(ShapelyGeometry('LINESTRING', srid=4326))
+    shape: Mapped[LineString] = mapped_column(ShapelyGeography('LINESTRING', srid=4326))
 
     dataset: Mapped[TransitDataset] = relationship(back_populates='routes')
     route_stops: Mapped[list[RouteStop]] = relationship(back_populates='route')

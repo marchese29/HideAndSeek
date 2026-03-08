@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from geoalchemy2 import Geography, Geometry
+from geoalchemy2 import Geometry
 from shapely import wkb
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
@@ -46,9 +46,10 @@ def get_candidate_stations(
             4326,
         )
 
-        # Build hiding zone circle for each stop via geography cast for metric accuracy
+        # Buffer geography column directly (returns meters); cast result to Geometry
+        # for ST_Covers comparison with the Geometry-typed exclusion zone.
         hiding_circle = sa.func.ST_Buffer(
-            sa.cast(Stop.coordinates, Geography(srid=4326)),
+            Stop.coordinates,
             radius_m,
         ).cast(Geometry(srid=4326))
 
@@ -72,7 +73,7 @@ def _playable_conditions(game: Game) -> list:
 
     conditions: list = [
         Stop.dataset_id == game_map.transit_dataset_id,
-        sa.func.ST_Contains(boundary_wkb, Stop.coordinates),
+        sa.func.ST_Contains(boundary_wkb, sa.cast(Stop.coordinates, Geometry(srid=4326))),
     ]
 
     if game.excluded_stop_ids:
@@ -93,13 +94,7 @@ def get_stops_near_point(
         wkb.dumps(location, include_srid=False),
         4326,
     )
-    conditions.append(
-        sa.func.ST_DWithin(
-            sa.cast(Stop.coordinates, Geography(srid=4326)),
-            sa.cast(location_wkb, Geography(srid=4326)),
-            radius_m,
-        )
-    )
+    conditions.append(sa.func.ST_DWithin(Stop.coordinates, location_wkb, radius_m))
 
     stmt = select(Stop).where(*conditions).order_by(Stop.name)
     return session.scalars(stmt).all()
@@ -121,24 +116,13 @@ def get_stops_within_radius_of_all(
     conditions = _playable_conditions(game)
     for loc in hider_locations:
         loc_wkb = sa.func.ST_GeomFromWKB(wkb.dumps(loc, include_srid=False), 4326)
-        conditions.append(
-            sa.func.ST_DWithin(
-                sa.cast(Stop.coordinates, Geography(srid=4326)),
-                sa.cast(loc_wkb, Geography(srid=4326)),
-                radius_m,
-            )
-        )
+        conditions.append(sa.func.ST_DWithin(Stop.coordinates, loc_wkb, radius_m))
 
     # Order by max distance across all hiders (tightest fit)
     max_dist_exprs = []
     for loc in hider_locations:
         loc_wkb = sa.func.ST_GeomFromWKB(wkb.dumps(loc, include_srid=False), 4326)
-        max_dist_exprs.append(
-            sa.func.ST_Distance(
-                sa.cast(Stop.coordinates, Geography(srid=4326)),
-                sa.cast(loc_wkb, Geography(srid=4326)),
-            )
-        )
+        max_dist_exprs.append(sa.func.ST_Distance(Stop.coordinates, loc_wkb))
     max_dist = sa.func.greatest(*max_dist_exprs) if len(max_dist_exprs) > 1 else max_dist_exprs[0]
 
     stmt = select(Stop).where(*conditions).order_by(max_dist)
@@ -162,24 +146,13 @@ def get_stops_within_radius_of_any(
     or_clauses = []
     for loc in hider_locations:
         loc_wkb = sa.func.ST_GeomFromWKB(wkb.dumps(loc, include_srid=False), 4326)
-        or_clauses.append(
-            sa.func.ST_DWithin(
-                sa.cast(Stop.coordinates, Geography(srid=4326)),
-                sa.cast(loc_wkb, Geography(srid=4326)),
-                radius_m,
-            )
-        )
+        or_clauses.append(sa.func.ST_DWithin(Stop.coordinates, loc_wkb, radius_m))
     conditions.append(sa.or_(*or_clauses))
 
     min_dist_exprs = []
     for loc in hider_locations:
         loc_wkb = sa.func.ST_GeomFromWKB(wkb.dumps(loc, include_srid=False), 4326)
-        min_dist_exprs.append(
-            sa.func.ST_Distance(
-                sa.cast(Stop.coordinates, Geography(srid=4326)),
-                sa.cast(loc_wkb, Geography(srid=4326)),
-            )
-        )
+        min_dist_exprs.append(sa.func.ST_Distance(Stop.coordinates, loc_wkb))
     min_dist = sa.func.least(*min_dist_exprs) if len(min_dist_exprs) > 1 else min_dist_exprs[0]
 
     stmt = select(Stop).where(*conditions).order_by(min_dist)
@@ -200,12 +173,7 @@ def get_closest_stop_to_any(
     min_dist_exprs = []
     for loc in hider_locations:
         loc_wkb = sa.func.ST_GeomFromWKB(wkb.dumps(loc, include_srid=False), 4326)
-        min_dist_exprs.append(
-            sa.func.ST_Distance(
-                sa.cast(Stop.coordinates, Geography(srid=4326)),
-                sa.cast(loc_wkb, Geography(srid=4326)),
-            )
-        )
+        min_dist_exprs.append(sa.func.ST_Distance(Stop.coordinates, loc_wkb))
     min_dist = sa.func.least(*min_dist_exprs) if len(min_dist_exprs) > 1 else min_dist_exprs[0]
 
     stmt = select(Stop).where(*conditions).order_by(min_dist).limit(1)
@@ -234,13 +202,9 @@ def all_hiders_within_radius(
     for loc in hider_locations:
         loc_wkb = sa.func.ST_GeomFromWKB(wkb.dumps(loc, include_srid=False), 4326)
         within = session.scalars(
-            select(
-                sa.func.ST_DWithin(
-                    sa.cast(Stop.coordinates, Geography(srid=4326)),
-                    sa.cast(loc_wkb, Geography(srid=4326)),
-                    radius_m,
-                )
-            ).where(Stop.id == stop.id)
+            select(sa.func.ST_DWithin(Stop.coordinates, loc_wkb, radius_m)).where(
+                Stop.id == stop.id
+            )
         ).one()
         if not within:
             return False

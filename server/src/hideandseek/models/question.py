@@ -10,7 +10,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeometry
+from hideandseek.models.geo_types import ShapelyGeography, ShapelyGeometry
 from hideandseek.models.types import QuestionStatus, QuestionType
 
 if TYPE_CHECKING:
@@ -32,14 +32,14 @@ class Question(Base):
     status: Mapped[QuestionStatus] = mapped_column(default=QuestionStatus.asked)
     asked_by: Mapped[uuid.UUID] = mapped_column(ForeignKey('player.id'))
     asked_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
-    seeker_location_start: Mapped[Point] = mapped_column(ShapelyGeometry('POINT', srid=4326))
+    seeker_location_start: Mapped[Point] = mapped_column(ShapelyGeography('POINT', srid=4326))
     seeker_location_end: Mapped[Point | None] = mapped_column(
-        ShapelyGeometry('POINT', srid=4326), nullable=True, default=None
+        ShapelyGeography('POINT', srid=4326), nullable=True, default=None
     )
     answerable_at: Mapped[datetime | None] = mapped_column(default=None)
     answered_at: Mapped[datetime | None] = mapped_column(default=None)
     hider_location: Mapped[Point | None] = mapped_column(
-        ShapelyGeometry('POINT', srid=4326), nullable=True, default=None
+        ShapelyGeography('POINT', srid=4326), nullable=True, default=None
     )
     ask_count: Mapped[int] = mapped_column(default=1)
     scheduled_veto: Mapped[bool] = mapped_column(default=False)
