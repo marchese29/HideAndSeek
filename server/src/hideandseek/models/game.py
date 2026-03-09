@@ -9,7 +9,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek.models.base import Base
-from hideandseek.models.types import GameStatus, PlayerRole, StationElectionStatus
+from hideandseek.models.types import GameStatus, PlayerColor, PlayerRole, StationElectionStatus
 
 if TYPE_CHECKING:
     from hideandseek.models.game_map import GameMap
@@ -58,7 +58,7 @@ class Player(Base):
     client_id: Mapped[uuid.UUID]
     game_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game.id'))
     name: Mapped[str]
-    color: Mapped[str]
+    color: Mapped[PlayerColor]
     role: Mapped[PlayerRole | None] = mapped_column(default=None)
 
     game: Mapped[Game] = relationship(back_populates='players')

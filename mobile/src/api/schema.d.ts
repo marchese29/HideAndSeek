@@ -55,7 +55,7 @@ export interface paths {
         put?: never;
         /**
          * Create Game
-         * @description Create a new game on a map.
+         * @description Create a new game on a map. The host is automatically added as the first player.
          */
         post: operations["create_game_games_post"];
         delete?: never;
@@ -139,7 +139,7 @@ export interface paths {
         head?: never;
         /**
          * Patch Player
-         * @description Update a player's role, name, or color.
+         * @description Update a player's role, name, color, or device token.
          */
         patch: operations["patch_player_games__game_id__players__player_id__patch"];
         trace?: never;
@@ -155,7 +155,7 @@ export interface paths {
         put?: never;
         /**
          * Start Game
-         * @description Transition the game from lobby to hiding.
+         * @description Transition the game from lobby to hiding. Host-only.
          */
         post: operations["start_game_games__game_id__start_post"];
         delete?: never;
@@ -688,6 +688,11 @@ export interface components {
              */
             map_id: string;
             /**
+             * Name
+             * @description Display name for the host player.
+             */
+            name: string;
+            /**
              * Excluded Stop Ids
              * @description Stop IDs to exclude from play for this game.
              */
@@ -1015,18 +1020,13 @@ export interface components {
              * @description Display name for this player.
              */
             name: string;
-            /**
-             * Color
-             * @description Hex color for this player, e.g. "#FF5733".
-             */
-            color: string;
             /** @description Optional role to assign on join (hider or seeker). */
             role?: components["schemas"]["PlayerRole"] | null;
             /**
              * Device Token
-             * @description Hex-encoded APNS device token. Required — push is central to gameplay.
+             * @description Hex-encoded APNS device token. Optional — can be set later via PATCH.
              */
-            device_token: string;
+            device_token?: string | null;
             /**
              * Device Token Environment
              * @description APNS environment: "production" or "sandbox".
@@ -1295,6 +1295,11 @@ export interface components {
             hiding_zone: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
         };
         /**
+         * PlayerColor
+         * @enum {string}
+         */
+        PlayerColor: "red" | "blue" | "green" | "orange" | "purple" | "teal" | "pink" | "amber" | "cyan" | "lime" | "indigo" | "coral";
+        /**
          * PlayerResponse
          * @description A player in a game.
          */
@@ -1306,11 +1311,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
-            /**
-             * Color
-             * @description Hex color, e.g. "#FF5733".
-             */
-            color: string;
+            /** @description Server-assigned player color. */
+            color: components["schemas"]["PlayerColor"];
             /** @description Null until the host assigns a role. */
             role: components["schemas"]["PlayerRole"] | null;
         };
@@ -1329,13 +1331,21 @@ export interface components {
              * @description New display name.
              */
             name?: string | null;
-            /**
-             * Color
-             * @description New hex color.
-             */
-            color?: string | null;
+            /** @description New player color. */
+            color?: components["schemas"]["PlayerColor"] | null;
             /** @description Assign hider or seeker role. */
             role?: components["schemas"]["PlayerRole"] | null;
+            /**
+             * Device Token
+             * @description Hex-encoded APNS device token.
+             */
+            device_token?: string | null;
+            /**
+             * Device Token Environment
+             * @description APNS environment: "production" or "sandbox".
+             * @default production
+             */
+            device_token_environment: string;
         };
         /**
          * Point
@@ -1686,8 +1696,7 @@ export interface components {
             player_id: string;
             /** Name */
             name: string;
-            /** Color */
-            color: string;
+            color: components["schemas"]["PlayerColor"];
             role: components["schemas"]["PlayerRole"] | null;
             /** @description GeoJSON Point — latest reported position. */
             coordinates: components["schemas"]["Point"];
@@ -1792,7 +1801,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GameResponse"];
+                    "application/json": components["schemas"]["JoinGameResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1906,7 +1915,9 @@ export interface operations {
     patch_player_games__game_id__players__player_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "x-client-id": string;
+            };
             path: {
                 player_id: string;
                 game_id: string;
@@ -1942,7 +1953,9 @@ export interface operations {
     start_game_games__game_id__start_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "x-client-id": string;
+            };
             path: {
                 game_id: string;
             };

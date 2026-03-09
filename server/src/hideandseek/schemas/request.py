@@ -8,7 +8,7 @@ from datetime import datetime
 from geojson_pydantic import Point
 from pydantic import BaseModel, Field
 
-from hideandseek.models.types import FeatureCategory, PlayerRole
+from hideandseek.models.types import FeatureCategory, PlayerColor, PlayerRole
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 
@@ -17,6 +17,7 @@ class CreateGameRequest(BaseModel):
     """Create a new game on a map."""
 
     map_id: uuid.UUID = Field(description='ID of the map to play on.')
+    name: str = Field(description='Display name for the host player.')
     excluded_stop_ids: list[uuid.UUID] = Field(
         default_factory=list,
         description='Stop IDs to exclude from play for this game.',
@@ -46,12 +47,12 @@ class JoinGameRequest(BaseModel):
 
     join_code: str = Field(description='4-character code shared by the host.')
     name: str = Field(description='Display name for this player.')
-    color: str = Field(description='Hex color for this player, e.g. "#FF5733".')
     role: PlayerRole | None = Field(
         default=None, description='Optional role to assign on join (hider or seeker).'
     )
-    device_token: str = Field(
-        description='Hex-encoded APNS device token. Required — push is central to gameplay.',
+    device_token: str | None = Field(
+        default=None,
+        description='Hex-encoded APNS device token. Optional — can be set later via PATCH.',
     )
     device_token_environment: str = Field(
         default='production',
@@ -66,8 +67,13 @@ class PlayerUpdate(BaseModel):
     """Partial update to a player. All fields are optional; only provided fields are applied."""
 
     name: str | None = Field(default=None, description='New display name.')
-    color: str | None = Field(default=None, description='New hex color.')
+    color: PlayerColor | None = Field(default=None, description='New player color.')
     role: PlayerRole | None = Field(default=None, description='Assign hider or seeker role.')
+    device_token: str | None = Field(default=None, description='Hex-encoded APNS device token.')
+    device_token_environment: str = Field(
+        default='production',
+        description='APNS environment: "production" or "sandbox".',
+    )
 
 
 # ── Location ──────────────────────────────────────────────────────────────────

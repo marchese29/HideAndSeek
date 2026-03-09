@@ -84,7 +84,8 @@ paths:
       tags:
       - games
       summary: Create Game
-      description: Create a new game on a map.
+      description: Create a new game on a map. The host is automatically added as
+        the first player.
       operationId: create_game_games_post
       parameters:
       - name: x-client-id
@@ -106,7 +107,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GameResponse'
+                $ref: '#/components/schemas/JoinGameResponse'
         '422':
           description: Validation Error
           content:
@@ -208,7 +209,7 @@ paths:
       tags:
       - games
       summary: Patch Player
-      description: Update a player's role, name, or color.
+      description: Update a player's role, name, color, or device token.
       operationId: patch_player_games__game_id__players__player_id__patch
       parameters:
       - name: player_id
@@ -225,6 +226,13 @@ paths:
           type: string
           format: uuid
           title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
       requestBody:
         required: true
         content:
@@ -249,7 +257,7 @@ paths:
       tags:
       - games
       summary: Start Game
-      description: Transition the game from lobby to hiding.
+      description: Transition the game from lobby to hiding. Host-only.
       operationId: start_game_games__game_id__start_post
       parameters:
       - name: game_id
@@ -259,6 +267,13 @@ paths:
           type: string
           format: uuid
           title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
       responses:
         '200':
           description: Successful Response
@@ -1265,6 +1280,10 @@ components:
           format: uuid
           title: Map Id
           description: ID of the map to play on.
+        name:
+          type: string
+          title: Name
+          description: Display name for the host player.
         excluded_stop_ids:
           items:
             type: string
@@ -1307,6 +1326,7 @@ components:
       type: object
       required:
       - map_id
+      - name
       title: CreateGameRequest
       description: Create a new game on a map.
     EffectiveMapResponse:
@@ -1795,20 +1815,18 @@ components:
           type: string
           title: Name
           description: Display name for this player.
-        color:
-          type: string
-          title: Color
-          description: Hex color for this player, e.g. "#FF5733".
         role:
           anyOf:
           - $ref: '#/components/schemas/PlayerRole'
           - type: 'null'
           description: Optional role to assign on join (hider or seeker).
         device_token:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Device Token
-          description: "Hex-encoded APNS device token. Required \u2014 push is central\
-            \ to gameplay."
+          description: "Hex-encoded APNS device token. Optional \u2014 can be set\
+            \ later via PATCH."
         device_token_environment:
           type: string
           title: Device Token Environment
@@ -1818,8 +1836,6 @@ components:
       required:
       - join_code
       - name
-      - color
-      - device_token
       title: JoinGameRequest
       description: Join an existing game by its join code.
     JoinGameResponse:
@@ -2201,6 +2217,22 @@ components:
       - hiding_zone
       title: NearbyStationResponse
       description: A playable stop near a given point, with its hiding zone polygon.
+    PlayerColor:
+      type: string
+      enum:
+      - red
+      - blue
+      - green
+      - orange
+      - purple
+      - teal
+      - pink
+      - amber
+      - cyan
+      - lime
+      - indigo
+      - coral
+      title: PlayerColor
     PlayerResponse:
       properties:
         id:
@@ -2211,9 +2243,8 @@ components:
           type: string
           title: Name
         color:
-          type: string
-          title: Color
-          description: Hex color, e.g. "#FF5733".
+          $ref: '#/components/schemas/PlayerColor'
+          description: Server-assigned player color.
         role:
           anyOf:
           - $ref: '#/components/schemas/PlayerRole'
@@ -2243,15 +2274,25 @@ components:
           description: New display name.
         color:
           anyOf:
-          - type: string
+          - $ref: '#/components/schemas/PlayerColor'
           - type: 'null'
-          title: Color
-          description: New hex color.
+          description: New player color.
         role:
           anyOf:
           - $ref: '#/components/schemas/PlayerRole'
           - type: 'null'
           description: Assign hider or seeker role.
+        device_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Token
+          description: Hex-encoded APNS device token.
+        device_token_environment:
+          type: string
+          title: Device Token Environment
+          description: 'APNS environment: "production" or "sandbox".'
+          default: production
       type: object
       title: PlayerUpdate
       description: Partial update to a player. All fields are optional; only provided
@@ -2734,8 +2775,7 @@ components:
           type: string
           title: Name
         color:
-          type: string
-          title: Color
+          $ref: '#/components/schemas/PlayerColor'
         role:
           anyOf:
           - $ref: '#/components/schemas/PlayerRole'

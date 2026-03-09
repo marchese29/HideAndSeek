@@ -69,27 +69,29 @@ HOST="aaaaaaaa-0000-0000-0000-000000000001"
 HIDER="aaaaaaaa-0000-0000-0000-000000000002"
 SEEKER="aaaaaaaa-0000-0000-0000-000000000003"
 
-# 1. Create game (host is not a player — just creates the game)
+# 1. Create game (host is automatically the first player)
 curl -s -X POST localhost:8000/games \
   -H "Content-Type: application/json" -H "X-Client-Id: $HOST" \
-  -d "{\"map_id\": \"$MAP_ID\"}"
-# → note game_id and join_code
+  -d "{\"map_id\": \"$MAP_ID\", \"name\": \"HostName\"}"
+# → returns JoinGameResponse: game state under ['game'], host player_id at ['player_id']
+# → host gets server-assigned color (red, blue, green, ...)
 
-# 2. Join as hider and seeker
+# 2. Join as hider and seeker (no color field — server assigns unique colors)
 curl -s -X POST localhost:8000/games/join \
   -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
-  -d '{"join_code": "XXXX", "role": "hider", "name": "Alice", "color": "#E74C3C", "device_token": "fake-hider"}'
+  -d '{"join_code": "XXXX", "role": "hider", "name": "Alice", "device_token": "fake-hider"}'
 curl -s -X POST localhost:8000/games/join \
   -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
-  -d '{"join_code": "XXXX", "role": "seeker", "name": "Bob", "color": "#3498DB", "device_token": "fake-seeker"}'
+  -d '{"join_code": "XXXX", "role": "seeker", "name": "Bob", "device_token": "fake-seeker"}'
 
 # 3. Optionally tweak timing for fast testing
 docker exec hideandseek-postgres-1 psql -U hideandseek -c \
   "UPDATE game SET hiding_time_min = 1, base_question_delay_min = 1
    WHERE id = '<game_id>';"
 
-# 4. Start game (transitions to "hiding", schedules hiding→seeking timer)
-curl -s -X POST localhost:8000/games/<game_id>/start
+# 4. Start game (host-only — transitions to "hiding", schedules hiding→seeking timer)
+curl -s -X POST localhost:8000/games/<game_id>/start \
+  -H "X-Client-Id: $HOST"
 
 # 5. Report hider locations during hiding phase
 curl -s -X POST localhost:8000/games/<game_id>/location \
@@ -236,6 +238,7 @@ src/hideandseek/
     answer.py                           # Answer computation, exclusion accumulation, veto, abandon
     resolution.py                       # Feature resolution strategy, answer computation helpers
     endgame.py                          # Hiding zone radius, endgame exclusions, candidate stations
+    lobby.py                            # Game creation with host-as-player, join with color assignment
     station.py                          # Station election, transition, fallback, hider centroid
   models/                               # SQLAlchemy declarative models (base, types, geo_types,
                                         #   transit, game_map, map_feature, game, inventory,
@@ -253,7 +256,7 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 ```
 
 **Key callouts** (things that aren't obvious from file names):
-- `logic/` is the **conversion boundary** — `to_meters()` before geo math, `from_meters()` after. Session-free: uses `db.register()` to persist new objects, mutates already-tracked ORM objects directly (autoflush handles persistence). Submodules: `ask.py` (question creation), `answer.py` (answer computation + exclusion), `endgame.py` (hiding zone + endgame exclusions), `station.py` (election + transition + fallback + centroid).
+- `logic/` is the **conversion boundary** — `to_meters()` before geo math, `from_meters()` after. Session-free: uses `db.register()` to persist new objects, mutates already-tracked ORM objects directly (autoflush handles persistence). Submodules: `ask.py` (question creation), `answer.py` (answer computation + exclusion), `endgame.py` (hiding zone + endgame exclusions), `lobby.py` (game creation + join + color assignment), `station.py` (election + transition + fallback + centroid).
 - `db.register(*objects)` — adds objects to session, flushes, returns last object. Enables `question = register(Question(...))` in logic code without importing `get_session`.
 - `exclusion.py` is called from `logic/answer.py` and `logic/endgame.py`, not from routers.
 - `logic/resolution.py` owns feature resolution strategy (containment vs nearest) and answer computation helpers. Category classification constants (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`, `category_key`) live in `models/types.py` alongside `FeatureCategory` — both `logic/` and `queries/` can import them without layer violations.
@@ -357,7 +360,11 @@ Questions cannot be answered while status is `ambiguous`. The auto-answer timer 
 - Only one unanswered question allowed at a time per game.
 - `join_code` is nullable — cleared when hiding starts (reclaims the code for new games).
 - Pagination uses offset/limit query params (`schemas/common.py`).
-- `device_token` is required on `POST /games/join`, optional on `POST /games`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
+- **Host-as-player**: `POST /games` creates the game and adds the host as the first player. Returns `JoinGameResponse` (game + player_id). The `name` field is required in `CreateGameRequest`.
+- **Server-assigned colors**: `PlayerColor` enum (12 values: red, blue, green, orange, purple, teal, pink, amber, cyan, lime, indigo, coral). Colors are auto-assigned on create/join. Players can swap colors via `PATCH` if the target color is available (409 if taken).
+- **Player cap**: `MAX_PLAYERS = 12`. Join returns 409 when full.
+- **Auth guards**: `PATCH /players/{id}` requires matching `X-Client-Id` (self-only, 403 otherwise). `POST /games/{id}/start` is host-only (403 if `client_id != game.host_client_id`).
+- `device_token` is optional on both `POST /games` and `POST /games/join`. Can also be set via `PATCH /players/{id}`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
 - Push notification env vars: `APNS_KEY_PATH`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_USE_SANDBOX`. All optional — when missing, PushService runs in no-op mode.
 - Database env vars: `DATABASE_URL` (required — no default). Docker Compose sets `postgresql+psycopg://...`. `scripts/dev.sh` defaults to the docker-compose PostgreSQL.
 - Celery env vars: `CELERY_BROKER_URL` (auto-detects `redis://localhost:6379/0` when unset; set to empty string to force eager mode). Docker Compose sets `redis://redis:6379/0`. `CELERY_RESULT_BACKEND` (default: same as broker URL).

@@ -10,10 +10,12 @@ from hideandseek.models.question import Question
 from hideandseek.models.question_params import FeatureQuestionParams, RadarParams, ThermometerParams
 from hideandseek.models.transit import Route, RouteStop, Stop, TransitDataset
 from hideandseek.models.types import (
+    MAX_PLAYERS,
     DistrictClass,
     FeatureCategory,
     GameStatus,
     MapSize,
+    PlayerColor,
     PlayerRole,
     PushEventType,
     QuestionStatus,
@@ -42,12 +44,15 @@ __all__ = [
     # Enums
     'FeatureCategory',
     'GameStatus',
-    'PushEventType',
     'MapSize',
+    'PlayerColor',
     'PlayerRole',
+    'PushEventType',
     'QuestionStatus',
     'QuestionType',
     'RouteType',
+    # Constants
+    'MAX_PLAYERS',
     # Value objects
     'DistrictClass',
 ]

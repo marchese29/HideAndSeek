@@ -18,6 +18,7 @@ from shapely.geometry.base import BaseGeometry
 from hideandseek.models.types import (
     GameStatus,
     MapSize,
+    PlayerColor,
     PlayerRole,
     QuestionStatus,
     QuestionType,
@@ -97,7 +98,7 @@ class PlayerResponse(BaseModel):
 
     id: uuid.UUID
     name: str
-    color: str = Field(description='Hex color, e.g. "#FF5733".')
+    color: PlayerColor = Field(description='Server-assigned player color.')
     role: PlayerRole | None = Field(description='Null until the host assigns a role.')
 
     @staticmethod
@@ -292,7 +293,7 @@ class VisiblePlayer(BaseModel):
 
     player_id: uuid.UUID
     name: str
-    color: str
+    color: PlayerColor
     role: PlayerRole | None
     coordinates: GeoJSONPoint = Field(description='GeoJSON Point — latest reported position.')
     timestamp: datetime

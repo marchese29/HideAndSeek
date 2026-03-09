@@ -7,6 +7,24 @@ from pydantic import BaseModel
 # ── Enums ──────────────────────────────────────────────────────────────────────
 
 
+class PlayerColor(StrEnum):
+    red = 'red'
+    blue = 'blue'
+    green = 'green'
+    orange = 'orange'
+    purple = 'purple'
+    teal = 'teal'
+    pink = 'pink'
+    amber = 'amber'
+    cyan = 'cyan'
+    lime = 'lime'
+    indigo = 'indigo'
+    coral = 'coral'
+
+
+MAX_PLAYERS = 12
+
+
 class RouteType(StrEnum):
     metro = 'metro'
     bus = 'bus'

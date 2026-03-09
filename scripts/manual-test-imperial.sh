@@ -82,16 +82,19 @@ SQL
 echo "Done."
 
 echo ""
-echo "=== POST /games (create imperial game) ==="
-GAME=$(curl -sf -X POST "$BASE/games" \
+echo "=== POST /games (create imperial game — host is first player) ==="
+CREATE_RESP=$(curl -sf -X POST "$BASE/games" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $HOST_CLIENT" \
-  -d "{\"map_id\": \"$MAP_ID\"}")
-echo "$GAME" | pp
+  -d "{\"map_id\": \"$MAP_ID\", \"name\": \"ImperialHost\"}")
+echo "$CREATE_RESP" | pp
+GAME=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['game']))")
 GAME_ID=$(echo "$GAME" | jq_val "['id']")
 JOIN_CODE=$(echo "$GAME" | jq_val "['join_code']")
-echo "  Game ID:   $GAME_ID"
-echo "  Join code: $JOIN_CODE"
+HOST_PLAYER_ID=$(echo "$CREATE_RESP" | jq_val "['player_id']")
+echo "  Game ID:        $GAME_ID"
+echo "  Join code:      $JOIN_CODE"
+echo "  Host player ID: $HOST_PLAYER_ID"
 
 # Verify convention is imperial
 CONVENTION=$(echo "$GAME" | jq_val "['convention']")
@@ -112,24 +115,30 @@ echo "=== POST /games/join (seeker + hider) ==="
 SEEKER_RESP=$(curl -sf -X POST "$BASE/games/join" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $SEEKER_CLIENT" \
-  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Seeker\",\"color\":\"#0000FF\",\"device_token\":\"ccc\"}")
+  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Seeker\",\"device_token\":\"ccc\"}")
 SEEKER_ID=$(echo "$SEEKER_RESP" | jq_val "['player_id']")
 echo "  Seeker ID: $SEEKER_ID"
 
 HIDER_RESP=$(curl -sf -X POST "$BASE/games/join" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $HIDER_CLIENT" \
-  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Hider\",\"color\":\"#FF0000\",\"device_token\":\"ddd\"}")
+  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Hider\",\"device_token\":\"ddd\"}")
 HIDER_ID=$(echo "$HIDER_RESP" | jq_val "['player_id']")
 echo "  Hider ID: $HIDER_ID"
 
 echo ""
 echo "=== Assign roles + start + force seeking ==="
+curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$HOST_PLAYER_ID" \
+  -H "Content-Type: application/json" -H "X-Client-Id: $HOST_CLIENT" \
+  -d '{"role":"seeker"}' > /dev/null
 curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$SEEKER_ID" \
-  -H "Content-Type: application/json" -d '{"role":"seeker"}' > /dev/null
+  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER_CLIENT" \
+  -d '{"role":"seeker"}' > /dev/null
 curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$HIDER_ID" \
-  -H "Content-Type: application/json" -d '{"role":"hider"}' > /dev/null
-curl -sf -X POST "$BASE/games/$GAME_ID/start" > /dev/null
+  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER_CLIENT" \
+  -d '{"role":"hider"}' > /dev/null
+curl -sf -X POST "$BASE/games/$GAME_ID/start" \
+  -H "X-Client-Id: $HOST_CLIENT" > /dev/null
 STOP_VICTORIA="00000000-0000-0000-0000-000000000020"
 docker compose exec -T postgres psql -U hideandseek -q -c \
   "UPDATE game SET status='seeking', seeking_started_at=NOW(), hider_station_id='$STOP_VICTORIA' WHERE id='$GAME_ID';"

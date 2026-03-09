@@ -78,16 +78,25 @@ echo "=== GET /maps/$MAP_ID (boundary should be GeoJSON Polygon) ==="
 curl -sf "$BASE/maps/$MAP_ID" | pp
 
 echo ""
-echo "=== POST /games (create game) ==="
-GAME=$(curl -sf -X POST "$BASE/games" \
+echo "=== POST /games (create game — host is first player) ==="
+CREATE_RESP=$(curl -sf -X POST "$BASE/games" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $HOST_CLIENT" \
-  -d "{\"map_id\": \"$MAP_ID\"}")
-echo "$GAME" | pp
+  -d "{\"map_id\": \"$MAP_ID\", \"name\": \"Host\"}")
+echo "$CREATE_RESP" | pp
+GAME=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['game']))")
 GAME_ID=$(echo "$GAME" | jq_val "['id']")
 JOIN_CODE=$(echo "$GAME" | jq_val "['join_code']")
-echo "  Game ID:   $GAME_ID"
-echo "  Join code: $JOIN_CODE"
+HOST_PLAYER_ID=$(echo "$CREATE_RESP" | jq_val "['player_id']")
+echo "  Game ID:        $GAME_ID"
+echo "  Join code:      $JOIN_CODE"
+echo "  Host player ID: $HOST_PLAYER_ID"
+
+# Verify host is in players with server-assigned color
+HOST_COLOR=$(echo "$GAME" | jq_val "['players'][0]['color']")
+assert_eq "host color" "$HOST_COLOR" "red"
+HOST_NAME=$(echo "$GAME" | jq_val "['players'][0]['name']")
+assert_eq "host name" "$HOST_NAME" "Host"
 
 # Verify static inventory (no IDs, no consumed flags)
 echo ""
@@ -106,7 +115,7 @@ echo "=== POST /games/join (seeker) ==="
 SEEKER_RESP=$(curl -sf -X POST "$BASE/games/join" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $SEEKER_CLIENT" \
-  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Seeker\",\"color\":\"#0000FF\",\"device_token\":\"aaa\"}")
+  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Seeker\",\"device_token\":\"aaa\"}")
 SEEKER_ID=$(echo "$SEEKER_RESP" | jq_val "['player_id']")
 echo "  Seeker ID: $SEEKER_ID"
 
@@ -115,20 +124,26 @@ echo "=== POST /games/join (hider) ==="
 HIDER_RESP=$(curl -sf -X POST "$BASE/games/join" \
   -H "Content-Type: application/json" \
   -H "X-Client-Id: $HIDER_CLIENT" \
-  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Hider\",\"color\":\"#FF0000\",\"device_token\":\"bbb\"}")
+  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Hider\",\"device_token\":\"bbb\"}")
 HIDER_ID=$(echo "$HIDER_RESP" | jq_val "['player_id']")
 echo "  Hider ID: $HIDER_ID"
 
 echo ""
-echo "=== PATCH players (assign roles) ==="
+echo "=== PATCH players (assign roles — host + joined players) ==="
+curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$HOST_PLAYER_ID" \
+  -H "Content-Type: application/json" -H "X-Client-Id: $HOST_CLIENT" \
+  -d '{"role":"seeker"}' | jq_val "['role']"
 curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$SEEKER_ID" \
-  -H "Content-Type: application/json" -d '{"role":"seeker"}' | jq_val "['role']"
+  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER_CLIENT" \
+  -d '{"role":"seeker"}' | jq_val "['role']"
 curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$HIDER_ID" \
-  -H "Content-Type: application/json" -d '{"role":"hider"}' | jq_val "['role']"
+  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER_CLIENT" \
+  -d '{"role":"hider"}' | jq_val "['role']"
 
 echo ""
-echo "=== POST /games/{id}/start ==="
-curl -sf -X POST "$BASE/games/$GAME_ID/start" | jq_val "['status']"
+echo "=== POST /games/{id}/start (host-only) ==="
+curl -sf -X POST "$BASE/games/$GAME_ID/start" \
+  -H "X-Client-Id: $HOST_CLIENT" | jq_val "['status']"
 
 STOP_VICTORIA="00000000-0000-0000-0000-000000000020"
 

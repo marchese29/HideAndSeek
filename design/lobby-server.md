@@ -348,3 +348,39 @@ Push remains the right tool for:
 - All hiding/seeking phase events.
 
 The `game_started` event is delivered through *both* channels: SSE (for clients with the lobby screen open) and push (for backgrounded clients). The client deduplicates by game status.
+
+---
+
+## 10. Implementation Cycles
+
+### Cycle 1: PlayerColor + Host-as-Player + Player Cap + Auth Guards
+
+Sections 1–4 plus authorization guards from section 2. All straightforward REST changes with no new infrastructure.
+
+- Add `PlayerColor` StrEnum (12 values) to types and Player model column.
+- Server-assign first unused color on join; color swap via `PATCH` with 409 if taken.
+- Update `POST /games` to accept `name`/`device_token`, auto-create host Player, return `JoinGameResponse`.
+- Enforce 12-player cap on `POST /games/join` (409 if full).
+- Authorization guards: self-only player updates (403), host-only game start (403).
+- Update schemas (`CreateGameRequest`, `JoinGameRequest`, `PlayerUpdate`, `PlayerResponse`).
+
+### Cycle 2: Player Removal
+
+Section 5. Isolated unit of logic with several edge cases worth focused testing.
+
+- `DELETE /games/{game_id}/players/{player_id}` endpoint.
+- Self-leave: host + only player → dissolve game (set `finished`). Host + others → require `new_host_id`.
+- Host kick: host removes another player.
+- Frees color for reuse on removal.
+- `RemovePlayerRequest` schema (`new_host_id` field).
+
+### Cycle 3: SSE + Redis Pub/Sub
+
+Section 6. Biggest lift, introduces new infrastructure. Depends on cycles 1–2.
+
+- `broadcast.py` module: async publish/subscribe functions accepting ORM objects.
+- Redis channel `game:{game_id}:lobby:events`.
+- `GET /games/{game_id}/events?client_id=...` SSE endpoint with auth.
+- Wire publish calls into join, update, remove, and start endpoints.
+- New dependencies: `redis` (async pub/sub), `sse-starlette`.
+- Subscribe before DB fetch to handle race conditions; no `Last-Event-ID` in v1.

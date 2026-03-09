@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 from hideandseek.models.game import Game
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.transit import Route, RouteStop, Stop
-from hideandseek.models.types import GameStatus, PlayerRole, RouteType, StationElectionStatus
+from hideandseek.models.types import (
+    GameStatus,
+    PlayerColor,
+    PlayerRole,
+    RouteType,
+    StationElectionStatus,
+)
 from hideandseek.queries.games import set_hider_station
 from tests.conftest import create_game, create_game_map, create_player
 
@@ -23,23 +29,29 @@ def _headers(client_id: uuid.UUID | None = None) -> dict[str, str]:
 
 def test_create_game(client: TestClient, session: Session):
     gm = create_game_map(session)
+    host_client = uuid.uuid4()
     resp = client.post(
         '/games',
-        json={'map_id': str(gm.id)},
-        headers=_headers(),
+        json={'map_id': str(gm.id), 'name': 'Host'},
+        headers=_headers(host_client),
     )
     assert resp.status_code == 201
     data = resp.json()
-    assert data['status'] == 'lobby'
-    assert data['map_id'] == str(gm.id)
-    assert len(data['join_code']) == 4
-    assert data['players'] == []
+    assert 'game' in data
+    assert 'player_id' in data
+    game = data['game']
+    assert game['status'] == 'lobby'
+    assert game['map_id'] == str(gm.id)
+    assert len(game['join_code']) == 4
+    assert len(game['players']) == 1
+    assert game['players'][0]['name'] == 'Host'
+    assert game['players'][0]['color'] == 'red'
 
 
 def test_create_game_map_not_found(client: TestClient):
     resp = client.post(
         '/games',
-        json={'map_id': str(uuid.uuid4())},
+        json={'map_id': str(uuid.uuid4()), 'name': 'Host'},
         headers=_headers(),
     )
     assert resp.status_code == 404
@@ -56,8 +68,6 @@ def test_join_game(client: TestClient, session: Session):
         json={
             'join_code': 'ABCD',
             'name': 'Alice',
-            'color': '#FF0000',
-            'device_token': 'abc123def456',
         },
         headers=_headers(client_id),
     )
@@ -67,6 +77,7 @@ def test_join_game(client: TestClient, session: Session):
     assert len(data['game']['players']) == 1
     assert data['game']['players'][0]['name'] == 'Alice'
     assert data['game']['players'][0]['role'] is None
+    assert data['game']['players'][0]['color'] in [c.value for c in PlayerColor]
 
 
 def test_join_game_invalid_code(client: TestClient):
@@ -75,8 +86,6 @@ def test_join_game_invalid_code(client: TestClient):
         json={
             'join_code': 'ZZZZ',
             'name': 'Bob',
-            'color': '#0000FF',
-            'device_token': 'abc123def456',
         },
         headers=_headers(),
     )
@@ -90,8 +99,6 @@ def test_join_game_not_in_lobby(client: TestClient, session: Session):
         json={
             'join_code': 'WXYZ',
             'name': 'Charlie',
-            'color': '#00FF00',
-            'device_token': 'abc123def456',
         },
         headers=_headers(),
     )
@@ -283,6 +290,7 @@ def test_update_player_role(client: TestClient, session: Session):
     resp = client.patch(
         f'/games/{game.id}/players/{player.id}',
         json={'role': 'seeker'},
+        headers=_headers(player.client_id),
     )
     assert resp.status_code == 200
     assert resp.json()['role'] == 'seeker'
@@ -290,15 +298,16 @@ def test_update_player_role(client: TestClient, session: Session):
 
 def test_update_player_name_and_color(client: TestClient, session: Session):
     game = create_game(session)
-    player = create_player(session, game.id, name='Old', color='#000000')
+    player = create_player(session, game.id, name='Old', color=PlayerColor.red)
     resp = client.patch(
         f'/games/{game.id}/players/{player.id}',
-        json={'name': 'New', 'color': '#FFFFFF'},
+        json={'name': 'New', 'color': 'blue'},
+        headers=_headers(player.client_id),
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data['name'] == 'New'
-    assert data['color'] == '#FFFFFF'
+    assert data['color'] == 'blue'
 
 
 def test_update_player_not_found(client: TestClient, session: Session):
@@ -306,6 +315,7 @@ def test_update_player_not_found(client: TestClient, session: Session):
     resp = client.patch(
         f'/games/{game.id}/players/{uuid.uuid4()}',
         json={'role': 'hider'},
+        headers=_headers(),
     )
     assert resp.status_code == 404
 
@@ -317,7 +327,10 @@ def test_start_game(client: TestClient, session: Session):
     game = create_game(session)
     create_player(session, game.id, role=PlayerRole.hider)
     create_player(session, game.id, role=PlayerRole.seeker)
-    resp = client.post(f'/games/{game.id}/start')
+    resp = client.post(
+        f'/games/{game.id}/start',
+        headers=_headers(game.host_client_id),
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data['status'] == 'hiding'
@@ -328,14 +341,20 @@ def test_start_game(client: TestClient, session: Session):
 
 def test_start_game_no_players(client: TestClient, session: Session):
     game = create_game(session)
-    resp = client.post(f'/games/{game.id}/start')
+    resp = client.post(
+        f'/games/{game.id}/start',
+        headers=_headers(game.host_client_id),
+    )
     assert resp.status_code == 409
 
 
 def test_start_game_unassigned_roles(client: TestClient, session: Session):
     game = create_game(session)
     create_player(session, game.id, role=None)
-    resp = client.post(f'/games/{game.id}/start')
+    resp = client.post(
+        f'/games/{game.id}/start',
+        headers=_headers(game.host_client_id),
+    )
     assert resp.status_code == 409
     assert 'assigned roles' in resp.json()['detail']
 
@@ -344,7 +363,10 @@ def test_start_game_missing_hider(client: TestClient, session: Session):
     game = create_game(session)
     create_player(session, game.id, role=PlayerRole.seeker)
     create_player(session, game.id, role=PlayerRole.seeker)
-    resp = client.post(f'/games/{game.id}/start')
+    resp = client.post(
+        f'/games/{game.id}/start',
+        headers=_headers(game.host_client_id),
+    )
     assert resp.status_code == 409
     assert 'hider' in resp.json()['detail']
 
@@ -352,14 +374,20 @@ def test_start_game_missing_hider(client: TestClient, session: Session):
 def test_start_game_missing_seeker(client: TestClient, session: Session):
     game = create_game(session)
     create_player(session, game.id, role=PlayerRole.hider)
-    resp = client.post(f'/games/{game.id}/start')
+    resp = client.post(
+        f'/games/{game.id}/start',
+        headers=_headers(game.host_client_id),
+    )
     assert resp.status_code == 409
     assert 'seeker' in resp.json()['detail']
 
 
 def test_start_game_not_in_lobby(client: TestClient, session: Session):
     game = create_game(session, status=GameStatus.seeking)
-    resp = client.post(f'/games/{game.id}/start')
+    resp = client.post(
+        f'/games/{game.id}/start',
+        headers=_headers(game.host_client_id),
+    )
     assert resp.status_code == 409
 
 
@@ -535,3 +563,131 @@ def test_hiding_zone_stop_not_found(client: TestClient, session: Session):
         headers=_headers(player.client_id),
     )
     assert resp.status_code == 404
+
+
+# ── Lobby: host-as-player, player cap, color assignment, auth guards ────
+
+
+def test_create_game_host_is_player(client: TestClient, session: Session):
+    """POST /games returns JoinGameResponse with host as first player."""
+    gm = create_game_map(session)
+    host_client = uuid.uuid4()
+    resp = client.post(
+        '/games',
+        json={'map_id': str(gm.id), 'name': 'HostPlayer'},
+        headers=_headers(host_client),
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data['player_id'] is not None
+    players = data['game']['players']
+    assert len(players) == 1
+    assert players[0]['name'] == 'HostPlayer'
+    assert players[0]['color'] == 'red'
+
+
+def test_join_full_game_409(client: TestClient, session: Session):
+    """Joining a game with 12 players returns 409."""
+    game = create_game(session, join_code='FULL')
+    for i in range(12):
+        create_player(session, game.id, name=f'P{i}', color=list(PlayerColor)[i])
+    resp = client.post(
+        '/games/join',
+        json={'join_code': 'FULL', 'name': 'Extra'},
+        headers=_headers(),
+    )
+    assert resp.status_code == 409
+    assert '12 players' in resp.json()['detail']
+
+
+def test_join_assigns_unique_colors(client: TestClient, session: Session):
+    """Two players joining get different auto-assigned colors."""
+    create_game(session, join_code='CLRS')
+    c1 = uuid.uuid4()
+    c2 = uuid.uuid4()
+    r1 = client.post(
+        '/games/join',
+        json={'join_code': 'CLRS', 'name': 'A'},
+        headers=_headers(c1),
+    )
+    r2 = client.post(
+        '/games/join',
+        json={'join_code': 'CLRS', 'name': 'B'},
+        headers=_headers(c2),
+    )
+    assert r1.status_code == 201
+    assert r2.status_code == 201
+    color1 = r1.json()['game']['players'][0]['color']
+    # Second response has both players
+    players = r2.json()['game']['players']
+    colors = {p['color'] for p in players}
+    assert len(colors) == 2
+    assert color1 in colors
+
+
+def test_patch_player_self_only_403(client: TestClient, session: Session):
+    """PATCH another player returns 403."""
+    game = create_game(session)
+    player = create_player(session, game.id)
+    other_client = uuid.uuid4()
+    resp = client.patch(
+        f'/games/{game.id}/players/{player.id}',
+        json={'name': 'Hacked'},
+        headers=_headers(other_client),
+    )
+    assert resp.status_code == 403
+
+
+def test_patch_color_swap_409(client: TestClient, session: Session):
+    """PATCH color to a taken color returns 409."""
+    game = create_game(session)
+    p1 = create_player(session, game.id, color=PlayerColor.red)
+    p2 = create_player(session, game.id, color=PlayerColor.blue)
+    resp = client.patch(
+        f'/games/{game.id}/players/{p2.id}',
+        json={'color': 'red'},
+        headers=_headers(p2.client_id),
+    )
+    assert resp.status_code == 409
+    assert 'already taken' in resp.json()['detail']
+    # p1 reference keeps linter happy
+    assert p1.color == PlayerColor.red
+
+
+def test_patch_color_swap_success(client: TestClient, session: Session):
+    """PATCH color to an available color succeeds."""
+    game = create_game(session)
+    p1 = create_player(session, game.id, color=PlayerColor.red)
+    resp = client.patch(
+        f'/games/{game.id}/players/{p1.id}',
+        json={'color': 'green'},
+        headers=_headers(p1.client_id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()['color'] == 'green'
+
+
+def test_start_game_host_only_403(client: TestClient, session: Session):
+    """Non-host starting the game returns 403."""
+    game = create_game(session)
+    create_player(session, game.id, role=PlayerRole.hider)
+    create_player(session, game.id, role=PlayerRole.seeker)
+    non_host = uuid.uuid4()
+    resp = client.post(
+        f'/games/{game.id}/start',
+        headers=_headers(non_host),
+    )
+    assert resp.status_code == 403
+    assert 'host' in resp.json()['detail']
+
+
+def test_patch_device_token(client: TestClient, session: Session):
+    """PATCH device_token upserts via the device token table."""
+    game = create_game(session)
+    player = create_player(session, game.id)
+    resp = client.patch(
+        f'/games/{game.id}/players/{player.id}',
+        json={'device_token': 'new-token-hex'},
+        headers=_headers(player.client_id),
+    )
+    assert resp.status_code == 200

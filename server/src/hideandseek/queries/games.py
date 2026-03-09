@@ -18,6 +18,7 @@ from hideandseek.models.types import (
     DistanceConvention,
     GameStatus,
     MapSize,
+    PlayerColor,
     PlayerRole,
     StationElectionStatus,
 )
@@ -89,7 +90,7 @@ def add_player(
     *,
     client_id: uuid.UUID,
     name: str,
-    color: str,
+    color: PlayerColor,
     role: PlayerRole | None = None,
 ) -> Player:
     """Create a player in a game via relationship append."""

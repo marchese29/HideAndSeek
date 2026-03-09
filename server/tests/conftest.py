@@ -11,7 +11,7 @@ import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from shapely.geometry import Point, Polygon
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 
@@ -30,6 +30,7 @@ from hideandseek.models.types import (
     FeatureCategory,
     GameStatus,
     MapSize,
+    PlayerColor,
     QuestionType,
     category_key,
 )
@@ -247,11 +248,13 @@ def create_inventory_slot(
 
 
 def create_player(session: Session, game_id: uuid.UUID, **overrides: Any) -> Player:
+    if 'color' not in overrides:
+        existing = session.scalars(select(Player).where(Player.game_id == game_id)).all()
+        overrides['color'] = list(PlayerColor)[len(existing)]
     defaults: dict[str, Any] = {
         'game_id': game_id,
         'client_id': uuid.uuid4(),
         'name': 'Test Player',
-        'color': '#FF5733',
         'role': None,
     }
     defaults.update(overrides)
