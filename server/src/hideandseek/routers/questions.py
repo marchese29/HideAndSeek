@@ -36,7 +36,6 @@ from hideandseek.logic.ask import (
 )
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import (
-    GameStatus,
     PushEventType,
     QuestionStatus,
     QuestionType,
@@ -81,7 +80,7 @@ def _schedule_auto_answer(game: Game, question_id: uuid.UUID) -> None:
 
 def _validate_can_ask(game: Game) -> None:
     """Common pre-ask validation: game must be seeking, no unanswered question."""
-    if game.status != GameStatus.seeking:
+    if not game.status.is_seeking:
         raise HTTPException(status_code=409, detail='Questions can only be asked during seeking.')
     if has_unanswered_question(game):
         raise HTTPException(status_code=409, detail='There is already an unanswered question.')

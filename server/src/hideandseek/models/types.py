@@ -52,6 +52,31 @@ class GameStatus(StrEnum):
     finished = 'finished'
     dissolved = 'dissolved'
 
+    @property
+    def is_lobby(self) -> bool:
+        """Game is waiting for players to join."""
+        return self == GameStatus.lobby
+
+    @property
+    def is_hiding(self) -> bool:
+        """Hider is traveling to their hiding spot."""
+        return self == GameStatus.hiding
+
+    @property
+    def is_seeking(self) -> bool:
+        """Seekers are actively searching for the hider."""
+        return self == GameStatus.seeking
+
+    @property
+    def is_finished(self) -> bool:
+        """Game ran to completion."""
+        return self == GameStatus.finished
+
+    @property
+    def is_active(self) -> bool:
+        """Game is in an active play phase (hiding or seeking)."""
+        return self.is_hiding or self.is_seeking
+
 
 class PlayerRole(StrEnum):
     hider = 'hider'

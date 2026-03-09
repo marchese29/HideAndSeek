@@ -10,7 +10,6 @@ from hideandseek.db import session_dependency
 from hideandseek.dependencies import get_game, get_seeker_in_game
 from hideandseek.logic.endgame import get_endgame_exclusions
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import GameStatus
 from hideandseek.schemas.response import EndgameExclusionsResponse
 from hideandseek.validators import validate_endgame_station
 
@@ -29,7 +28,7 @@ def endgame_exclusions(
     _player: Player = Depends(get_seeker_in_game),
 ) -> EndgameExclusionsResponse:
     """Endgame exclusion view: per-question exclusions intersected with a hiding zone circle."""
-    if game.status != GameStatus.seeking:
+    if not game.status.is_seeking:
         raise HTTPException(
             status_code=409, detail='Endgame view is only available during seeking.'
         )

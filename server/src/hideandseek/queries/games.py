@@ -111,10 +111,10 @@ def update_game_status(game: Game, status: GameStatus) -> Game:
     """Update a game's status. Clears join_code when entering hiding."""
     session = get_session()
     game.status = status
-    if status == GameStatus.hiding:
+    if status.is_hiding:
         game.hiding_started_at = datetime.now(UTC)
         game.join_code = None
-    elif status == GameStatus.seeking:
+    elif status.is_seeking:
         game.seeking_started_at = datetime.now(UTC)
     session.add(game)
     session.flush()

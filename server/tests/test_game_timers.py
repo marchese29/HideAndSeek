@@ -48,7 +48,7 @@ def test_transition_hiding_to_seeking(session: Session):
     transition_hiding_to_seeking(str(game.id))
     session.expire_all()
     session.refresh(game)
-    assert game.status == GameStatus.seeking
+    assert game.status.is_seeking
     assert game.seeking_started_at is not None
     # No hider locations → ambiguous
     assert game.station_election_status == StationElectionStatus.ambiguous
@@ -80,7 +80,7 @@ def test_transition_preserves_early_election(session: Session):
     transition_hiding_to_seeking(str(game.id))
     session.expire_all()
     session.refresh(game)
-    assert game.status == GameStatus.seeking
+    assert game.status.is_seeking
     assert game.station_election_status == StationElectionStatus.elected
     assert game.hider_station_id == stop.id
 
@@ -90,7 +90,7 @@ def test_transition_idempotent_when_already_seeking(session: Session):
     transition_hiding_to_seeking(str(game.id))
     session.expire_all()
     session.refresh(game)
-    assert game.status == GameStatus.seeking
+    assert game.status.is_seeking
 
 
 def test_transition_noop_when_finished(session: Session):
@@ -98,7 +98,7 @@ def test_transition_noop_when_finished(session: Session):
     transition_hiding_to_seeking(str(game.id))
     session.expire_all()
     session.refresh(game)
-    assert game.status == GameStatus.finished
+    assert game.status.is_finished
 
 
 def test_transition_noop_for_missing_game(session: Session):

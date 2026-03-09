@@ -51,7 +51,7 @@ def transition_hiding_to_seeking(game_id: str) -> None:
         if not game:
             logger.warning('transition_game_not_found', game_id=game_id)
             return
-        if game.status != GameStatus.hiding:
+        if not game.status.is_hiding:
             logger.info('transition_skipped', game_id=game_id, status=game.status)
             return
 

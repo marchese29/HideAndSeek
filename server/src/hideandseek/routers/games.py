@@ -64,9 +64,6 @@ from hideandseek.tasks.push import send_push
 
 router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(session_dependency)])
 
-# States from which a game can be ended.
-_ACTIVE_STATES = {GameStatus.hiding, GameStatus.seeking}
-
 
 @router.post('', response_model=JoinGameResponse, status_code=201)
 def create_game(
@@ -114,7 +111,7 @@ def join_game(
     game = find_game_by_join_code(body.join_code)
     if not game:
         raise HTTPException(status_code=404, detail='Invalid join code.')
-    if game.status != GameStatus.lobby:
+    if not game.status.is_lobby:
         raise HTTPException(status_code=409, detail='Game is not in lobby.')
 
     if body.device_token:
@@ -222,7 +219,7 @@ def start_game(
     """Transition the game from lobby to hiding. Host-only."""
     if client_id != game.host_client_id:
         raise HTTPException(status_code=403, detail='Only the host can start the game.')
-    if game.status != GameStatus.lobby:
+    if not game.status.is_lobby:
         raise HTTPException(status_code=409, detail='Game is not in lobby.')
 
     roles = [p.role for p in game.players]
@@ -260,7 +257,7 @@ def end_game(
     game: Game = Depends(get_game),
 ) -> GameResponse:
     """Transition the game to finished."""
-    if game.status not in _ACTIVE_STATES:
+    if not game.status.is_active:
         raise HTTPException(
             status_code=409,
             detail=f'Cannot end game in {game.status} state.',
@@ -280,7 +277,7 @@ def get_hider_station(
     _player: Player = Depends(get_hider_in_game),
 ) -> HiderStationResponse:
     """The hider's station and election status. Available during hiding and seeking."""
-    if game.status not in {GameStatus.hiding, GameStatus.seeking}:
+    if not game.status.is_active:
         raise HTTPException(
             status_code=409, detail='Hider station is only available during hiding or seeking.'
         )
@@ -297,7 +294,7 @@ def elect_hider_station(
     player: Player = Depends(get_hider_in_game),
 ) -> HidingZoneResponse:
     """Elect a station as the hider's hiding zone anchor. Permanent."""
-    not_hiding = game.status != GameStatus.hiding
+    not_hiding = not game.status.is_hiding
     not_ambiguous = game.station_election_status != StationElectionStatus.ambiguous
     if not_hiding and not_ambiguous:
         raise HTTPException(
@@ -387,7 +384,7 @@ def list_candidate_stations(
     _player: Player = Depends(get_seeker_in_game),
 ) -> list[StopResponse]:
     """Playable stops whose hiding zone circle is not fully covered by exclusion zones."""
-    if game.status != GameStatus.seeking:
+    if not game.status.is_seeking:
         raise HTTPException(
             status_code=409, detail='Candidate stations are only available during seeking.'
         )

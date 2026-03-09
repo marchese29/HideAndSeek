@@ -329,7 +329,7 @@ lobby → hiding → seeking → finished
 lobby → dissolved  (all players left before start)
 ```
 
-The `GameStatus` enum reflects this. `dissolved` means the game was abandoned in the lobby before it ever started (distinct from `finished` which means a game ran to completion). The endgame is a client-side lens over the `seeking` phase (see `design/endgame.md`). Games can be ended from any active state (hiding/seeking). `join_code` is cleared when hiding starts (no longer usable after lobby).
+The `GameStatus` enum reflects this. `dissolved` means the game was abandoned in the lobby before it ever started (distinct from `finished` which means a game ran to completion). The endgame is a client-side lens over the `seeking` phase (see `design/endgame.md`). Games can be ended from any active state (hiding/seeking). `join_code` is cleared when hiding starts (no longer usable after lobby). `GameStatus` has instance properties for status checks — use them instead of bare enum comparisons: `is_lobby`, `is_hiding`, `is_seeking`, `is_finished`, `is_active` (hiding or seeking). Direct `GameStatus.X` references are only for setting values (e.g., `update_game_status(game, GameStatus.hiding)`).
 
 ### Station Election
 

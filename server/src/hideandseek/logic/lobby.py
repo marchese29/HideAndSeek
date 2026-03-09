@@ -83,7 +83,7 @@ def remove_player(
         PermissionError: caller is neither the player nor the host (→ 403).
         ValueError: game not in lobby, new_host_id missing/invalid (→ 422).
     """
-    if game.status != GameStatus.lobby:
+    if not game.status.is_lobby:
         msg = 'Players can only be removed during lobby.'
         raise ValueError(msg)
 

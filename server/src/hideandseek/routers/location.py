@@ -9,7 +9,6 @@ from shapely.geometry import Point, mapping
 from hideandseek.db import session_dependency
 from hideandseek.dependencies import get_game, get_player_in_game
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import GameStatus
 from hideandseek.queries.location import (
     create_location_update,
     get_location_history,
@@ -65,7 +64,7 @@ def location_history(
     game: Game = Depends(get_game),
 ) -> list[LocationHistoryEntry]:
     """Full location log for post-game replay. Only available when finished."""
-    if game.status != GameStatus.finished:
+    if not game.status.is_finished:
         raise HTTPException(
             status_code=409,
             detail='Location history is only available after the game ends.',
