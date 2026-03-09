@@ -25,6 +25,7 @@ from hideandseek.logic.endgame import (
 )
 from hideandseek.logic.lobby import create_game_with_host, validate_color_available
 from hideandseek.logic.lobby import join_game as lobby_join_game
+from hideandseek.logic.lobby import remove_player as lobby_remove_player
 from hideandseek.logic.station import validate_station_election
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import GameStatus, PlayerRole, PushEventType, StationElectionStatus
@@ -45,6 +46,7 @@ from hideandseek.schemas.request import (
     ElectStationRequest,
     JoinGameRequest,
     PlayerUpdate,
+    RemovePlayerRequest,
 )
 from hideandseek.schemas.response import (
     EffectiveMapResponse,
@@ -185,6 +187,31 @@ def patch_player(
             environment=body.device_token_environment,
         )
     return PlayerResponse.from_model(player)
+
+
+@router.delete('/{game_id}/players/{player_id}', status_code=204)
+def remove_player(
+    player_id: uuid.UUID,
+    body: RemovePlayerRequest | None = None,
+    game: Game = Depends(get_game),
+    client_id: uuid.UUID = Depends(get_client_id),
+) -> None:
+    """Remove a player from the lobby. Self-leave or host-kick."""
+    player = get_player(player_id)
+    if not player or player.game_id != game.id:
+        raise HTTPException(status_code=404, detail='Player not found in this game.')
+
+    try:
+        lobby_remove_player(
+            game,
+            player,
+            client_id=client_id,
+            new_host_id=body.new_host_id if body else None,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 @router.post('/{game_id}/start', response_model=GameResponse)

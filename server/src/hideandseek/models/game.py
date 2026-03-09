@@ -64,4 +64,5 @@ class Player(Base):
     game: Mapped[Game] = relationship(back_populates='players')
     location_updates: Mapped[list[LocationUpdate]] = relationship(
         back_populates='player',
+        cascade='all, delete-orphan',
     )

@@ -50,6 +50,7 @@ class GameStatus(StrEnum):
     hiding = 'hiding'
     seeking = 'seeking'
     finished = 'finished'
+    dissolved = 'dissolved'
 
 
 class PlayerRole(StrEnum):

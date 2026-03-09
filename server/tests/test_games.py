@@ -691,3 +691,153 @@ def test_patch_device_token(client: TestClient, session: Session):
         headers=_headers(player.client_id),
     )
     assert resp.status_code == 200
+
+
+# ── DELETE /games/{game_id}/players/{player_id} ─────────────────────────────
+
+
+def test_remove_player_self_leave(client: TestClient, session: Session):
+    """Non-host player leaves → 204, player gone from game."""
+    game = create_game(session)
+    host = create_player(session, game.id, client_id=game.host_client_id)
+    player = create_player(session, game.id)
+    resp = client.delete(
+        f'/games/{game.id}/players/{player.id}',
+        headers=_headers(player.client_id),
+    )
+    assert resp.status_code == 204
+    # Verify player is gone
+    game_resp = client.get(f'/games/{game.id}')
+    assert len(game_resp.json()['players']) == 1
+    assert game_resp.json()['players'][0]['name'] == host.name
+
+
+def test_remove_player_host_kick(client: TestClient, session: Session):
+    """Host removes another player → 204, player gone."""
+    game = create_game(session)
+    create_player(session, game.id, client_id=game.host_client_id)
+    target = create_player(session, game.id, name='Kicked')
+    resp = client.delete(
+        f'/games/{game.id}/players/{target.id}',
+        headers=_headers(game.host_client_id),
+    )
+    assert resp.status_code == 204
+    game_resp = client.get(f'/games/{game.id}')
+    names = [p['name'] for p in game_resp.json()['players']]
+    assert 'Kicked' not in names
+
+
+def test_remove_player_unauthorized_403(client: TestClient, session: Session):
+    """Non-self, non-host removal → 403."""
+    game = create_game(session)
+    create_player(session, game.id, client_id=game.host_client_id)
+    target = create_player(session, game.id)
+    bystander = uuid.uuid4()
+    resp = client.delete(
+        f'/games/{game.id}/players/{target.id}',
+        headers=_headers(bystander),
+    )
+    assert resp.status_code == 403
+
+
+def test_remove_player_not_in_game_404(client: TestClient, session: Session):
+    """Player from different game → 404."""
+    game = create_game(session)
+    resp = client.delete(
+        f'/games/{game.id}/players/{uuid.uuid4()}',
+        headers=_headers(game.host_client_id),
+    )
+    assert resp.status_code == 404
+
+
+def test_remove_player_not_in_lobby_422(client: TestClient, session: Session):
+    """Game in hiding → 422."""
+    game = create_game(session, status=GameStatus.hiding)
+    player = create_player(session, game.id)
+    resp = client.delete(
+        f'/games/{game.id}/players/{player.id}',
+        headers=_headers(player.client_id),
+    )
+    assert resp.status_code == 422
+    assert 'lobby' in resp.json()['detail']
+
+
+def test_remove_host_only_player_dissolves(client: TestClient, session: Session):
+    """Host is only player, leaves → 204, game status becomes dissolved."""
+    game = create_game(session)
+    host = create_player(session, game.id, client_id=game.host_client_id)
+    resp = client.delete(
+        f'/games/{game.id}/players/{host.id}',
+        headers=_headers(game.host_client_id),
+    )
+    assert resp.status_code == 204
+    game_resp = client.get(f'/games/{game.id}')
+    assert game_resp.json()['status'] == 'dissolved'
+
+
+def test_remove_host_requires_new_host_422(client: TestClient, session: Session):
+    """Host leaves with others but no new_host_id → 422."""
+    game = create_game(session)
+    host = create_player(session, game.id, client_id=game.host_client_id)
+    create_player(session, game.id)
+    resp = client.delete(
+        f'/games/{game.id}/players/{host.id}',
+        headers=_headers(game.host_client_id),
+    )
+    assert resp.status_code == 422
+    assert 'new_host_id' in resp.json()['detail']
+
+
+def test_remove_host_invalid_new_host_422(client: TestClient, session: Session):
+    """new_host_id is the leaving host → 422."""
+    game = create_game(session)
+    host = create_player(session, game.id, client_id=game.host_client_id)
+    create_player(session, game.id)
+    resp = client.request(
+        'DELETE',
+        f'/games/{game.id}/players/{host.id}',
+        json={'new_host_id': str(host.id)},
+        headers=_headers(game.host_client_id),
+    )
+    assert resp.status_code == 422
+    assert 'another player' in resp.json()['detail']
+
+
+def test_remove_host_transfers_and_leaves(client: TestClient, session: Session):
+    """Host leaves with valid new_host_id → 204, host_client_id updated."""
+    game = create_game(session)
+    host = create_player(session, game.id, client_id=game.host_client_id)
+    successor = create_player(session, game.id, name='Successor')
+    resp = client.request(
+        'DELETE',
+        f'/games/{game.id}/players/{host.id}',
+        json={'new_host_id': str(successor.id)},
+        headers=_headers(game.host_client_id),
+    )
+    assert resp.status_code == 204
+    game_resp = client.get(f'/games/{game.id}')
+    assert game_resp.json()['status'] == 'lobby'
+    assert len(game_resp.json()['players']) == 1
+    assert game_resp.json()['players'][0]['name'] == 'Successor'
+
+
+def test_remove_player_frees_color(client: TestClient, session: Session):
+    """After removal, the freed color is assigned to the next joiner."""
+    game = create_game(session, join_code='FREE')
+    create_player(session, game.id, client_id=game.host_client_id, color=PlayerColor.red)
+    p2 = create_player(session, game.id, color=PlayerColor.blue)
+    # Remove p2 (blue)
+    client.delete(
+        f'/games/{game.id}/players/{p2.id}',
+        headers=_headers(game.host_client_id),
+    )
+    # Join a new player — should get red's next unused, which is blue (freed)
+    new_client = uuid.uuid4()
+    join_resp = client.post(
+        '/games/join',
+        json={'join_code': 'FREE', 'name': 'NewPlayer'},
+        headers=_headers(new_client),
+    )
+    assert join_resp.status_code == 201
+    new_color = join_resp.json()['game']['players'][-1]['color']
+    assert new_color == 'blue'

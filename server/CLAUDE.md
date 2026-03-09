@@ -84,7 +84,14 @@ curl -s -X POST localhost:8000/games/join \
   -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
   -d '{"join_code": "XXXX", "role": "seeker", "name": "Bob", "device_token": "fake-seeker"}'
 
-# 3. Optionally tweak timing for fast testing
+# 3. Remove a player (self-leave or host-kick — lobby only)
+curl -s -X DELETE localhost:8000/games/<game_id>/players/<player_id> \
+  -H "X-Client-Id: $HOST"
+# → 204 (player removed). Non-host can only remove themselves.
+# Host leaving with others: include body {"new_host_id": "<player_uuid>"}
+# Host leaving as sole player: game status → "dissolved"
+
+# 4. Optionally tweak timing for fast testing
 docker exec hideandseek-postgres-1 psql -U hideandseek -c \
   "UPDATE game SET hiding_time_min = 1, base_question_delay_min = 1
    WHERE id = '<game_id>';"
@@ -256,7 +263,7 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 ```
 
 **Key callouts** (things that aren't obvious from file names):
-- `logic/` is the **conversion boundary** — `to_meters()` before geo math, `from_meters()` after. Session-free: uses `db.register()` to persist new objects, mutates already-tracked ORM objects directly (autoflush handles persistence). Submodules: `ask.py` (question creation), `answer.py` (answer computation + exclusion), `endgame.py` (hiding zone + endgame exclusions), `lobby.py` (game creation + join + color assignment), `station.py` (election + transition + fallback + centroid).
+- `logic/` is the **conversion boundary** — `to_meters()` before geo math, `from_meters()` after. Session-free: uses `db.register()` to persist new objects, mutates already-tracked ORM objects directly (autoflush handles persistence). Submodules: `ask.py` (question creation), `answer.py` (answer computation + exclusion), `endgame.py` (hiding zone + endgame exclusions), `lobby.py` (game creation + join + color assignment + player removal), `station.py` (election + transition + fallback + centroid).
 - `db.register(*objects)` — adds objects to session, flushes, returns last object. Enables `question = register(Question(...))` in logic code without importing `get_session`.
 - `exclusion.py` is called from `logic/answer.py` and `logic/endgame.py`, not from routers.
 - `logic/resolution.py` owns feature resolution strategy (containment vs nearest) and answer computation helpers. Category classification constants (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`, `category_key`) live in `models/types.py` alongside `FeatureCategory` — both `logic/` and `queries/` can import them without layer violations.
@@ -319,9 +326,10 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 
 ```
 lobby → hiding → seeking → finished
+lobby → dissolved  (all players left before start)
 ```
 
-The `GameStatus` enum reflects this. The endgame is a client-side lens over the `seeking` phase (see `design/endgame.md`). Games can be ended from any active state (hiding/seeking). `join_code` is cleared when hiding starts (no longer usable after lobby).
+The `GameStatus` enum reflects this. `dissolved` means the game was abandoned in the lobby before it ever started (distinct from `finished` which means a game ran to completion). The endgame is a client-side lens over the `seeking` phase (see `design/endgame.md`). Games can be ended from any active state (hiding/seeking). `join_code` is cleared when hiding starts (no longer usable after lobby).
 
 ### Station Election
 
@@ -363,7 +371,8 @@ Questions cannot be answered while status is `ambiguous`. The auto-answer timer 
 - **Host-as-player**: `POST /games` creates the game and adds the host as the first player. Returns `JoinGameResponse` (game + player_id). The `name` field is required in `CreateGameRequest`.
 - **Server-assigned colors**: `PlayerColor` enum (12 values: red, blue, green, orange, purple, teal, pink, amber, cyan, lime, indigo, coral). Colors are auto-assigned on create/join. Players can swap colors via `PATCH` if the target color is available (409 if taken).
 - **Player cap**: `MAX_PLAYERS = 12`. Join returns 409 when full.
-- **Auth guards**: `PATCH /players/{id}` requires matching `X-Client-Id` (self-only, 403 otherwise). `POST /games/{id}/start` is host-only (403 if `client_id != game.host_client_id`).
+- **Auth guards**: `PATCH /players/{id}` requires matching `X-Client-Id` (self-only, 403 otherwise). `POST /games/{id}/start` is host-only (403 if `client_id != game.host_client_id`). `DELETE /players/{id}` allows self-leave or host-kick (403 otherwise).
+- **Player removal** (`DELETE /games/{id}/players/{pid}`): lobby-only (422 if not in lobby). Self-leave or host-kick. When the host leaves: if sole player → game dissolves (`dissolved` status); if others remain → must provide `new_host_id` in `RemovePlayerRequest` body to transfer host. Freed colors are re-assignable to new joiners.
 - `device_token` is optional on both `POST /games` and `POST /games/join`. Can also be set via `PATCH /players/{id}`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
 - Push notification env vars: `APNS_KEY_PATH`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_USE_SANDBOX`. All optional — when missing, PushService runs in no-op mode.
 - Database env vars: `DATABASE_URL` (required — no default). Docker Compose sets `postgresql+psycopg://...`. `scripts/dev.sh` defaults to the docker-compose PostgreSQL.

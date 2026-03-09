@@ -121,6 +121,15 @@ def update_game_status(game: Game, status: GameStatus) -> Game:
     return game
 
 
+def delete_player(player: Player) -> None:
+    """Delete a player row and expire the parent game's player list."""
+    session = get_session()
+    game = player.game
+    session.delete(player)
+    session.flush()
+    session.expire(game, ['players'])
+
+
 def set_hider_station(
     game: Game,
     station: Stop,

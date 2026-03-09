@@ -252,6 +252,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - games
+      summary: Remove Player
+      description: Remove a player from the lobby. Self-leave or host-kick.
+      operationId: remove_player_games__game_id__players__player_id__delete
+      parameters:
+      - name: player_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Player Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-client-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Client-Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/RemovePlayerRequest'
+              - type: 'null'
+              title: Body
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/start:
     post:
       tags:
@@ -1659,6 +1704,7 @@ components:
       - hiding
       - seeking
       - finished
+      - dissolved
       title: GameStatus
     GeometryCollection:
       properties:
@@ -2615,6 +2661,19 @@ components:
       - radius
       title: RadarParamsResponse
       description: Parameters for a radar question.
+    RemovePlayerRequest:
+      properties:
+        new_host_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: New Host Id
+          description: Player ID to transfer host to. Required when the host leaves
+            and other players remain.
+      type: object
+      title: RemovePlayerRequest
+      description: Body for DELETE /games/{game_id}/players/{player_id}.
     RouteResponse:
       properties:
         id:

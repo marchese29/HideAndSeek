@@ -134,7 +134,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove Player
+         * @description Remove a player from the lobby. Self-leave or host-kick.
+         */
+        delete: operations["remove_player_games__game_id__players__player_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -922,7 +926,7 @@ export interface components {
          * GameStatus
          * @enum {string}
          */
-        GameStatus: "lobby" | "hiding" | "seeking" | "finished";
+        GameStatus: "lobby" | "hiding" | "seeking" | "finished" | "dissolved";
         /**
          * GeometryCollection
          * @description GeometryCollection Model
@@ -1564,6 +1568,17 @@ export interface components {
             radius: number;
         };
         /**
+         * RemovePlayerRequest
+         * @description Body for DELETE /games/{game_id}/players/{player_id}.
+         */
+        RemovePlayerRequest: {
+            /**
+             * New Host Id
+             * @description Player ID to transfer host to. Required when the host leaves and other players remain.
+             */
+            new_host_id?: string | null;
+        };
+        /**
          * RouteResponse
          * @description A transit route on the effective game map, with ordered stop IDs.
          */
@@ -1900,6 +1915,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InventoryResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_player_games__game_id__players__player_id__delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-client-id": string;
+            };
+            path: {
+                player_id: string;
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RemovePlayerRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

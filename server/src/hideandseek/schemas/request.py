@@ -107,6 +107,17 @@ class ElectStationRequest(BaseModel):
     location: Point = Field(description='Current hider position as a GeoJSON Point.')
 
 
+class RemovePlayerRequest(BaseModel):
+    """Body for DELETE /games/{game_id}/players/{player_id}."""
+
+    new_host_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            'Player ID to transfer host to. Required when the host leaves and other players remain.'
+        ),
+    )
+
+
 class PreviewQuestionRequest(BaseModel):
     """Preview the nearest feature for a matching/measuring question without consuming inventory."""
 

@@ -126,6 +126,28 @@ HIDER_RESP=$(curl -sf -X POST "$BASE/games/join" \
 HIDER_ID=$(echo "$HIDER_RESP" | jq_val "['player_id']")
 echo "  Hider ID: $HIDER_ID"
 
+TEMP_CLIENT="77777777-7777-7777-7777-777777777777"
+echo ""
+echo "=== POST /games/join (temp player for kick test) ==="
+TEMP_RESP=$(curl -sf -X POST "$BASE/games/join" \
+  -H "Content-Type: application/json" \
+  -H "X-Client-Id: $TEMP_CLIENT" \
+  -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"TempPlayer\"}")
+TEMP_ID=$(echo "$TEMP_RESP" | jq_val "['player_id']")
+echo "  Temp ID: $TEMP_ID"
+
+echo ""
+echo "=== DELETE player (host kicks temp player) ==="
+KICK_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+  "$BASE/games/$GAME_ID/players/$TEMP_ID" \
+  -H "X-Client-Id: $HOST_CLIENT")
+assert_eq "kick status" "$KICK_STATUS" "204"
+
+echo ""
+echo "=== Verify game has 3 players after kick ==="
+PLAYER_COUNT=$(curl -sf "$BASE/games/$GAME_ID" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['players']))")
+assert_eq "player count after kick" "$PLAYER_COUNT" "3"
+
 echo ""
 echo "=== Assign roles + start + force seeking ==="
 curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$HOST_PLAYER_ID" \
