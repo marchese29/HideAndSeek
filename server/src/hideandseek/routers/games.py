@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from shapely.geometry import Point
 
+from hideandseek.broadcast import GameStartedEvent, PlayerUpdatedEvent, emit
 from hideandseek.celery_app import app as celery_app
 from hideandseek.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
 from hideandseek.db import session_dependency
@@ -183,6 +184,8 @@ def patch_player(
             token=updates['device_token'],
             environment=body.device_token_environment,
         )
+    if game.status.is_lobby:
+        emit(PlayerUpdatedEvent(game=game, player=player))
     return PlayerResponse.from_model(player)
 
 
@@ -242,12 +245,7 @@ def start_game(
         task_id=f'hiding_timer:{game.id}',
     )
 
-    # Push: game started
-    send_push.delay(  # type: ignore[attr-defined]
-        str(game.id),
-        PushEventType.game_started,
-        alert='Game on! The hiding phase has begun.',
-    )
+    emit(GameStartedEvent(game=game))
 
     return GameResponse.from_model(game)
 

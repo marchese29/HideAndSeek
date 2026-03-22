@@ -76,6 +76,10 @@ curl -s -X POST localhost:8000/games \
 # → returns JoinGameResponse: game state under ['game'], host player_id at ['player_id']
 # → host gets server-assigned color (red, blue, green, ...)
 
+# 1b. Connect to lobby SSE stream (in another terminal — stays open)
+curl -N "localhost:8000/games/<game_id>/lobby/events?client_id=$HOST"
+# → initial game_state event, then real-time player_joined/updated/left/host_changed/game_started
+
 # 2. Join as hider and seeker (no color field — server assigns unique colors)
 curl -s -X POST localhost:8000/games/join \
   -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
@@ -240,12 +244,17 @@ src/hideandseek/
   gtfs.py                                # Reusable GTFS feed parser (pure data, no DB deps)
   config.py, push.py, utils.py          # Push config, APNS service, shared utils
   celery_app.py, celery_config.py       # Celery instance + broker config
+  redis_client.py                       # Redis client factory (sync + async), URL resolution
+  broadcast/                            # Unified event broadcast (SSE + push routing)
+    events.py                           # Typed lobby event dataclasses (LobbyEvent union)
+    emit.py                             # Publish logic: pattern-match on event → SSE + push
+    subscribe.py                        # SSE streaming: Redis subscribe + initial game_state
   logic/                                # Business logic (session-free)
     ask.py                              # Question creation (radar, thermometer, matching, measuring)
     answer.py                           # Answer computation, exclusion accumulation, veto, abandon
     resolution.py                       # Feature resolution strategy, answer computation helpers
     endgame.py                          # Hiding zone radius, endgame exclusions, candidate stations
-    lobby.py                            # Game creation with host-as-player, join with color assignment
+    lobby.py                            # Game creation, join, color, removal + emit() calls
     station.py                          # Station election, transition, fallback, hider centroid
   models/                               # SQLAlchemy declarative models (base, types, geo_types,
                                         #   transit, game_map, map_feature, game, inventory,
@@ -253,7 +262,7 @@ src/hideandseek/
   schemas/                              # Pydantic request/response schemas + common utils
   queries/                              # DB query functions by domain (games, maps, questions,
                                         #   location, features, stops, effective_map, device_tokens)
-  routers/                              # API routes (games, maps, location, questions, endgame)
+  routers/                              # API routes (games, maps, location, questions, endgame, events)
   tasks/                                # Celery tasks (game_timers, push)
 tests/                                  # pytest (one file per router + features, geo, resolution,
                                         #   exclusion, conventions)
@@ -282,6 +291,14 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 - **Background jobs (Celery + Redis)**: All push delivery and game timers go through Celery tasks. Broker resolution: (1) `CELERY_BROKER_URL` env var if set, (2) auto-detect Redis on `localhost:6379`, (3) eager mode (tasks run synchronously in-process). Set `CELERY_BROKER_URL=''` to force eager mode when Redis is running. Routers call `.delay()` or `.apply_async()` instead of `BackgroundTasks`. Worker tasks use `session_scope()` to get a DB session with ContextVar — all query functions using `db.get_session()` work naturally inside the `with session_scope():` block.
 - **Task ID convention**: Deterministic IDs (`hiding_timer:{game_id}`, `answer_deadline:{question_id}`) so the API can revoke tasks without storing IDs in the DB.
 - **Push notifications**: `PushService` wraps `aioapns` for APNS delivery. No-ops silently when env vars are missing (dev/test). All push delivery goes through the `send_push` Celery task (with retry). Event types are defined by `PushEventType` enum. See `design/push-notifications.md` for payload specs.
+- **Broadcast (SSE + push)**: Unified event emission via `broadcast.emit()`. The logic layer calls `emit()` with typed event dataclasses — it doesn't know about SSE, Redis, or push. `emit()` pattern-matches on event type, serializes via response schemas, and routes to channels:
+  - **SSE** (Redis pub/sub): real-time data for connected clients. Channel: `game:{id}:lobby:events`. Lobby-only events (`player_joined`, `player_updated`, `player_left`, `host_changed`) are SSE-only — Redis failure propagates (no fallback).
+  - **Push** (Celery): wake-up for backgrounded clients. `game_started` is dual-channel — SSE failure is logged and swallowed, push still delivers independently.
+  - **SSE endpoint** (`GET /games/{id}/lobby/events?client_id=...`): separate router (`routers/events.py`), no `session_dependency` (SSE outlives the request). Auth via short-lived `session_scope()`. Returns `EventSourceResponse` from `sse-starlette`. Initial `game_state` event sent on connect, then real-time events via Redis subscription. Reconnecting clients get fresh state (no gap recovery needed).
+  - **Redis client** (`redis_client.py`): `get_redis_url()` resolves URL (env var → auto-detect → None). `get_sync_redis()` for publish, `get_async_redis()` for subscribe. Returns None when unavailable.
+  - **`LobbyEventType` enum** (`models/types.py`): `game_state`, `player_joined`, `player_updated`, `player_left`, `host_changed`, `game_started`.
+  - **Emit call sites**: `logic/lobby.py` (join → `PlayerJoinedEvent`, remove → `PlayerLeftEvent` + `HostChangedEvent`), `routers/games.py` (patch → `PlayerUpdatedEvent` if lobby, start → `GameStartedEvent`). `create_game_with_host()` does NOT emit (no SSE subscribers yet).
+  - **Future**: `GET /games/{id}/events` for in-game phase (separate channel, lifecycle, auth). Existing in-game push events will migrate to `emit()`.
 - **Test fixtures**: The `session` fixture sets `_session_var` so `db.get_session()` works in tests. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_inventory_slot`, `create_map_feature`, `create_game_map_feature`) create test data with sensible defaults and accept `**overrides`. `create_game` automatically creates all `InventorySlot` rows — radar/thermometer from the default template, plus matching/measuring from map feature categories.
 - **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
 - **Geometry — three layers**: Geometry flows through three representations:

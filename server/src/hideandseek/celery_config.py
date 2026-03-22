@@ -14,9 +14,9 @@ import os
 
 import structlog
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+from hideandseek.redis_client import get_redis_url
 
-_LOCAL_REDIS_URL = 'redis://localhost:6379/0'
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 def _resolve_broker() -> str:
@@ -24,18 +24,7 @@ def _resolve_broker() -> str:
     explicit = os.environ.get('CELERY_BROKER_URL')
     if explicit is not None:
         return explicit
-
-    try:
-        import redis  # noqa: PLC0415
-
-        conn = redis.Redis.from_url(_LOCAL_REDIS_URL, socket_connect_timeout=0.5)
-        conn.ping()
-        conn.close()
-        logger.info('celery_broker_auto_detected', url=_LOCAL_REDIS_URL)
-        return _LOCAL_REDIS_URL
-    except Exception:
-        logger.info('celery_broker_eager_mode', reason='no broker configured or reachable')
-        return ''
+    return get_redis_url() or ''
 
 
 _broker = _resolve_broker()

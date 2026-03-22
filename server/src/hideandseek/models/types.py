@@ -196,6 +196,15 @@ class StationElectionStatus(StrEnum):
     ambiguous = 'ambiguous'
 
 
+class LobbyEventType(StrEnum):
+    game_state = 'game_state'
+    player_joined = 'player_joined'
+    player_updated = 'player_updated'
+    player_left = 'player_left'
+    host_changed = 'host_changed'
+    game_started = 'game_started'
+
+
 class PushEventType(StrEnum):
     game_started = 'game_started'
     phase_changed = 'phase_changed'

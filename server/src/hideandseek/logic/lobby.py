@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+from hideandseek.broadcast import HostChangedEvent, PlayerJoinedEvent, PlayerLeftEvent, emit
 from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.types import MAX_PLAYERS, GameStatus, PlayerColor
@@ -66,7 +67,9 @@ def join_game(
         msg = 'Game is full (12 players max).'
         raise ValueError(msg)
     color = assign_color(game)
-    return add_player(game, client_id=client_id, name=body.name, color=color, role=body.role)
+    player = add_player(game, client_id=client_id, name=body.name, color=color, role=body.role)
+    emit(PlayerJoinedEvent(game=game, player=player))
+    return player
 
 
 def remove_player(
@@ -95,6 +98,7 @@ def remove_player(
         raise PermissionError(msg)
 
     target_is_host = player.client_id == game.host_client_id
+    removed_player_id = player.id
 
     if target_is_host:
         # Host is leaving
@@ -114,10 +118,13 @@ def remove_player(
             raise ValueError(msg)
         game.host_client_id = new_host.client_id
         delete_player(player)
+        emit(PlayerLeftEvent(game=game, player_id=removed_player_id))
+        emit(HostChangedEvent(game=game, new_host_player_id=new_host.id))
         return
 
     # Non-host removal (self-leave or host-kick)
     delete_player(player)
+    emit(PlayerLeftEvent(game=game, player_id=removed_player_id))
 
 
 def _find_player_in_game(game: Game, player_id: uuid.UUID) -> Player | None:

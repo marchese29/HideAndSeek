@@ -20,6 +20,7 @@ dependencies = [
     "geojson-pydantic>=2.1.0",
     "pyproj>=3.7.2",
     "sqlalchemy>=2.0.46",
+    "sse-starlette>=3.3.3",
 ]
 
 [dependency-groups]
@@ -29,6 +30,7 @@ dev = [
     "ruff>=0.11.0",
     "pyright>=1.1.0",
     "testcontainers[postgres]>=4.14.1",
+    "fakeredis[lua]>=2.34.1",
 ]
 
 [tool.ruff]
