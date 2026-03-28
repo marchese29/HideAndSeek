@@ -1637,6 +1637,11 @@ components:
           type: string
           format: uuid
           title: Map Id
+        host_player_id:
+          type: string
+          format: uuid
+          title: Host Player Id
+          description: Player ID of the game's host.
         status:
           $ref: '#/components/schemas/GameStatus'
         convention:
@@ -1687,6 +1692,7 @@ components:
       required:
       - id
       - map_id
+      - host_player_id
       - status
       - convention
       - join_code

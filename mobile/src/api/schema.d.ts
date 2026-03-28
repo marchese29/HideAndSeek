@@ -881,6 +881,12 @@ export interface components {
              * Format: uuid
              */
             map_id: string;
+            /**
+             * Host Player Id
+             * Format: uuid
+             * @description Player ID of the game's host.
+             */
+            host_player_id: string;
             status: components["schemas"]["GameStatus"];
             /**
              * Convention

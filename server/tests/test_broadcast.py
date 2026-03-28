@@ -184,6 +184,7 @@ class TestEmitGameStarted:
         assert len(messages) == 1
         parsed = json.loads(messages[0]['data'])
         assert parsed['event'] == LobbyEventType.game_started
+        assert 'host_player_id' in parsed['data']
 
     @pytest.mark.usefixtures('_patch_no_redis')
     def test_still_sends_push_when_redis_unavailable(self, session: Session) -> None:

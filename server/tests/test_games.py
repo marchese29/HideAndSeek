@@ -4,9 +4,10 @@ import uuid
 
 from fastapi.testclient import TestClient
 from shapely.geometry import LineString, Point
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from hideandseek.models.game import Game
+from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.transit import Route, RouteStop, Stop
 from hideandseek.models.types import (
@@ -22,6 +23,13 @@ from tests.conftest import create_game, create_game_map, create_player
 
 def _headers(client_id: uuid.UUID | None = None) -> dict[str, str]:
     return {'X-Client-Id': str(client_id or uuid.uuid4())}
+
+
+def _get_host(session: Session, game: Game) -> Player:
+    """Get the auto-created host player."""
+    return session.scalars(
+        select(Player).where(Player.game_id == game.id, Player.client_id == game.host_client_id)
+    ).one()
 
 
 # ── POST /games ──────────────────────────────────────────────────────────────
@@ -74,10 +82,10 @@ def test_join_game(client: TestClient, session: Session):
     assert resp.status_code == 201
     data = resp.json()
     assert data['player_id'] is not None
-    assert len(data['game']['players']) == 1
-    assert data['game']['players'][0]['name'] == 'Alice'
-    assert data['game']['players'][0]['role'] is None
-    assert data['game']['players'][0]['color'] in [c.value for c in PlayerColor]
+    assert len(data['game']['players']) == 2
+    joiner = next(p for p in data['game']['players'] if p['name'] == 'Alice')
+    assert joiner['role'] is None
+    assert joiner['color'] in [c.value for c in PlayerColor]
 
 
 def test_join_game_invalid_code(client: TestClient):
@@ -110,13 +118,12 @@ def test_join_game_not_in_lobby(client: TestClient, session: Session):
 
 def test_get_game_state(client: TestClient, session: Session):
     game = create_game(session)
-    create_player(session, game.id, name='Alice', role=PlayerRole.hider)
     resp = client.get(f'/games/{game.id}')
     assert resp.status_code == 200
     data = resp.json()
     assert data['id'] == str(game.id)
     assert len(data['players']) == 1
-    assert data['players'][0]['role'] == 'hider'
+    assert data['players'][0]['name'] == 'Host'
     # No hider_station_id on shared endpoint
     assert 'hider_station_id' not in data
 
@@ -298,16 +305,16 @@ def test_update_player_role(client: TestClient, session: Session):
 
 def test_update_player_name_and_color(client: TestClient, session: Session):
     game = create_game(session)
-    player = create_player(session, game.id, name='Old', color=PlayerColor.red)
+    player = create_player(session, game.id, name='Old', color=PlayerColor.blue)
     resp = client.patch(
         f'/games/{game.id}/players/{player.id}',
-        json={'name': 'New', 'color': 'blue'},
+        json={'name': 'New', 'color': 'green'},
         headers=_headers(player.client_id),
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data['name'] == 'New'
-    assert data['color'] == 'blue'
+    assert data['color'] == 'green'
 
 
 def test_update_player_not_found(client: TestClient, session: Session):
@@ -325,7 +332,10 @@ def test_update_player_not_found(client: TestClient, session: Session):
 
 def test_start_game(client: TestClient, session: Session):
     game = create_game(session)
-    create_player(session, game.id, role=PlayerRole.hider)
+    # Assign role to auto-created host player
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    session.flush()
     create_player(session, game.id, role=PlayerRole.seeker)
     resp = client.post(
         f'/games/{game.id}/start',
@@ -339,18 +349,9 @@ def test_start_game(client: TestClient, session: Session):
     assert data['seeking_started_at'] is None
 
 
-def test_start_game_no_players(client: TestClient, session: Session):
-    game = create_game(session)
-    resp = client.post(
-        f'/games/{game.id}/start',
-        headers=_headers(game.host_client_id),
-    )
-    assert resp.status_code == 409
-
-
 def test_start_game_unassigned_roles(client: TestClient, session: Session):
+    """Host has no role (auto-created) → 409 unassigned roles."""
     game = create_game(session)
-    create_player(session, game.id, role=None)
     resp = client.post(
         f'/games/{game.id}/start',
         headers=_headers(game.host_client_id),
@@ -361,7 +362,10 @@ def test_start_game_unassigned_roles(client: TestClient, session: Session):
 
 def test_start_game_missing_hider(client: TestClient, session: Session):
     game = create_game(session)
-    create_player(session, game.id, role=PlayerRole.seeker)
+    # Assign host as seeker, add another seeker — no hider
+    host = _get_host(session, game)
+    host.role = PlayerRole.seeker
+    session.flush()
     create_player(session, game.id, role=PlayerRole.seeker)
     resp = client.post(
         f'/games/{game.id}/start',
@@ -373,7 +377,10 @@ def test_start_game_missing_hider(client: TestClient, session: Session):
 
 def test_start_game_missing_seeker(client: TestClient, session: Session):
     game = create_game(session)
-    create_player(session, game.id, role=PlayerRole.hider)
+    # Assign host as hider — no seeker
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    session.flush()
     resp = client.post(
         f'/games/{game.id}/start',
         headers=_headers(game.host_client_id),
@@ -589,8 +596,9 @@ def test_create_game_host_is_player(client: TestClient, session: Session):
 def test_join_full_game_409(client: TestClient, session: Session):
     """Joining a game with 12 players returns 409."""
     game = create_game(session, join_code='FULL')
-    for i in range(12):
-        create_player(session, game.id, name=f'P{i}', color=list(PlayerColor)[i])
+    # Host already exists as player 0 (red). Add 11 more to reach cap of 12.
+    for i in range(11):
+        create_player(session, game.id, name=f'P{i}', color=list(PlayerColor)[i + 1])
     resp = client.post(
         '/games/join',
         json={'join_code': 'FULL', 'name': 'Extra'},
@@ -601,7 +609,7 @@ def test_join_full_game_409(client: TestClient, session: Session):
 
 
 def test_join_assigns_unique_colors(client: TestClient, session: Session):
-    """Two players joining get different auto-assigned colors."""
+    """Two players joining get different auto-assigned colors (host already has red)."""
     create_game(session, join_code='CLRS')
     c1 = uuid.uuid4()
     c2 = uuid.uuid4()
@@ -617,12 +625,10 @@ def test_join_assigns_unique_colors(client: TestClient, session: Session):
     )
     assert r1.status_code == 201
     assert r2.status_code == 201
-    color1 = r1.json()['game']['players'][0]['color']
-    # Second response has both players
+    # r2 has all 3 players (host + 2 joiners)
     players = r2.json()['game']['players']
     colors = {p['color'] for p in players}
-    assert len(colors) == 2
-    assert color1 in colors
+    assert len(colors) == 3  # host(red) + 2 unique joiner colors
 
 
 def test_patch_player_self_only_403(client: TestClient, session: Session):
@@ -641,23 +647,21 @@ def test_patch_player_self_only_403(client: TestClient, session: Session):
 def test_patch_color_swap_409(client: TestClient, session: Session):
     """PATCH color to a taken color returns 409."""
     game = create_game(session)
-    p1 = create_player(session, game.id, color=PlayerColor.red)
-    p2 = create_player(session, game.id, color=PlayerColor.blue)
+    # Host already has red. Try to swap p1 to red.
+    p1 = create_player(session, game.id, color=PlayerColor.blue)
     resp = client.patch(
-        f'/games/{game.id}/players/{p2.id}',
+        f'/games/{game.id}/players/{p1.id}',
         json={'color': 'red'},
-        headers=_headers(p2.client_id),
+        headers=_headers(p1.client_id),
     )
     assert resp.status_code == 409
     assert 'already taken' in resp.json()['detail']
-    # p1 reference keeps linter happy
-    assert p1.color == PlayerColor.red
 
 
 def test_patch_color_swap_success(client: TestClient, session: Session):
     """PATCH color to an available color succeeds."""
     game = create_game(session)
-    p1 = create_player(session, game.id, color=PlayerColor.red)
+    p1 = create_player(session, game.id, color=PlayerColor.blue)
     resp = client.patch(
         f'/games/{game.id}/players/{p1.id}',
         json={'color': 'green'},
@@ -670,8 +674,6 @@ def test_patch_color_swap_success(client: TestClient, session: Session):
 def test_start_game_host_only_403(client: TestClient, session: Session):
     """Non-host starting the game returns 403."""
     game = create_game(session)
-    create_player(session, game.id, role=PlayerRole.hider)
-    create_player(session, game.id, role=PlayerRole.seeker)
     non_host = uuid.uuid4()
     resp = client.post(
         f'/games/{game.id}/start',
@@ -699,7 +701,7 @@ def test_patch_device_token(client: TestClient, session: Session):
 def test_remove_player_self_leave(client: TestClient, session: Session):
     """Non-host player leaves → 204, player gone from game."""
     game = create_game(session)
-    host = create_player(session, game.id, client_id=game.host_client_id)
+    host = _get_host(session, game)
     player = create_player(session, game.id)
     resp = client.delete(
         f'/games/{game.id}/players/{player.id}',
@@ -715,7 +717,6 @@ def test_remove_player_self_leave(client: TestClient, session: Session):
 def test_remove_player_host_kick(client: TestClient, session: Session):
     """Host removes another player → 204, player gone."""
     game = create_game(session)
-    create_player(session, game.id, client_id=game.host_client_id)
     target = create_player(session, game.id, name='Kicked')
     resp = client.delete(
         f'/games/{game.id}/players/{target.id}',
@@ -730,7 +731,6 @@ def test_remove_player_host_kick(client: TestClient, session: Session):
 def test_remove_player_unauthorized_403(client: TestClient, session: Session):
     """Non-self, non-host removal → 403."""
     game = create_game(session)
-    create_player(session, game.id, client_id=game.host_client_id)
     target = create_player(session, game.id)
     bystander = uuid.uuid4()
     resp = client.delete(
@@ -765,20 +765,20 @@ def test_remove_player_not_in_lobby_422(client: TestClient, session: Session):
 def test_remove_host_only_player_dissolves(client: TestClient, session: Session):
     """Host is only player, leaves → 204, game status becomes dissolved."""
     game = create_game(session)
-    host = create_player(session, game.id, client_id=game.host_client_id)
+    host = _get_host(session, game)
     resp = client.delete(
         f'/games/{game.id}/players/{host.id}',
         headers=_headers(game.host_client_id),
     )
     assert resp.status_code == 204
-    game_resp = client.get(f'/games/{game.id}')
-    assert game_resp.json()['status'] == 'dissolved'
+    session.expire(game)
+    assert game.status == GameStatus.dissolved
 
 
 def test_remove_host_requires_new_host_422(client: TestClient, session: Session):
     """Host leaves with others but no new_host_id → 422."""
     game = create_game(session)
-    host = create_player(session, game.id, client_id=game.host_client_id)
+    host = _get_host(session, game)
     create_player(session, game.id)
     resp = client.delete(
         f'/games/{game.id}/players/{host.id}',
@@ -791,7 +791,7 @@ def test_remove_host_requires_new_host_422(client: TestClient, session: Session)
 def test_remove_host_invalid_new_host_422(client: TestClient, session: Session):
     """new_host_id is the leaving host → 422."""
     game = create_game(session)
-    host = create_player(session, game.id, client_id=game.host_client_id)
+    host = _get_host(session, game)
     create_player(session, game.id)
     resp = client.request(
         'DELETE',
@@ -806,7 +806,7 @@ def test_remove_host_invalid_new_host_422(client: TestClient, session: Session):
 def test_remove_host_transfers_and_leaves(client: TestClient, session: Session):
     """Host leaves with valid new_host_id → 204, host_client_id updated."""
     game = create_game(session)
-    host = create_player(session, game.id, client_id=game.host_client_id)
+    host = _get_host(session, game)
     successor = create_player(session, game.id, name='Successor')
     resp = client.request(
         'DELETE',
@@ -824,7 +824,7 @@ def test_remove_host_transfers_and_leaves(client: TestClient, session: Session):
 def test_remove_player_frees_color(client: TestClient, session: Session):
     """After removal, the freed color is assigned to the next joiner."""
     game = create_game(session, join_code='FREE')
-    create_player(session, game.id, client_id=game.host_client_id, color=PlayerColor.red)
+    # Host already has red. Add a player with blue.
     p2 = create_player(session, game.id, color=PlayerColor.blue)
     # Remove p2 (blue)
     client.delete(

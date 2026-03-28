@@ -40,6 +40,15 @@ class Game(Base):
     excluded_route_ids: Mapped[list] = mapped_column(sa.JSON, default=list)
     hiding_zone_radius_override: Mapped[float | None] = mapped_column(default=None)
 
+    @property
+    def host_player_id(self) -> uuid.UUID:
+        """Resolve the host's player ID from host_client_id via the players relationship."""
+        for player in self.players:
+            if player.client_id == self.host_client_id:
+                return player.id
+        msg = f'No player with client_id={self.host_client_id} in game {self.id}'
+        raise ValueError(msg)
+
     game_map: Mapped[GameMap] = relationship(back_populates='games')
     hider_station: Mapped[Stop | None] = relationship()
     players: Mapped[list[Player]] = relationship(back_populates='game')

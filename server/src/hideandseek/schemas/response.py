@@ -168,6 +168,7 @@ class GameResponse(BaseModel):
 
     id: uuid.UUID
     map_id: uuid.UUID
+    host_player_id: uuid.UUID = Field(description="Player ID of the game's host.")
     status: GameStatus
     convention: str = Field(description='Distance convention: "metric" or "imperial".')
     join_code: str | None = Field(
@@ -192,6 +193,7 @@ class GameResponse(BaseModel):
         return GameResponse(
             id=game.id,
             map_id=game.map_id,
+            host_player_id=game.host_player_id,
             status=game.status,
             convention=game.game_map.convention,
             join_code=game.join_code,

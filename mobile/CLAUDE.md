@@ -22,12 +22,22 @@ This app requires **development builds** (not Expo Go) because `react-native-map
 
 ```
 app/                           # expo-router file-based routes (stack navigator)
-  _layout.tsx                  # Root Stack layout
+  _layout.tsx                  # Root Stack layout + QueryClientProvider
   index.tsx                    # Home screen
+  create.tsx                   # Create Game screen
+  join.tsx                     # Join Game screen
+  lobby/
+    [game_id].tsx              # Lobby screen
 src/
   api/
     schema.d.ts                # Auto-generated from OpenAPI — DO NOT EDIT
-    client.ts                  # openapi-fetch wrapper
+    client.ts                  # openapi-fetch wrapper + X-Client-Id middleware
+    queryClient.ts             # TanStack Query client instance
+  store.ts                     # Zustand store (client identity + session)
+  constants/
+    colors.ts                  # PlayerColor → hex mapping
+  hooks/                       # Custom React hooks
+  components/                  # Reusable UI components
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types
 assets/                        # Images, fonts
@@ -60,6 +70,13 @@ const { data, error } = await api.GET('/games/{game_id}', {
 
 Copy `.env.example` to `.env` and fill in values.
 
+## State Management
+
+- **Zustand** (`src/store.ts`) — client identity and session context. `clientId` (UUID, generated once, persisted to AsyncStorage), `gameId`, `playerId`. Does NOT hold game data.
+- **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (game state, maps). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for game state.
+- `X-Client-Id` header is injected at runtime via `api.use()` middleware in `client.ts`. For endpoints where the OpenAPI spec declares `x-client-id` as a required header parameter, also pass `header: authHeader()` in the `params` object to satisfy TypeScript types. Import `authHeader` from `@/api/auth`.
+- API base URL is platform-aware: `localhost:8000` for iOS simulator, `10.0.2.2:8000` for Android emulator. Override via `EXPO_PUBLIC_API_BASE_URL`.
+
 ## Conventions
 
 - TypeScript strict mode enabled
@@ -68,3 +85,4 @@ Copy `.env.example` to `.env` and fill in values.
 - Navigation is stack-based (not tabs) — game flow is sequential
 - Routes live in `app/`, everything else in `src/`
 - `.npmrc` has `legacy-peer-deps=true` due to Expo SDK peer dependency mismatches
+- Create/Join → Lobby navigation uses `router.replace` (no going back to forms)

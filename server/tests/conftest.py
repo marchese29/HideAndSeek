@@ -177,6 +177,16 @@ def create_game(session: Session, **overrides: Any) -> Game:
     session.flush()
     session.refresh(game)
 
+    # Create host player (matches real app behavior — POST /games always creates host as player)
+    host_player = Player(
+        game_id=game.id,
+        client_id=defaults['host_client_id'],
+        name='Host',
+        color=PlayerColor.red,
+    )
+    session.add(host_player)
+    session.flush()
+
     # Create InventorySlot rows from the template + map features
     _create_inventory_slots(session, game, inventory_template)
 
