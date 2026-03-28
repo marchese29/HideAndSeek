@@ -18,17 +18,17 @@ from hideandseek.models.types import (
     StationElectionStatus,
 )
 from hideandseek.queries.games import set_hider_station
-from tests.conftest import create_game, create_game_map, create_player
+from tests.conftest import TEST_SECRET, create_game, create_game_map, create_player
 
 
-def _headers(client_id: uuid.UUID | None = None) -> dict[str, str]:
-    return {'X-Client-Id': str(client_id or uuid.uuid4())}
+def _headers(player_id: uuid.UUID) -> dict[str, str]:
+    return {'X-Player-Id': str(player_id), 'X-Player-Secret': TEST_SECRET}
 
 
 def _get_host(session: Session, game: Game) -> Player:
     """Get the auto-created host player."""
     return session.scalars(
-        select(Player).where(Player.game_id == game.id, Player.client_id == game.host_client_id)
+        select(Player).where(Player.game_id == game.id, Player.id == game.host_player_id)
     ).one()
 
 
@@ -37,16 +37,15 @@ def _get_host(session: Session, game: Game) -> Player:
 
 def test_create_game(client: TestClient, session: Session):
     gm = create_game_map(session)
-    host_client = uuid.uuid4()
     resp = client.post(
         '/games',
         json={'map_id': str(gm.id), 'name': 'Host'},
-        headers=_headers(host_client),
     )
     assert resp.status_code == 201
     data = resp.json()
     assert 'game' in data
     assert 'player_id' in data
+    assert 'player_secret' in data
     game = data['game']
     assert game['status'] == 'lobby'
     assert game['map_id'] == str(gm.id)
@@ -60,7 +59,6 @@ def test_create_game_map_not_found(client: TestClient):
     resp = client.post(
         '/games',
         json={'map_id': str(uuid.uuid4()), 'name': 'Host'},
-        headers=_headers(),
     )
     assert resp.status_code == 404
 
@@ -70,18 +68,17 @@ def test_create_game_map_not_found(client: TestClient):
 
 def test_join_game(client: TestClient, session: Session):
     create_game(session, join_code='ABCD')
-    client_id = uuid.uuid4()
     resp = client.post(
         '/games/join',
         json={
             'join_code': 'ABCD',
             'name': 'Alice',
         },
-        headers=_headers(client_id),
     )
     assert resp.status_code == 201
     data = resp.json()
     assert data['player_id'] is not None
+    assert 'player_secret' in data
     assert len(data['game']['players']) == 2
     joiner = next(p for p in data['game']['players'] if p['name'] == 'Alice')
     assert joiner['role'] is None
@@ -95,7 +92,6 @@ def test_join_game_invalid_code(client: TestClient):
             'join_code': 'ZZZZ',
             'name': 'Bob',
         },
-        headers=_headers(),
     )
     assert resp.status_code == 404
 
@@ -108,7 +104,6 @@ def test_join_game_not_in_lobby(client: TestClient, session: Session):
             'join_code': 'WXYZ',
             'name': 'Charlie',
         },
-        headers=_headers(),
     )
     assert resp.status_code == 409
 
@@ -222,7 +217,7 @@ def test_hider_station_endpoint_hider_sees_station(client: TestClient, session: 
     stop_id = _create_stop(session, game_map.transit_dataset_id)
     _set_hider_station(session, game, stop_id)
 
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.client_id))
+    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.id))
     assert resp.status_code == 200
     data = resp.json()
     assert data['hider_station_id'] == str(stop_id)
@@ -239,7 +234,7 @@ def test_hider_station_endpoint_seeker_403(client: TestClient, session: Session)
     stop_id = _create_stop(session, game_map.transit_dataset_id)
     _set_hider_station(session, game, stop_id)
 
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(seeker.client_id))
+    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(seeker.id))
     assert resp.status_code == 403
 
 
@@ -261,7 +256,7 @@ def test_hider_station_pending_when_not_assigned(client: TestClient, session: Se
     game = create_game(session, status=GameStatus.seeking)
     hider = create_player(session, game.id, role=PlayerRole.hider)
 
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.client_id))
+    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.id))
     assert resp.status_code == 200
     data = resp.json()
     assert data['hider_station_id'] is None
@@ -273,7 +268,7 @@ def test_hider_station_409_when_lobby(client: TestClient, session: Session):
     game = create_game(session, status=GameStatus.lobby)
     hider = create_player(session, game.id, role=PlayerRole.hider)
 
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.client_id))
+    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.id))
     assert resp.status_code == 409
 
 
@@ -282,7 +277,7 @@ def test_hider_station_available_during_hiding(client: TestClient, session: Sess
     game = create_game(session, status=GameStatus.hiding)
     hider = create_player(session, game.id, role=PlayerRole.hider)
 
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.client_id))
+    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.id))
     assert resp.status_code == 200
     assert resp.json()['station_election_status'] == 'pending'
     assert resp.json()['hider_station_id'] is None
@@ -297,7 +292,7 @@ def test_update_player_role(client: TestClient, session: Session):
     resp = client.patch(
         f'/games/{game.id}/players/{player.id}',
         json={'role': 'seeker'},
-        headers=_headers(player.client_id),
+        headers=_headers(player.id),
     )
     assert resp.status_code == 200
     assert resp.json()['role'] == 'seeker'
@@ -309,7 +304,7 @@ def test_update_player_name_and_color(client: TestClient, session: Session):
     resp = client.patch(
         f'/games/{game.id}/players/{player.id}',
         json={'name': 'New', 'color': 'green'},
-        headers=_headers(player.client_id),
+        headers=_headers(player.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -319,10 +314,11 @@ def test_update_player_name_and_color(client: TestClient, session: Session):
 
 def test_update_player_not_found(client: TestClient, session: Session):
     game = create_game(session)
+    host = _get_host(session, game)
     resp = client.patch(
         f'/games/{game.id}/players/{uuid.uuid4()}',
         json={'role': 'hider'},
-        headers=_headers(),
+        headers=_headers(host.id),
     )
     assert resp.status_code == 404
 
@@ -339,7 +335,7 @@ def test_start_game(client: TestClient, session: Session):
     create_player(session, game.id, role=PlayerRole.seeker)
     resp = client.post(
         f'/games/{game.id}/start',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -354,7 +350,7 @@ def test_start_game_unassigned_roles(client: TestClient, session: Session):
     game = create_game(session)
     resp = client.post(
         f'/games/{game.id}/start',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 409
     assert 'assigned roles' in resp.json()['detail']
@@ -369,7 +365,7 @@ def test_start_game_missing_hider(client: TestClient, session: Session):
     create_player(session, game.id, role=PlayerRole.seeker)
     resp = client.post(
         f'/games/{game.id}/start',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 409
     assert 'hider' in resp.json()['detail']
@@ -383,7 +379,7 @@ def test_start_game_missing_seeker(client: TestClient, session: Session):
     session.flush()
     resp = client.post(
         f'/games/{game.id}/start',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 409
     assert 'seeker' in resp.json()['detail']
@@ -393,7 +389,7 @@ def test_start_game_not_in_lobby(client: TestClient, session: Session):
     game = create_game(session, status=GameStatus.seeking)
     resp = client.post(
         f'/games/{game.id}/start',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 409
 
@@ -493,7 +489,7 @@ def test_elect_station_seeker_403(client: TestClient, session: Session):
             'station_id': str(uuid.uuid4()),
             'location': {'type': 'Point', 'coordinates': [0.5, 0.5]},
         },
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 403
 
@@ -509,7 +505,7 @@ def test_elect_station_wrong_phase_409(client: TestClient, session: Session):
             'station_id': str(uuid.uuid4()),
             'location': {'type': 'Point', 'coordinates': [0.5, 0.5]},
         },
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 409
 
@@ -529,7 +525,7 @@ def test_elect_station_already_elected_409(client: TestClient, session: Session)
             'station_id': str(uuid.uuid4()),
             'location': {'type': 'Point', 'coordinates': [0.5, 0.5]},
         },
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 409
 
@@ -551,7 +547,7 @@ def test_elect_station_during_ambiguity(client: TestClient, session: Session):
             'station_id': str(uuid.uuid4()),
             'location': {'type': 'Point', 'coordinates': [0.5, 0.5]},
         },
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     # Stop doesn't exist / isn't playable → 422
     assert resp.status_code == 422
@@ -567,7 +563,7 @@ def test_hiding_zone_stop_not_found(client: TestClient, session: Session):
 
     resp = client.get(
         f'/games/{game.id}/hiding-zone?station_id={uuid.uuid4()}',
-        headers=_headers(player.client_id),
+        headers=_headers(player.id),
     )
     assert resp.status_code == 404
 
@@ -578,11 +574,9 @@ def test_hiding_zone_stop_not_found(client: TestClient, session: Session):
 def test_create_game_host_is_player(client: TestClient, session: Session):
     """POST /games returns JoinGameResponse with host as first player."""
     gm = create_game_map(session)
-    host_client = uuid.uuid4()
     resp = client.post(
         '/games',
         json={'map_id': str(gm.id), 'name': 'HostPlayer'},
-        headers=_headers(host_client),
     )
     assert resp.status_code == 201
     data = resp.json()
@@ -602,7 +596,6 @@ def test_join_full_game_409(client: TestClient, session: Session):
     resp = client.post(
         '/games/join',
         json={'join_code': 'FULL', 'name': 'Extra'},
-        headers=_headers(),
     )
     assert resp.status_code == 409
     assert '12 players' in resp.json()['detail']
@@ -611,17 +604,13 @@ def test_join_full_game_409(client: TestClient, session: Session):
 def test_join_assigns_unique_colors(client: TestClient, session: Session):
     """Two players joining get different auto-assigned colors (host already has red)."""
     create_game(session, join_code='CLRS')
-    c1 = uuid.uuid4()
-    c2 = uuid.uuid4()
     r1 = client.post(
         '/games/join',
         json={'join_code': 'CLRS', 'name': 'A'},
-        headers=_headers(c1),
     )
     r2 = client.post(
         '/games/join',
         json={'join_code': 'CLRS', 'name': 'B'},
-        headers=_headers(c2),
     )
     assert r1.status_code == 201
     assert r2.status_code == 201
@@ -635,11 +624,11 @@ def test_patch_player_self_only_403(client: TestClient, session: Session):
     """PATCH another player returns 403."""
     game = create_game(session)
     player = create_player(session, game.id)
-    other_client = uuid.uuid4()
+    other = create_player(session, game.id)
     resp = client.patch(
         f'/games/{game.id}/players/{player.id}',
         json={'name': 'Hacked'},
-        headers=_headers(other_client),
+        headers=_headers(other.id),
     )
     assert resp.status_code == 403
 
@@ -652,7 +641,7 @@ def test_patch_color_swap_409(client: TestClient, session: Session):
     resp = client.patch(
         f'/games/{game.id}/players/{p1.id}',
         json={'color': 'red'},
-        headers=_headers(p1.client_id),
+        headers=_headers(p1.id),
     )
     assert resp.status_code == 409
     assert 'already taken' in resp.json()['detail']
@@ -665,7 +654,7 @@ def test_patch_color_swap_success(client: TestClient, session: Session):
     resp = client.patch(
         f'/games/{game.id}/players/{p1.id}',
         json={'color': 'green'},
-        headers=_headers(p1.client_id),
+        headers=_headers(p1.id),
     )
     assert resp.status_code == 200
     assert resp.json()['color'] == 'green'
@@ -674,10 +663,10 @@ def test_patch_color_swap_success(client: TestClient, session: Session):
 def test_start_game_host_only_403(client: TestClient, session: Session):
     """Non-host starting the game returns 403."""
     game = create_game(session)
-    non_host = uuid.uuid4()
+    non_host = create_player(session, game.id)
     resp = client.post(
         f'/games/{game.id}/start',
-        headers=_headers(non_host),
+        headers=_headers(non_host.id),
     )
     assert resp.status_code == 403
     assert 'host' in resp.json()['detail']
@@ -690,7 +679,7 @@ def test_patch_device_token(client: TestClient, session: Session):
     resp = client.patch(
         f'/games/{game.id}/players/{player.id}',
         json={'device_token': 'new-token-hex'},
-        headers=_headers(player.client_id),
+        headers=_headers(player.id),
     )
     assert resp.status_code == 200
 
@@ -705,7 +694,7 @@ def test_remove_player_self_leave(client: TestClient, session: Session):
     player = create_player(session, game.id)
     resp = client.delete(
         f'/games/{game.id}/players/{player.id}',
-        headers=_headers(player.client_id),
+        headers=_headers(player.id),
     )
     assert resp.status_code == 204
     # Verify player is gone
@@ -720,7 +709,7 @@ def test_remove_player_host_kick(client: TestClient, session: Session):
     target = create_player(session, game.id, name='Kicked')
     resp = client.delete(
         f'/games/{game.id}/players/{target.id}',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 204
     game_resp = client.get(f'/games/{game.id}')
@@ -732,10 +721,10 @@ def test_remove_player_unauthorized_403(client: TestClient, session: Session):
     """Non-self, non-host removal → 403."""
     game = create_game(session)
     target = create_player(session, game.id)
-    bystander = uuid.uuid4()
+    bystander = create_player(session, game.id)
     resp = client.delete(
         f'/games/{game.id}/players/{target.id}',
-        headers=_headers(bystander),
+        headers=_headers(bystander.id),
     )
     assert resp.status_code == 403
 
@@ -745,7 +734,7 @@ def test_remove_player_not_in_game_404(client: TestClient, session: Session):
     game = create_game(session)
     resp = client.delete(
         f'/games/{game.id}/players/{uuid.uuid4()}',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 404
 
@@ -756,7 +745,7 @@ def test_remove_player_not_in_lobby_422(client: TestClient, session: Session):
     player = create_player(session, game.id)
     resp = client.delete(
         f'/games/{game.id}/players/{player.id}',
-        headers=_headers(player.client_id),
+        headers=_headers(player.id),
     )
     assert resp.status_code == 422
     assert 'lobby' in resp.json()['detail']
@@ -768,7 +757,7 @@ def test_remove_host_only_player_dissolves(client: TestClient, session: Session)
     host = _get_host(session, game)
     resp = client.delete(
         f'/games/{game.id}/players/{host.id}',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 204
     session.expire(game)
@@ -782,7 +771,7 @@ def test_remove_host_requires_new_host_422(client: TestClient, session: Session)
     create_player(session, game.id)
     resp = client.delete(
         f'/games/{game.id}/players/{host.id}',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 422
     assert 'new_host_id' in resp.json()['detail']
@@ -797,14 +786,14 @@ def test_remove_host_invalid_new_host_422(client: TestClient, session: Session):
         'DELETE',
         f'/games/{game.id}/players/{host.id}',
         json={'new_host_id': str(host.id)},
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 422
     assert 'another player' in resp.json()['detail']
 
 
 def test_remove_host_transfers_and_leaves(client: TestClient, session: Session):
-    """Host leaves with valid new_host_id → 204, host_client_id updated."""
+    """Host leaves with valid new_host_id → 204, host_player_id updated."""
     game = create_game(session)
     host = _get_host(session, game)
     successor = create_player(session, game.id, name='Successor')
@@ -812,7 +801,7 @@ def test_remove_host_transfers_and_leaves(client: TestClient, session: Session):
         'DELETE',
         f'/games/{game.id}/players/{host.id}',
         json={'new_host_id': str(successor.id)},
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 204
     game_resp = client.get(f'/games/{game.id}')
@@ -829,14 +818,12 @@ def test_remove_player_frees_color(client: TestClient, session: Session):
     # Remove p2 (blue)
     client.delete(
         f'/games/{game.id}/players/{p2.id}',
-        headers=_headers(game.host_client_id),
+        headers=_headers(game.host_player_id),
     )
     # Join a new player — should get red's next unused, which is blue (freed)
-    new_client = uuid.uuid4()
     join_resp = client.post(
         '/games/join',
         json={'join_code': 'FREE', 'name': 'NewPlayer'},
-        headers=_headers(new_client),
     )
     assert join_resp.status_code == 201
     new_color = join_resp.json()['game']['players'][-1]['color']

@@ -1,6 +1,7 @@
 import { useAppStore } from '@/store';
 
-/** Returns the x-client-id header object for typed API calls. */
+/** Returns the auth header object for typed API calls. */
 export function authHeader() {
-  return { 'x-client-id': useAppStore.getState().clientId };
+  const { playerId, playerSecret } = useAppStore.getState();
+  return { 'x-player-id': playerId!, 'x-player-secret': playerSecret! };
 }

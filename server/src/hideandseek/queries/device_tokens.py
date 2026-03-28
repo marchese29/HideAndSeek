@@ -15,13 +15,13 @@ from hideandseek.models.types import PlayerRole
 
 def upsert_device_token(
     *,
-    client_id: uuid.UUID,
+    player_id: uuid.UUID,
     token: str,
     environment: str = 'production',
 ) -> DeviceToken:
-    """Insert or update a device token for a client_id."""
+    """Insert or update a device token for a player."""
     session = get_session()
-    existing = session.get(DeviceToken, client_id)
+    existing = session.get(DeviceToken, player_id)
     if existing:
         existing.token = token
         existing.environment = environment
@@ -31,7 +31,7 @@ def upsert_device_token(
         return existing
 
     dt = DeviceToken(
-        client_id=client_id,
+        player_id=player_id,
         token=token,
         environment=environment,
     )
@@ -49,7 +49,7 @@ def get_device_tokens_for_game(
     session = get_session()
     stmt = (
         select(DeviceToken)
-        .join(Player, DeviceToken.client_id == Player.client_id)
+        .join(Player, DeviceToken.player_id == Player.id)
         .where(Player.game_id == game_id)
     )
     if role_filter is not None:
@@ -57,10 +57,10 @@ def get_device_tokens_for_game(
     return list(session.scalars(stmt).all())
 
 
-def delete_device_token(client_id: uuid.UUID) -> None:
-    """Delete a device token by client_id (for stale token cleanup)."""
+def delete_device_token(player_id: uuid.UUID) -> None:
+    """Delete a device token by player_id (for stale token cleanup)."""
     session = get_session()
-    dt = session.get(DeviceToken, client_id)
+    dt = session.get(DeviceToken, player_id)
     if dt:
         session.delete(dt)
         session.flush()

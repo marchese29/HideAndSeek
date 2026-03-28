@@ -11,7 +11,6 @@ import {
   View,
 } from 'react-native';
 
-import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import { queryClient } from '@/api/queryClient';
 import type { components } from '@/api/schema';
@@ -42,7 +41,6 @@ export default function CreateGameScreen() {
     setLoading(true);
 
     const { data, error: apiError } = await api.POST('/games', {
-      params: { header: authHeader() },
       body: {
         map_id: selectedMapId,
         name: name.trim(),
@@ -58,7 +56,7 @@ export default function CreateGameScreen() {
       return;
     }
 
-    useAppStore.getState().setSession(data.game.id, data.player_id);
+    useAppStore.getState().setSession(data.game.id, data.player_id, data.player_secret);
     queryClient.setQueryData(['game', data.game.id], data.game);
     router.replace(`/lobby/${data.game.id}`);
   }

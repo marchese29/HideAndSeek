@@ -87,20 +87,12 @@ paths:
       description: Create a new game on a map. The host is automatically added as
         the first player.
       operationId: create_game_games_post
-      parameters:
-      - name: x-client-id
-        in: header
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: X-Client-Id
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateGameRequest'
+        required: true
       responses:
         '201':
           description: Successful Response
@@ -121,20 +113,12 @@ paths:
       summary: Join Game
       description: Join a game by its join code.
       operationId: join_game_games_join_post
-      parameters:
-      - name: x-client-id
-        in: header
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: X-Client-Id
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/JoinGameRequest'
+        required: true
       responses:
         '201':
           description: Successful Response
@@ -170,6 +154,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GameResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/me:
+    get:
+      tags:
+      - games
+      summary: Get Session Info
+      description: Validate stored session credentials. Returns player info and game
+        status.
+      operationId: get_session_info_games__game_id__me_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
         '422':
           description: Validation Error
           content:
@@ -226,13 +252,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       requestBody:
         required: true
         content:
@@ -273,13 +305,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       requestBody:
         content:
           application/json:
@@ -312,13 +350,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -376,13 +420,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -410,13 +460,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       requestBody:
         required: true
         content:
@@ -468,13 +524,19 @@ paths:
           description: Longitude of the query point.
           title: Lng
         description: Longitude of the query point.
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -516,13 +578,19 @@ paths:
           description: Stop ID to compute the hiding zone for.
           title: Station Id
         description: Stop ID to compute the hiding zone for.
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -601,13 +669,19 @@ paths:
           default: 50
           title: Limit
         description: Pagination limit.
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -640,13 +714,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       requestBody:
         required: true
         content:
@@ -713,13 +793,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       requestBody:
         required: true
         content:
@@ -754,13 +840,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       requestBody:
         required: true
         content:
@@ -795,13 +887,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       requestBody:
         required: true
         content:
@@ -836,13 +934,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       requestBody:
         required: true
         content:
@@ -884,13 +988,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -927,13 +1037,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -979,13 +1095,19 @@ paths:
           type: boolean
           default: false
           title: Scheduled
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -1021,13 +1143,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -1056,13 +1184,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -1101,13 +1235,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -1136,13 +1276,19 @@ paths:
           type: string
           format: uuid
           title: Game Id
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -1190,13 +1336,19 @@ paths:
           default: 0
           title: After Question
         description: Only include questions with sequence > this value.
-      - name: x-client-id
+      - name: x-player-id
         in: header
         required: true
         schema:
           type: string
           format: uuid
-          title: X-Client-Id
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
         '200':
           description: Successful Response
@@ -1899,13 +2051,18 @@ components:
           format: uuid
           title: Player Id
           description: The joining player's ID for subsequent requests.
+        player_secret:
+          type: string
+          title: Player Secret
+          description: "Secret token. Store securely \u2014 not retrievable again."
       type: object
       required:
       - game
       - player_id
+      - player_secret
       title: JoinGameResponse
-      description: "Returned when a player joins a game \u2014 includes the game state\
-        \ and the caller's player ID."
+      description: "Returned when a player joins a game \u2014 includes credentials\
+        \ for the session."
     LineString:
       properties:
         bbox:
@@ -2722,6 +2879,19 @@ components:
       - stop_ids
       title: RouteResponse
       description: A transit route on the effective game map, with ordered stop IDs.
+    SessionResponse:
+      properties:
+        player:
+          $ref: '#/components/schemas/PlayerResponse'
+        game_status:
+          $ref: '#/components/schemas/GameStatus'
+      type: object
+      required:
+      - player
+      - game_status
+      title: SessionResponse
+      description: "Session validation \u2014 confirms the caller is a valid player\
+        \ in the game."
     SlotResponse:
       properties:
         slot_index:

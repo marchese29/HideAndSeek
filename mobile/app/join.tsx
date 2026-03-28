@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import { queryClient } from '@/api/queryClient';
 import { useAppStore } from '@/store';
@@ -20,7 +19,6 @@ export default function JoinGameScreen() {
     setLoading(true);
 
     const { data, error: apiError } = await api.POST('/games/join', {
-      params: { header: authHeader() },
       body: { join_code: joinCode, name: name.trim(), device_token_environment: 'sandbox' },
     });
 
@@ -32,7 +30,7 @@ export default function JoinGameScreen() {
       return;
     }
 
-    useAppStore.getState().setSession(data.game.id, data.player_id);
+    useAppStore.getState().setSession(data.game.id, data.player_id, data.player_secret);
     queryClient.setQueryData(['game', data.game.id], data.game);
     router.replace(`/lobby/${data.game.id}`);
   }

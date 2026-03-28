@@ -65,32 +65,32 @@ After seeding, restart the API so it picks up the new data: `docker compose rest
 
 ```bash
 MAP_ID="<from GET /maps>"
-HOST="aaaaaaaa-0000-0000-0000-000000000001"
-HIDER="aaaaaaaa-0000-0000-0000-000000000002"
-SEEKER="aaaaaaaa-0000-0000-0000-000000000003"
+# Credentials come from POST /games and POST /games/join responses:
+# HOST_PLAYER_ID, HOST_SECRET, HIDER_PLAYER_ID, HIDER_SECRET, etc.
 
-# 1. Create game (host is automatically the first player)
+# 1. Create game (host is automatically the first player, no auth needed)
 curl -s -X POST localhost:8000/games \
-  -H "Content-Type: application/json" -H "X-Client-Id: $HOST" \
+  -H "Content-Type: application/json" \
   -d "{\"map_id\": \"$MAP_ID\", \"name\": \"HostName\"}"
-# → returns JoinGameResponse: game state under ['game'], host player_id at ['player_id']
+# → returns JoinGameResponse: game state under ['game'], player_id + player_secret for auth
 # → host gets server-assigned color (red, blue, green, ...)
 
 # 1b. Connect to lobby SSE stream (in another terminal — stays open)
-curl -N "localhost:8000/games/<game_id>/lobby/events?client_id=$HOST"
+curl -N localhost:8000/games/<game_id>/lobby/events \
+  -H "X-Player-Id: $HOST_PLAYER_ID" -H "X-Player-Secret: $HOST_SECRET"
 # → initial game_state event, then real-time player_joined/updated/left/host_changed/game_started
 
 # 2. Join as hider and seeker (no color field — server assigns unique colors)
 curl -s -X POST localhost:8000/games/join \
-  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
+  -H "Content-Type: application/json" \
   -d '{"join_code": "XXXX", "role": "hider", "name": "Alice", "device_token": "fake-hider"}'
 curl -s -X POST localhost:8000/games/join \
-  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -H "Content-Type: application/json" \
   -d '{"join_code": "XXXX", "role": "seeker", "name": "Bob", "device_token": "fake-seeker"}'
 
 # 3. Remove a player (self-leave or host-kick — lobby only)
 curl -s -X DELETE localhost:8000/games/<game_id>/players/<player_id> \
-  -H "X-Client-Id: $HOST"
+  -H "X-Player-Id: $HOST_PLAYER_ID" -H "X-Player-Secret: $HOST_SECRET"
 # → 204 (player removed). Non-host can only remove themselves.
 # Host leaving with others: include body {"new_host_id": "<player_uuid>"}
 # Host leaving as sole player: game status → "dissolved"
@@ -102,23 +102,23 @@ docker exec hideandseek-postgres-1 psql -U hideandseek -c \
 
 # 4. Start game (host-only — transitions to "hiding", schedules hiding→seeking timer)
 curl -s -X POST localhost:8000/games/<game_id>/start \
-  -H "X-Client-Id: $HOST"
+  -H "X-Player-Id: $HOST_PLAYER_ID" -H "X-Player-Secret: $HOST_SECRET"
 
 # 5. Report hider locations during hiding phase
 curl -s -X POST localhost:8000/games/<game_id>/location \
-  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET" \
   -d '{"coordinates": {"type": "Point", "coordinates": [<lon>, <lat>]}, "timestamp": "<ISO8601>"}'
 # The hider's last location when hiding ends determines their assigned station.
 
 # 5b. (Optional) Elect station during hiding — locks in the hider's station early
 curl -s -X POST localhost:8000/games/<game_id>/hider-station \
-  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET" \
   -d '{"station_id": "<stop_uuid>", "location": {"type": "Point", "coordinates": [<lon>, <lat>]}}'
 # → Returns hiding zone polygon. Station is now locked in.
 
 # 5c. Query nearby stations to find candidates for election
 curl -s "localhost:8000/games/<game_id>/nearby-stations?lat=<lat>&lng=<lon>" \
-  -H "X-Client-Id: $HIDER"
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
 
 # 6. Wait for hiding timer (check: docker logs hideandseek-worker-1 | grep transition)
 #    Game auto-transitions to "seeking". If no election:
@@ -127,7 +127,7 @@ curl -s "localhost:8000/games/<game_id>/nearby-stations?lat=<lat>&lng=<lon>" \
 
 # 7. Report seeker location (required before asking questions)
 curl -s -X POST localhost:8000/games/<game_id>/location \
-  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"coordinates": {"type": "Point", "coordinates": [<lon>, <lat>]}, "timestamp": "<ISO8601>"}'
 ```
 
@@ -138,14 +138,14 @@ curl -s -X POST localhost:8000/games/<game_id>/location \
 # Inventory: [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, custom] (imperial/medium)
 # For the custom slot (distance=null), pass custom_distance in the request.
 curl -s -X POST localhost:8000/games/<game_id>/questions/radar \
-  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"location": {"type": "Point", "coordinates": [<lon>, <lat>]}, "slot_index": <N>}'
 # For custom slot: "slot_index": 9, "custom_distance": 3.0
 # → status: "answerable", schedules auto-answer timer (location_question_delay_min)
 
 # Answer (hider) — uses hider's latest reported location
 curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
-  -H "X-Client-Id: $HIDER"
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
 # → answer: "yes" (hider inside radius) or "no" (outside)
 # → auto-answer timer is revoked (check: docker logs hideandseek-worker-1 | grep revoke)
 
@@ -154,19 +154,19 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
 
 # Veto (hider) — refuse to answer, no exclusion zone generated
 curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/veto \
-  -H "X-Client-Id: $HIDER"
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
 # → status: "vetoed", answer: null, no exclusion
 # → seekers can re-ask the same slot (ask_count increments)
 
 # Scheduled veto (hider) — veto fires when auto-answer timer expires
 curl -s -X POST "localhost:8000/games/<game_id>/questions/<question_id>/veto?scheduled=true" \
-  -H "X-Client-Id: $HIDER"
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
 # → question stays answerable, veto triggers at timer expiry
 # → hider can still answer normally before the timer to override
 
 # Abandon (seeker) — drop an unwanted question, no answer or exclusion
 curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/abandon \
-  -H "X-Client-Id: $SEEKER"
+  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
 # → status: "abandoned", answer: null, no exclusion
 # → ask is consumed (ask_count stays incremented), seeker can ask a new question
 ```
@@ -178,21 +178,21 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/abandon \
 # Inventory: [0.5, 1.0, 5.0, 10.0, custom] (imperial/medium)
 # For the custom slot (distance=null), pass custom_distance in the request.
 curl -s -X POST localhost:8000/games/<game_id>/questions/thermometer \
-  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"location": {"type": "Point", "coordinates": [<start_lon>, <start_lat>]}, "slot_index": <N>}'
 
 # Travel, then report new location
 curl -s -X POST localhost:8000/games/<game_id>/location \
-  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"coordinates": {"type": "Point", "coordinates": [<end_lon>, <end_lat>]}, "timestamp": "<ISO8601>"}'
 
 # Lock in end position (seeker) — transitions to "answerable", starts auto-answer timer
 curl -s -X POST localhost:8000/games/<game_id>/questions/thermometer/<question_id>/lock-in \
-  -H "X-Client-Id: $SEEKER"
+  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
 
 # Answer (hider)
 curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
-  -H "X-Client-Id: $HIDER"
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
 # → answer: "closer" (hider nearer to end) or "farther" (hider nearer to start)
 ```
 
@@ -200,16 +200,20 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
 
 ```bash
 # Question list (any player)
-curl -s localhost:8000/games/<game_id>/questions -H "X-Client-Id: $SEEKER"
+curl -s localhost:8000/games/<game_id>/questions \
+  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
 
 # Question detail (hider only — includes hider_location, parameters)
-curl -s localhost:8000/games/<game_id>/questions/<question_id> -H "X-Client-Id: $HIDER"
+curl -s localhost:8000/games/<game_id>/questions/<question_id> \
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
 
 # Exclusion zones (seeker only — per-question + cumulative total)
-curl -s localhost:8000/games/<game_id>/exclusions -H "X-Client-Id: $SEEKER"
+curl -s localhost:8000/games/<game_id>/exclusions \
+  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
 
 # Candidate stations (seeker only — stops not eliminated by exclusions)
-curl -s localhost:8000/games/<game_id>/candidate-stations -H "X-Client-Id: $SEEKER"
+curl -s localhost:8000/games/<game_id>/candidate-stations \
+  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
 ```
 
 ### Useful DB queries
@@ -283,7 +287,7 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 ## Architecture Patterns
 
 - **Schema vs Model separation**: SQLAlchemy declarative models (`models/`) own the DB schema. Pydantic schemas (`schemas/`) control the API surface. Response schemas have `from_model()` static methods for transformation.
-- **Dependency injection**: `dependencies.py` provides reusable FastAPI `Depends()` — `get_client_id` (from `X-Client-Id` header), `get_game` (uses `db.get_session()`, 404 if missing), `get_player_in_game` (composes `get_game` + `get_client_id`, 403 if not found), `get_hider_in_game` / `get_seeker_in_game` (compose `get_player_in_game` + role check, 403 if wrong role), `get_optional_client_id` (returns `None` when header absent), `get_optional_player_in_game` (returns `None` instead of 403). Role gating is declarative via dependency — use `get_hider_in_game` or `get_seeker_in_game` instead of manual `player.role` checks. Dependencies use `db.get_session()` directly — the router-level dependency ensures the ContextVar is already set.
+- **Dependency injection**: `dependencies.py` provides reusable FastAPI `Depends()` — `get_authenticated_player_id` (validates `X-Player-Id` + `X-Player-Secret` headers), `get_game` (uses `db.get_session()`, 404 if missing), `get_player_in_game` (composes `get_game` + `get_authenticated_player_id`, 403 if not found), `get_hider_in_game` / `get_seeker_in_game` (compose `get_player_in_game` + role check, 403 if wrong role), `get_optional_player_id` (returns `None` when headers absent), `get_optional_player_in_game` (uses `get_optional_player_id`, returns `None` instead of 403). Role gating is declarative via dependency — use `get_hider_in_game` or `get_seeker_in_game` instead of manual `player.role` checks. Dependencies use `db.get_session()` directly — the router-level dependency ensures the ContextVar is already set.
 - **Transactional boundaries**: `session_dependency()` is an async generator that commits once after the handler succeeds and sets a `ContextVar` so `db.get_session()` works everywhere. Must be async so the ContextVar is set in the event-loop context (sync handler threads copy that context). If the handler raises, commit is never called and `Session.__exit__` rolls back. All writes in a request succeed or fail together.
 - **ContextVar session access**: A `ContextVar[Session]` (`_session_var`) is set by `session_dependency()` (for requests) or `session_scope()` (for background tasks). All query and logic functions call `db.get_session()` as their first line to get the active session. No decorators, no session parameters — functions just call `session = get_session()`.
 - **Router-level session dependency**: Each router uses `dependencies=[Depends(session_dependency)]` to ensure the ContextVar is always set for every route. Handlers never declare `session` in their signatures.
@@ -294,12 +298,12 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 - **Broadcast (SSE + push)**: Unified event emission via `broadcast.emit()`. The logic layer calls `emit()` with typed event dataclasses — it doesn't know about SSE, Redis, or push. `emit()` pattern-matches on event type, serializes via response schemas, and routes to channels:
   - **SSE** (Redis pub/sub): real-time data for connected clients. Channel: `game:{id}:lobby:events`. Lobby-only events (`player_joined`, `player_updated`, `player_left`, `host_changed`) are SSE-only — Redis failure propagates (no fallback).
   - **Push** (Celery): wake-up for backgrounded clients. `game_started` is dual-channel — SSE failure is logged and swallowed, push still delivers independently.
-  - **SSE endpoint** (`GET /games/{id}/lobby/events?client_id=...`): separate router (`routers/events.py`), no `session_dependency` (SSE outlives the request). Auth via short-lived `session_scope()`. Returns `EventSourceResponse` from `sse-starlette`. Initial `game_state` event sent on connect, then real-time events via Redis subscription. Reconnecting clients get fresh state (no gap recovery needed).
+  - **SSE endpoint** (`GET /games/{id}/lobby/events`): separate router (`routers/events.py`), no `session_dependency` (SSE outlives the request). Auth via `X-Player-Id` + `X-Player-Secret` headers, validated in a short-lived `session_scope()`. Returns `EventSourceResponse` from `sse-starlette`. Initial `game_state` event sent on connect, then real-time events via Redis subscription. Reconnecting clients get fresh state (no gap recovery needed).
   - **Redis client** (`redis_client.py`): `get_redis_url()` resolves URL (env var → auto-detect → None). `get_sync_redis()` for publish, `get_async_redis()` for subscribe. Returns None when unavailable.
   - **`LobbyEventType` enum** (`models/types.py`): `game_state`, `player_joined`, `player_updated`, `player_left`, `host_changed`, `game_started`.
   - **Emit call sites**: `logic/lobby.py` (join → `PlayerJoinedEvent`, remove → `PlayerLeftEvent` + `HostChangedEvent`), `routers/games.py` (patch → `PlayerUpdatedEvent` if lobby, start → `GameStartedEvent`). `create_game_with_host()` does NOT emit (no SSE subscribers yet).
   - **Future**: `GET /games/{id}/events` for in-game phase (separate channel, lifecycle, auth). Existing in-game push events will migrate to `emit()`.
-- **Test fixtures**: The `session` fixture sets `_session_var` so `db.get_session()` works in tests. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_inventory_slot`, `create_map_feature`, `create_game_map_feature`) create test data with sensible defaults and accept `**overrides`. `create_game` automatically creates a host player (`client_id=host_client_id`, name `'Host'`, color `red`, no role) and all `InventorySlot` rows — radar/thermometer from the default template, plus matching/measuring from map feature categories.
+- **Test fixtures**: The `session` fixture sets `_session_var` so `db.get_session()` works in tests. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_inventory_slot`, `create_map_feature`, `create_game_map_feature`) create test data with sensible defaults and accept `**overrides`. `create_game` automatically creates a host player (name `'Host'`, color `red`, no role) and all `InventorySlot` rows — radar/thermometer from the default template, plus matching/measuring from map feature categories. `create_player` defaults `secret_hash` to `TEST_SECRET_HASH` (the SHA-256 hash of `TEST_SECRET`). Tests authenticate by passing `X-Player-Id` + `X-Player-Secret: TEST_SECRET` headers.
 - **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
 - **Geometry — three layers**: Geometry flows through three representations:
   - **API boundary** — GeoJSON via `geojson-pydantic` types (`Point`, `Polygon`, `LineString`). Requests accept GeoJSON; responses return GeoJSON.
@@ -381,16 +385,16 @@ Questions cannot be answered while status is `ambiguous`. The auto-answer timer 
 - All routes go in `routers/` and are included via `app.include_router()`.
 - Tests use `fastapi.testclient.TestClient` via the `client` fixture from `conftest.py`.
 - OpenAPI spec is auto-generated — add routes to FastAPI, not the YAML file.
-- Client identity is via `X-Client-Id` header (UUID). No authentication.
+- Player identity is via `X-Player-Id` + `X-Player-Secret` headers. Credentials (`player_id` + `player_secret`) are minted server-side at game create/join and returned in `JoinGameResponse`. Secret is SHA-256 hashed on the Player model (`secret_hash` + `verify_secret`). `GET /games/{id}/me` validates stored credentials for session recovery.
 - Only one unanswered question allowed at a time per game.
 - `join_code` is nullable — cleared when hiding starts (reclaims the code for new games).
 - Pagination uses offset/limit query params (`schemas/common.py`).
-- **Host-as-player**: `POST /games` creates the game and adds the host as the first player. Returns `JoinGameResponse` (game + player_id). The `name` field is required in `CreateGameRequest`. `GameResponse` includes `host_player_id` (resolved from `host_client_id` via the players relationship) so clients can identify the host without exposing `client_id`.
+- **Host-as-player**: `POST /games` creates the game and adds the host as the first player. Returns `JoinGameResponse` (game + player_id + player_secret). The `name` field is required in `CreateGameRequest`. `GameResponse` includes `host_player_id` (direct column on Game) so clients can identify the host.
 - **Server-assigned colors**: `PlayerColor` enum (12 values: red, blue, green, orange, purple, teal, pink, amber, cyan, lime, indigo, coral). Colors are auto-assigned on create/join. Players can swap colors via `PATCH` if the target color is available (409 if taken).
 - **Player cap**: `MAX_PLAYERS = 12`. Join returns 409 when full.
-- **Auth guards**: `PATCH /players/{id}` requires matching `X-Client-Id` (self-only, 403 otherwise). `POST /games/{id}/start` is host-only (403 if `client_id != game.host_client_id`). `DELETE /players/{id}` allows self-leave or host-kick (403 otherwise).
+- **Auth guards**: `PATCH /players/{id}` requires matching authenticated `player_id` (self-only, 403 otherwise). `POST /games/{id}/start` is host-only (403 if authenticated player is not `game.host_player_id`). `DELETE /players/{id}` allows self-leave or host-kick (403 otherwise).
 - **Player removal** (`DELETE /games/{id}/players/{pid}`): lobby-only (422 if not in lobby). Self-leave or host-kick. When the host leaves: if sole player → game dissolves (`dissolved` status); if others remain → must provide `new_host_id` in `RemovePlayerRequest` body to transfer host. Freed colors are re-assignable to new joiners.
-- `device_token` is optional on both `POST /games` and `POST /games/join`. Can also be set via `PATCH /players/{id}`. Device tokens are upserted by `client_id` (separate `DeviceToken` table).
+- `device_token` is optional on both `POST /games` and `POST /games/join`. Can also be set via `PATCH /players/{id}`. Device tokens are upserted by `player_id` (separate `DeviceToken` table).
 - Push notification env vars: `APNS_KEY_PATH`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_USE_SANDBOX`. All optional — when missing, PushService runs in no-op mode.
 - Database env vars: `DATABASE_URL` (required — no default). Docker Compose sets `postgresql+psycopg://...`. `scripts/dev.sh` defaults to the docker-compose PostgreSQL.
 - Celery env vars: `CELERY_BROKER_URL` (auto-detects `redis://localhost:6379/0` when unset; set to empty string to force eager mode). Docker Compose sets `redis://redis:6379/0`. `CELERY_RESULT_BACKEND` (default: same as broker URL).

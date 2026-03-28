@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -24,7 +26,7 @@ class Game(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     map_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game_map.id'))
-    host_client_id: Mapped[uuid.UUID]
+    host_player_id: Mapped[uuid.UUID]
     status: Mapped[GameStatus] = mapped_column(default=GameStatus.lobby)
     join_code: Mapped[str | None] = mapped_column(unique=True, index=True, default=None)
     hiding_time_min: Mapped[int] = mapped_column(default=60)
@@ -40,15 +42,6 @@ class Game(Base):
     excluded_route_ids: Mapped[list] = mapped_column(sa.JSON, default=list)
     hiding_zone_radius_override: Mapped[float | None] = mapped_column(default=None)
 
-    @property
-    def host_player_id(self) -> uuid.UUID:
-        """Resolve the host's player ID from host_client_id via the players relationship."""
-        for player in self.players:
-            if player.client_id == self.host_client_id:
-                return player.id
-        msg = f'No player with client_id={self.host_client_id} in game {self.id}'
-        raise ValueError(msg)
-
     game_map: Mapped[GameMap] = relationship(back_populates='games')
     hider_station: Mapped[Stop | None] = relationship()
     players: Mapped[list[Player]] = relationship(back_populates='game')
@@ -61,17 +54,21 @@ class Game(Base):
 
 class Player(Base):
     __tablename__ = 'player'
-    __table_args__ = (sa.UniqueConstraint('client_id', 'game_id'),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    client_id: Mapped[uuid.UUID]
     game_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('game.id'))
     name: Mapped[str]
     color: Mapped[PlayerColor]
     role: Mapped[PlayerRole | None] = mapped_column(default=None)
+    secret_hash: Mapped[str] = mapped_column(default='')
 
     game: Mapped[Game] = relationship(back_populates='players')
     location_updates: Mapped[list[LocationUpdate]] = relationship(
         back_populates='player',
         cascade='all, delete-orphan',
     )
+
+    def verify_secret(self, secret: str) -> bool:
+        """Verify a raw secret against the stored SHA-256 hash."""
+        actual_hash = hashlib.sha256(secret.encode()).hexdigest()
+        return hmac.compare_digest(actual_hash, self.secret_hash)

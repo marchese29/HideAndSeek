@@ -1,7 +1,52 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { api } from '@/api/client';
+import { useAppStore } from '@/store';
 
 export default function HomeScreen() {
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    const { gameId, playerId, playerSecret } = useAppStore.getState();
+    if (!gameId || !playerId || !playerSecret) {
+      setChecking(false);
+      return;
+    }
+
+    // Validate stored credentials against the server
+    void api
+      .GET('/games/{game_id}/me', {
+        params: {
+          path: { game_id: gameId },
+          header: { 'x-player-id': playerId, 'x-player-secret': playerSecret },
+        },
+      })
+      .then(({ data, error }) => {
+        if (error || !data) {
+          useAppStore.getState().clearSession();
+          setChecking(false);
+          return;
+        }
+        if (data.game_status === 'lobby') {
+          router.replace(`/lobby/${gameId}`);
+        } else {
+          // Game is no longer in lobby — clear session for now
+          useAppStore.getState().clearSession();
+          setChecking(false);
+        }
+      });
+  }, []);
+
+  if (checking) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>HideAndSeek</Text>

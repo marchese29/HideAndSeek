@@ -1,31 +1,36 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { randomUUID } from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 interface AppState {
-  clientId: string;
   gameId: string | null;
   playerId: string | null;
+  playerSecret: string | null;
 
-  setSession: (gameId: string, playerId: string) => void;
+  setSession: (gameId: string, playerId: string, playerSecret: string) => void;
   clearSession: () => void;
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      clientId: randomUUID(),
       gameId: null,
       playerId: null,
+      playerSecret: null,
 
-      setSession: (gameId, playerId) => set({ gameId, playerId }),
-      clearSession: () => set({ gameId: null, playerId: null }),
+      setSession: (gameId, playerId, playerSecret) => set({ gameId, playerId, playerSecret }),
+      clearSession: () => set({ gameId: null, playerId: null, playerSecret: null }),
     }),
     {
       name: 'app-store',
+      version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ clientId: state.clientId }),
+      partialize: (state) => ({
+        gameId: state.gameId,
+        playerId: state.playerId,
+        playerSecret: state.playerSecret,
+      }),
+      migrate: () => ({ gameId: null, playerId: null, playerSecret: null }),
     },
   ),
 );

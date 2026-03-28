@@ -12,15 +12,15 @@ from hideandseek.models.base import Base
 
 
 class DeviceToken(Base):
-    """Maps a client_id to its APNS device token.
+    """Maps a player_id to its APNS device token.
 
-    Separate from Player — a client_id can span multiple games and may register
+    Separate from Player — a player_id can span multiple games and may register
     a token before joining any game.
     """
 
     __tablename__ = 'device_token'
 
-    client_id: Mapped[uuid.UUID] = mapped_column(
+    player_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         primary_key=True,
         default=uuid.uuid4,

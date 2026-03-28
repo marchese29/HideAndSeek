@@ -12,18 +12,20 @@ from sqlalchemy.orm import Session
 
 from hideandseek.db import _session_var
 from hideandseek.models.types import GameStatus
-from tests.conftest import create_game, create_player
+from tests.conftest import TEST_SECRET, create_game, create_player
 
 
 class TestLobbySSEAuth:
     """Auth validation for GET /games/{game_id}/lobby/events."""
 
     def test_404_game_not_found(self, client: TestClient, session: Session) -> None:
-        fake_id = uuid.uuid4()
+        game = create_game(session)
+        player = create_player(session, game.id)
+        fake_game_id = uuid.uuid4()
         with _patch_session_scope(session):
             resp = client.get(
-                f'/games/{fake_id}/lobby/events',
-                params={'client_id': str(uuid.uuid4())},
+                f'/games/{fake_game_id}/lobby/events',
+                headers={'X-Player-Id': str(player.id), 'X-Player-Secret': TEST_SECRET},
             )
         assert resp.status_code == 404
 
@@ -33,18 +35,18 @@ class TestLobbySSEAuth:
         with _patch_session_scope(session):
             resp = client.get(
                 f'/games/{game.id}/lobby/events',
-                params={'client_id': str(player.client_id)},
+                headers={'X-Player-Id': str(player.id), 'X-Player-Secret': TEST_SECRET},
             )
         assert resp.status_code == 409
 
-    def test_403_not_a_player(self, client: TestClient, session: Session) -> None:
+    def test_401_invalid_credentials(self, client: TestClient, session: Session) -> None:
         game = create_game(session)
         with _patch_session_scope(session):
             resp = client.get(
                 f'/games/{game.id}/lobby/events',
-                params={'client_id': str(uuid.uuid4())},
+                headers={'X-Player-Id': str(uuid.uuid4()), 'X-Player-Secret': 'wrong'},
             )
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
 
 @contextmanager

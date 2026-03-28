@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import DistanceConvention, GameStatus, PlayerRole
 from tests.conftest import (
+    TEST_SECRET,
     create_game,
     create_game_map,
     create_game_map_feature,
@@ -17,8 +18,8 @@ from tests.conftest import (
 )
 
 
-def _headers(client_id: uuid.UUID) -> dict[str, str]:
-    return {'X-Client-Id': str(client_id)}
+def _headers(player_id: uuid.UUID) -> dict[str, str]:
+    return {'X-Player-Id': str(player_id), 'X-Player-Secret': TEST_SECRET}
 
 
 def _point(lng: float = -0.141, lat: float = 51.515) -> dict:
@@ -28,7 +29,7 @@ def _point(lng: float = -0.141, lat: float = 51.515) -> dict:
 def _report_location(
     client: TestClient,
     game_id: uuid.UUID,
-    player_client_id: uuid.UUID,
+    player_id: uuid.UUID,
     lng: float = -0.141,
     lat: float = 51.515,
 ):
@@ -36,7 +37,7 @@ def _report_location(
     client.post(
         f'/games/{game_id}/location',
         json={'coordinates': _point(lng, lat), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(player_client_id),
+        headers=_headers(player_id),
     )
 
 
@@ -45,8 +46,8 @@ def _setup_seeking_game(client: TestClient, session: Session) -> tuple[Game, Pla
     game = create_game(session, status=GameStatus.seeking)
     hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
     seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
-    _report_location(client, game.id, seeker.client_id, -0.1, 51.5)
-    _report_location(client, game.id, hider.client_id, 0.0, 51.0)
+    _report_location(client, game.id, seeker.id, -0.1, 51.5)
+    _report_location(client, game.id, hider.id, 0.0, 51.0)
     return game, hider, seeker
 
 
@@ -58,7 +59,7 @@ def test_ask_radar_question(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     data = resp.json()
@@ -82,7 +83,7 @@ def test_ask_custom_slot_requires_distance(client: TestClient, session: Session)
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 2},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 422
     assert 'custom_distance' in resp.json()['detail']
@@ -93,7 +94,7 @@ def test_ask_custom_slot_with_distance(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 2, 'custom_distance': 4000},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['parameters']['radius'] == 4000
@@ -105,14 +106,14 @@ def test_ask_question_deducts_slot(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
 
     # Answer the question so we can ask another
     resp = client.post(
         f'/games/{game.id}/questions/{resp.json()["id"]}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
 
@@ -128,7 +129,7 @@ def test_ask_question_invalid_slot_index(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 99},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 422
 
@@ -139,7 +140,7 @@ def test_ask_question_not_seeking(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 409
 
@@ -149,7 +150,7 @@ def test_ask_question_hider_forbidden(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 403
 
@@ -160,7 +161,7 @@ def test_ask_question_while_unanswered(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
 
@@ -168,7 +169,7 @@ def test_ask_question_while_unanswered(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 409
     assert 'unanswered' in resp.json()['detail']
@@ -182,7 +183,7 @@ def test_reask_radar_slot(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['ask_count'] == 1
@@ -191,14 +192,14 @@ def test_reask_radar_slot(client: TestClient, session: Session):
     # Answer
     client.post(
         f'/games/{game.id}/questions/{q1_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # Re-ask same slot
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['ask_count'] == 2
@@ -212,7 +213,7 @@ def test_ask_thermometer_question(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/thermometer',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     data = resp.json()
@@ -230,16 +231,16 @@ def test_lock_in_thermometer(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/thermometer',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     # Report a new seeker location (simulates travel)
-    _report_location(client, game.id, seeker.client_id, 0.1, 51.6)
+    _report_location(client, game.id, seeker.id, 0.1, 51.6)
 
     resp = client.post(
         f'/games/{game.id}/questions/thermometer/{question_id}/lock-in',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -255,19 +256,19 @@ def test_thermometer_full_flow(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/thermometer',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     question_id = resp.json()['id']
     assert resp.json()['status'] == 'in_progress'
 
     # Seeker moves closer to hider and reports location
-    _report_location(client, game.id, seeker.client_id, -0.05, 51.3)
+    _report_location(client, game.id, seeker.id, -0.05, 51.3)
 
     # Lock in
     resp = client.post(
         f'/games/{game.id}/questions/thermometer/{question_id}/lock-in',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     assert resp.json()['status'] == 'answerable'
@@ -275,7 +276,7 @@ def test_thermometer_full_flow(client: TestClient, session: Session):
     # Hider answers
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -291,13 +292,13 @@ def test_lock_in_wrong_status(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/thermometer/{question_id}/lock-in',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 409
 
@@ -310,13 +311,13 @@ def test_answer_question(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -335,13 +336,13 @@ def test_answer_question_seeker_forbidden(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 403
 
@@ -357,18 +358,18 @@ def test_list_questions(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
     client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # List as seeker — summary only
     resp = client.get(
         f'/games/{game.id}/questions',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -393,7 +394,7 @@ def test_list_questions(client: TestClient, session: Session):
     # List as hider — same summary shape
     resp = client.get(
         f'/games/{game.id}/questions',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     data = resp.json()
     assert 'parameters' not in data[0]
@@ -410,14 +411,14 @@ def test_question_detail_hider_only(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     # Hider can access
     resp = client.get(
         f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -431,7 +432,7 @@ def test_question_detail_hider_only(client: TestClient, session: Session):
     # Seeker gets 403
     resp = client.get(
         f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 403
 
@@ -447,25 +448,25 @@ def test_exclusions_seeker_only(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
     client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # Hider gets 403
     resp = client.get(
         f'/games/{game.id}/exclusions',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 403
 
     # Seeker gets exclusion data
     resp = client.get(
         f'/games/{game.id}/exclusions',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -502,8 +503,8 @@ def _setup_feature_game(client: TestClient, session: Session) -> tuple[Game, Pla
     game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
     hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
     seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
-    _report_location(client, game.id, seeker.client_id, -0.115, 51.499)
-    _report_location(client, game.id, hider.client_id, -0.06, 51.519)
+    _report_location(client, game.id, seeker.id, -0.115, 51.499)
+    _report_location(client, game.id, hider.id, -0.06, 51.519)
     return game, hider, seeker
 
 
@@ -534,7 +535,7 @@ def test_ask_matching_question(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/matching',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     data = resp.json()
@@ -555,13 +556,13 @@ def test_answer_matching_no(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/matching',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     q_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -584,20 +585,20 @@ def test_answer_matching_yes(client: TestClient, session: Session):
     hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
     seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
     # Both near the same hospital
-    _report_location(client, game.id, seeker.client_id, -0.101, 51.501)
-    _report_location(client, game.id, hider.client_id, -0.099, 51.499)
+    _report_location(client, game.id, seeker.id, -0.101, 51.501)
+    _report_location(client, game.id, hider.id, -0.099, 51.499)
 
     slot_idx = _get_matching_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/matching',
         json={'location': _point(-0.101, 51.501), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     q_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.json()['answer'] == 'yes'
 
@@ -611,21 +612,21 @@ def test_reask_matching_slot(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/matching',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['ask_count'] == 1
     q_id = resp.json()['id']
     client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # Re-ask same slot
     resp = client.post(
         f'/games/{game.id}/questions/matching',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['ask_count'] == 2
@@ -638,7 +639,7 @@ def test_matching_no_feature_on_map(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/matching',
         json={'location': _point(-0.115, 51.499), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 422
 
@@ -650,14 +651,14 @@ def test_matching_consumes_inventory(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/matching',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
 
     # Verify via question summary list
     resp = client.get(
         f'/games/{game.id}/questions',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert len(resp.json()) == 1
     assert resp.json()[0]['question_type'] == 'matching'
@@ -672,7 +673,7 @@ def test_ask_measuring_question(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     data = resp.json()
@@ -688,14 +689,14 @@ def test_answer_measuring_farther(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     q_id = resp.json()['id']
     seeker_dist = resp.json()['parameters']['seeker_resolution']['distance']
 
     resp = client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     data = resp.json()
     hider_dist = data['parameters']['hider_resolution']['distance']
@@ -720,20 +721,20 @@ def test_answer_measuring_closer(client: TestClient, session: Session):
     hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
     seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
     # Seeker very close, hider far
-    _report_location(client, game.id, seeker.client_id, -0.1001, 51.5001)
-    _report_location(client, game.id, hider.client_id, -0.2, 51.6)
+    _report_location(client, game.id, seeker.id, -0.1001, 51.5001)
+    _report_location(client, game.id, hider.id, -0.2, 51.6)
 
     slot_idx = _get_measuring_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
         json={'location': _point(-0.1001, 51.5001), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     q_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.json()['answer'] == 'closer'
 
@@ -746,19 +747,19 @@ def test_reask_measuring_slot(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.json()['ask_count'] == 1
     q_id = resp.json()['id']
     client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
         json={'location': _point(-0.115, 51.499), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['ask_count'] == 2
@@ -773,13 +774,13 @@ def test_radar_answer_has_no_exclusion_in_detail(client: TestClient, session: Se
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -795,17 +796,17 @@ def test_exclusions_accumulate(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     q1_id = resp.json()['id']
     client.post(
         f'/games/{game.id}/questions/{q1_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     resp = client.get(
         f'/games/{game.id}/exclusions',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -815,17 +816,17 @@ def test_exclusions_accumulate(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.05, 51.52), 'slot_index': 1},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     q2_id = resp.json()['id']
     client.post(
         f'/games/{game.id}/questions/{q2_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     resp = client.get(
         f'/games/{game.id}/exclusions',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -841,13 +842,13 @@ def test_veto_question(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/veto',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -863,21 +864,21 @@ def test_veto_then_reask(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     # Veto
     client.post(
         f'/games/{game.id}/questions/{question_id}/veto',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # Re-ask same slot
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['ask_count'] == 2
@@ -890,20 +891,20 @@ def test_veto_non_answerable(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     # Answer first
     client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # Try to veto an answered question
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/veto',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 409
 
@@ -914,13 +915,13 @@ def test_veto_as_seeker(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/veto',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 403
 
@@ -931,19 +932,19 @@ def test_veto_no_exclusion_generated(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     client.post(
         f'/games/{game.id}/questions/{question_id}/veto',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # Exclusions endpoint should have no entries
     resp = client.get(
         f'/games/{game.id}/exclusions',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     assert len(resp.json()['exclusions']) == 0
@@ -959,13 +960,13 @@ def test_scheduled_veto_sets_flag(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/veto?scheduled=true',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -980,20 +981,20 @@ def test_scheduled_veto_answer_overrides(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     # Schedule veto
     client.post(
         f'/games/{game.id}/questions/{question_id}/veto?scheduled=true',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # Answer normally — overrides the scheduled veto
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     assert resp.json()['status'] == 'answered'
@@ -1006,13 +1007,13 @@ def test_scheduled_veto_immediate_still_works(client: TestClient, session: Sessi
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/veto',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     assert resp.json()['status'] == 'vetoed'
@@ -1038,8 +1039,8 @@ def _setup_imperial_seeking_game(
     )
     hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
     seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
-    _report_location(client, game.id, seeker.client_id, -0.1, 51.5)
-    _report_location(client, game.id, hider.client_id, 0.0, 51.0)
+    _report_location(client, game.id, seeker.id, -0.1, 51.5)
+    _report_location(client, game.id, hider.id, 0.0, 51.0)
     return game, hider, seeker
 
 
@@ -1057,7 +1058,7 @@ def test_imperial_radar_stores_miles(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['parameters']['radius'] == 1  # 1 mile
@@ -1080,20 +1081,20 @@ def test_imperial_radar_conversion_for_answer(client: TestClient, session: Sessi
     )
     hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
     seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
-    _report_location(client, game.id, seeker.client_id, -0.1, 51.5)
+    _report_location(client, game.id, seeker.id, -0.1, 51.5)
     # Hider ~1556 m away (within 1 mile ≈ 1609 m)
-    _report_location(client, game.id, hider.client_id, -0.1, 51.514)
+    _report_location(client, game.id, hider.id, -0.1, 51.514)
 
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     q_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     assert resp.json()['answer'] == 'yes'
@@ -1120,15 +1121,15 @@ def test_imperial_measuring_distances_in_miles(client: TestClient, session: Sess
     hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
     seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
     # Seeker very close to hospital
-    _report_location(client, game.id, seeker.client_id, -0.1001, 51.5001)
+    _report_location(client, game.id, seeker.id, -0.1001, 51.5001)
     # Hider far from hospital
-    _report_location(client, game.id, hider.client_id, -0.2, 51.6)
+    _report_location(client, game.id, hider.id, -0.2, 51.6)
 
     slot_idx = _get_measuring_slot_index(client, game, 'hospital')
     resp = client.post(
         f'/games/{game.id}/questions/measuring',
         json={'location': _point(-0.1001, 51.5001), 'slot_index': slot_idx},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     seeker_dist = resp.json()['parameters']['seeker_resolution']['distance']
@@ -1138,7 +1139,7 @@ def test_imperial_measuring_distances_in_miles(client: TestClient, session: Sess
     q_id = resp.json()['id']
     resp = client.post(
         f'/games/{game.id}/questions/{q_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -1173,13 +1174,13 @@ def test_abandon_answerable_question(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/abandon',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -1195,14 +1196,14 @@ def test_abandon_in_progress_thermometer(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/thermometer',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.json()['status'] == 'in_progress'
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/abandon',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     assert resp.json()['status'] == 'abandoned'
@@ -1214,13 +1215,13 @@ def test_abandon_as_hider_forbidden(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/abandon',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 403
 
@@ -1231,19 +1232,19 @@ def test_abandon_already_answered(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     # Answer first
     client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/abandon',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 409
 
@@ -1254,20 +1255,20 @@ def test_abandon_then_reask(client: TestClient, session: Session):
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     question_id = resp.json()['id']
 
     client.post(
         f'/games/{game.id}/questions/{question_id}/abandon',
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
 
     # Should be able to ask a new question
     resp = client.post(
         f'/games/{game.id}/questions/radar',
         json={'location': _point(-0.1, 51.5), 'slot_index': 0},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 201
     assert resp.json()['ask_count'] == 2

@@ -35,14 +35,19 @@ def create_game_with_host(
     body: CreateGameRequest,
     *,
     game_map: GameMap,
-    host_client_id: uuid.UUID,
+    secret_hash: str,
     hiding_time_min: int,
     base_question_delay_min: int,
 ) -> tuple[Game, Player]:
-    """Create a game and its host player with an auto-assigned color."""
+    """Create a game and its host player with an auto-assigned color.
+
+    Pre-generates the host player's UUID so both the game and the player
+    can be created with a consistent host_player_id in one pass.
+    """
+    host_player_id = uuid.uuid4()
     game = query_create_game(
         game_map=game_map,
-        host_client_id=host_client_id,
+        host_player_id=host_player_id,
         hiding_time_min=hiding_time_min,
         base_question_delay_min=base_question_delay_min,
         default_inventory=game_map.default_inventory,
@@ -52,7 +57,13 @@ def create_game_with_host(
         excluded_route_ids=body.excluded_route_ids,
     )
     color = assign_color(game)
-    player = add_player(game, client_id=host_client_id, name=body.name, color=color)
+    player = add_player(
+        game,
+        player_id=host_player_id,
+        name=body.name,
+        color=color,
+        secret_hash=secret_hash,
+    )
     return game, player
 
 
@@ -60,14 +71,14 @@ def join_game(
     body: JoinGameRequest,
     game: Game,
     *,
-    client_id: uuid.UUID,
+    secret_hash: str,
 ) -> Player:
     """Join a game with an auto-assigned color. Enforces player cap."""
     if len(game.players) >= MAX_PLAYERS:
         msg = 'Game is full (12 players max).'
         raise ValueError(msg)
     color = assign_color(game)
-    player = add_player(game, client_id=client_id, name=body.name, color=color, role=body.role)
+    player = add_player(game, name=body.name, color=color, role=body.role, secret_hash=secret_hash)
     emit(PlayerJoinedEvent(game=game, player=player))
     return player
 
@@ -76,7 +87,7 @@ def remove_player(
     game: Game,
     player: Player,
     *,
-    client_id: uuid.UUID,
+    caller_player_id: uuid.UUID,
     new_host_id: uuid.UUID | None = None,
 ) -> None:
     """Remove a player from a lobby game.
@@ -90,14 +101,14 @@ def remove_player(
         msg = 'Players can only be removed during lobby.'
         raise ValueError(msg)
 
-    is_self = player.client_id == client_id
-    is_host = client_id == game.host_client_id
+    is_self = player.id == caller_player_id
+    is_host = caller_player_id == game.host_player_id
 
     if not is_self and not is_host:
         msg = 'Only the player or the host can remove a player.'
         raise PermissionError(msg)
 
-    target_is_host = player.client_id == game.host_client_id
+    target_is_host = player.id == game.host_player_id
     removed_player_id = player.id
 
     if target_is_host:
@@ -116,7 +127,7 @@ def remove_player(
         if new_host is None or new_host.id == player.id:
             msg = 'new_host_id must be another player in this game.'
             raise ValueError(msg)
-        game.host_client_id = new_host.client_id
+        game.host_player_id = new_host.id
         delete_player(player)
         emit(PlayerLeftEvent(game=game, player_id=removed_player_id))
         emit(HostChangedEvent(game=game, new_host_player_id=new_host.id))

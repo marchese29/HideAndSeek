@@ -6,11 +6,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from hideandseek.models.types import GameStatus, PlayerRole
-from tests.conftest import create_game, create_player
+from tests.conftest import TEST_SECRET, create_game, create_player
 
 
-def _headers(client_id: uuid.UUID) -> dict[str, str]:
-    return {'X-Client-Id': str(client_id)}
+def _headers(player_id: uuid.UUID) -> dict[str, str]:
+    return {'X-Player-Id': str(player_id), 'X-Player-Secret': TEST_SECRET}
 
 
 def _point(lng: float = -0.141, lat: float = 51.515) -> dict:
@@ -30,7 +30,7 @@ def test_report_location(client: TestClient, session: Session):
             'coordinates': _point(),
             'timestamp': '2026-02-11T10:00:00Z',
         },
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -46,14 +46,14 @@ def test_report_location_seeker_sees_other_seekers(client: TestClient, session: 
     client.post(
         f'/games/{game.id}/location',
         json={'coordinates': _point(0.1, 51.5), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(seeker2.client_id),
+        headers=_headers(seeker2.id),
     )
 
     # seeker1 reports and should see seeker2
     resp = client.post(
         f'/games/{game.id}/location',
         json={'coordinates': _point(-0.1, 51.5), 'timestamp': '2026-02-11T10:01:00Z'},
-        headers=_headers(seeker1.client_id),
+        headers=_headers(seeker1.id),
     )
     assert resp.status_code == 200
     players = resp.json()['players']
@@ -70,14 +70,14 @@ def test_hider_sees_seekers(client: TestClient, session: Session):
     client.post(
         f'/games/{game.id}/location',
         json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
 
     # hider reports and should see the seeker
     resp = client.post(
         f'/games/{game.id}/location',
         json={'coordinates': _point(0.0, 52.0), 'timestamp': '2026-02-11T10:01:00Z'},
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 200
     players = resp.json()['players']
@@ -94,14 +94,14 @@ def test_hider_sees_other_hiders(client: TestClient, session: Session):
     client.post(
         f'/games/{game.id}/location',
         json={'coordinates': _point(0.1, 51.5), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(hider2.client_id),
+        headers=_headers(hider2.id),
     )
 
     # hider1 reports and should see hider2
     resp = client.post(
         f'/games/{game.id}/location',
         json={'coordinates': _point(-0.1, 51.5), 'timestamp': '2026-02-11T10:01:00Z'},
-        headers=_headers(hider1.client_id),
+        headers=_headers(hider1.id),
     )
     assert resp.status_code == 200
     players = resp.json()['players']
@@ -118,14 +118,14 @@ def test_seeker_does_not_see_hider(client: TestClient, session: Session):
     client.post(
         f'/games/{game.id}/location',
         json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(hider.client_id),
+        headers=_headers(hider.id),
     )
 
     # seeker reports — should NOT see the hider
     resp = client.post(
         f'/games/{game.id}/location',
         json={'coordinates': _point(0.0, 52.0), 'timestamp': '2026-02-11T10:01:00Z'},
-        headers=_headers(seeker.client_id),
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     assert resp.json()['players'] == []
@@ -138,7 +138,7 @@ def test_report_location_not_in_game(client: TestClient, session: Session):
         json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
         headers=_headers(uuid.uuid4()),
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 # ── GET /games/{game_id}/location-history ────────────────────────────────────
@@ -153,7 +153,7 @@ def test_location_history_when_finished(client: TestClient, session: Session):
         client.post(
             f'/games/{game.id}/location',
             json={'coordinates': _point(i * 0.01, 51.5), 'timestamp': f'2026-02-11T10:0{i}:00Z'},
-            headers=_headers(player.client_id),
+            headers=_headers(player.id),
         )
 
     # End the game

@@ -13,7 +13,7 @@ from hideandseek.celery_app import app as celery_app
 from hideandseek.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
 from hideandseek.db import session_dependency
 from hideandseek.dependencies import (
-    get_client_id,
+    get_authenticated_player_id,
     get_game,
     get_hider_in_game,
     get_player_in_game,
@@ -34,6 +34,7 @@ from hideandseek.queries.device_tokens import upsert_device_token
 from hideandseek.queries.effective_map import get_effective_map_data
 from hideandseek.queries.games import (
     find_game_by_join_code,
+    generate_credentials,
     get_player,
     set_hider_station,
     update_game_status,
@@ -58,6 +59,7 @@ from hideandseek.schemas.response import (
     JoinGameResponse,
     NearbyStationResponse,
     PlayerResponse,
+    SessionResponse,
     StopResponse,
 )
 from hideandseek.tasks.game_timers import transition_hiding_to_seeking
@@ -69,19 +71,13 @@ router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(sessio
 @router.post('', response_model=JoinGameResponse, status_code=201)
 def create_game(
     body: CreateGameRequest,
-    client_id: uuid.UUID = Depends(get_client_id),
 ) -> JoinGameResponse:
     """Create a new game on a map. The host is automatically added as the first player."""
     game_map = get_map(body.map_id)
     if not game_map:
         raise HTTPException(status_code=404, detail='Map not found.')
 
-    if body.device_token:
-        upsert_device_token(
-            client_id=client_id,
-            token=body.device_token,
-            environment=body.device_token_environment,
-        )
+    raw_secret, secret_hash = generate_credentials()
 
     hiding_time = resolve_hiding_time_min(
         request_override=body.hiding_time_min,
@@ -96,17 +92,28 @@ def create_game(
     game, player = create_game_with_host(
         body,
         game_map=game_map,
-        host_client_id=client_id,
+        secret_hash=secret_hash,
         hiding_time_min=hiding_time,
         base_question_delay_min=question_delay,
     )
-    return JoinGameResponse(game=GameResponse.from_model(game), player_id=player.id)
+
+    if body.device_token:
+        upsert_device_token(
+            player_id=player.id,
+            token=body.device_token,
+            environment=body.device_token_environment,
+        )
+
+    return JoinGameResponse(
+        game=GameResponse.from_model(game),
+        player_id=player.id,
+        player_secret=raw_secret,
+    )
 
 
 @router.post('/join', response_model=JoinGameResponse, status_code=201)
 def join_game(
     body: JoinGameRequest,
-    client_id: uuid.UUID = Depends(get_client_id),
 ) -> JoinGameResponse:
     """Join a game by its join code."""
     game = find_game_by_join_code(body.join_code)
@@ -115,21 +122,24 @@ def join_game(
     if not game.status.is_lobby:
         raise HTTPException(status_code=409, detail='Game is not in lobby.')
 
+    raw_secret, secret_hash = generate_credentials()
+
+    try:
+        player = lobby_join_game(body, game, secret_hash=secret_hash)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
     if body.device_token:
         upsert_device_token(
-            client_id=client_id,
+            player_id=player.id,
             token=body.device_token,
             environment=body.device_token_environment,
         )
 
-    try:
-        player = lobby_join_game(body, game, client_id=client_id)
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-
     return JoinGameResponse(
         game=GameResponse.from_model(game),
         player_id=player.id,
+        player_secret=raw_secret,
     )
 
 
@@ -139,6 +149,15 @@ def get_game_state(
 ) -> GameResponse:
     """Fetch current game state."""
     return GameResponse.from_model(game)
+
+
+@router.get('/{game_id}/me', response_model=SessionResponse)
+def get_session_info(
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> SessionResponse:
+    """Validate stored session credentials. Returns player info and game status."""
+    return SessionResponse(player=PlayerResponse.from_model(player), game_status=game.status)
 
 
 @router.get('/{game_id}/inventory', response_model=InventoryResponse)
@@ -158,13 +177,13 @@ def patch_player(
     player_id: uuid.UUID,
     body: PlayerUpdate,
     game: Game = Depends(get_game),
-    client_id: uuid.UUID = Depends(get_client_id),
+    auth_player_id: uuid.UUID = Depends(get_authenticated_player_id),
 ) -> PlayerResponse:
     """Update a player's role, name, color, or device token."""
     player = get_player(player_id)
     if not player or player.game_id != game.id:
         raise HTTPException(status_code=404, detail='Player not found in this game.')
-    if player.client_id != client_id:
+    if player.id != auth_player_id:
         raise HTTPException(status_code=403, detail='You can only update your own player.')
 
     updates = body.model_dump(exclude_unset=True)
@@ -180,7 +199,7 @@ def patch_player(
         player.role = updates['role']
     if updates.get('device_token'):
         upsert_device_token(
-            client_id=client_id,
+            player_id=auth_player_id,
             token=updates['device_token'],
             environment=body.device_token_environment,
         )
@@ -194,7 +213,7 @@ def remove_player(
     player_id: uuid.UUID,
     body: RemovePlayerRequest | None = None,
     game: Game = Depends(get_game),
-    client_id: uuid.UUID = Depends(get_client_id),
+    auth_player_id: uuid.UUID = Depends(get_authenticated_player_id),
 ) -> None:
     """Remove a player from the lobby. Self-leave or host-kick."""
     player = get_player(player_id)
@@ -205,7 +224,7 @@ def remove_player(
         lobby_remove_player(
             game,
             player,
-            client_id=client_id,
+            caller_player_id=auth_player_id,
             new_host_id=body.new_host_id if body else None,
         )
     except PermissionError as e:
@@ -217,10 +236,10 @@ def remove_player(
 @router.post('/{game_id}/start', response_model=GameResponse)
 def start_game(
     game: Game = Depends(get_game),
-    client_id: uuid.UUID = Depends(get_client_id),
+    auth_player_id: uuid.UUID = Depends(get_authenticated_player_id),
 ) -> GameResponse:
     """Transition the game from lobby to hiding. Host-only."""
-    if client_id != game.host_client_id:
+    if auth_player_id != game.host_player_id:
         raise HTTPException(status_code=403, detail='Only the host can start the game.')
     if not game.status.is_lobby:
         raise HTTPException(status_code=409, detail='Game is not in lobby.')

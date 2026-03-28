@@ -33,12 +33,14 @@ function parseData<T>(event: SSEEvent): T | null {
 export function useLobbyEvents(gameId: string) {
   const queryClient = useQueryClient();
   const playerId = useAppStore((s) => s.playerId);
-  const clientId = useAppStore((s) => s.clientId);
+  const playerSecret = useAppStore((s) => s.playerSecret);
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    const url = `${API_BASE_URL}/games/${gameId}/lobby/events?client_id=${clientId}`;
-    const es = new EventSource<LobbyEventType>(url);
+    const url = `${API_BASE_URL}/games/${gameId}/lobby/events`;
+    const es = new EventSource<LobbyEventType>(url, {
+      headers: { 'x-player-id': playerId!, 'x-player-secret': playerSecret! },
+    });
     esRef.current = es;
 
     const queryKey = ['game', gameId];
@@ -111,5 +113,5 @@ export function useLobbyEvents(gameId: string) {
       es.close();
       esRef.current = null;
     };
-  }, [gameId, clientId, playerId, queryClient]);
+  }, [gameId, playerId, playerSecret, queryClient]);
 }

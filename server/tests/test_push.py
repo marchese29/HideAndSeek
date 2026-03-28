@@ -21,26 +21,26 @@ from tests.conftest import create_game, create_player
 
 
 def test_upsert_creates_token(session: Session):
-    client_id = uuid.uuid4()
-    dt = upsert_device_token(client_id=client_id, token='aabbccdd', environment='sandbox')
-    assert dt.client_id == client_id
+    player_id = uuid.uuid4()
+    dt = upsert_device_token(player_id=player_id, token='aabbccdd', environment='sandbox')
+    assert dt.player_id == player_id
     assert dt.token == 'aabbccdd'
     assert dt.environment == 'sandbox'
     assert dt.updated_at is not None
 
 
 def test_upsert_updates_existing_token(session: Session):
-    client_id = uuid.uuid4()
-    dt1 = upsert_device_token(client_id=client_id, token='old_token')
+    player_id = uuid.uuid4()
+    dt1 = upsert_device_token(player_id=player_id, token='old_token')
     original_time = dt1.updated_at
 
-    dt2 = upsert_device_token(client_id=client_id, token='new_token')
-    assert dt2.client_id == client_id
+    dt2 = upsert_device_token(player_id=player_id, token='new_token')
+    assert dt2.player_id == player_id
     assert dt2.token == 'new_token'
     assert dt2.updated_at >= original_time
 
     # Only one record in DB
-    result = session.get(DeviceToken, client_id)
+    result = session.get(DeviceToken, player_id)
     assert result is not None
     assert result.token == 'new_token'
 
@@ -53,8 +53,8 @@ def test_get_device_tokens_for_game(session: Session):
     hider = create_player(session, game.id, role=PlayerRole.hider)
     seeker = create_player(session, game.id, role=PlayerRole.seeker)
 
-    upsert_device_token(client_id=hider.client_id, token='hider_token')
-    upsert_device_token(client_id=seeker.client_id, token='seeker_token')
+    upsert_device_token(player_id=hider.id, token='hider_token')
+    upsert_device_token(player_id=seeker.id, token='seeker_token')
 
     all_tokens = get_device_tokens_for_game(game.id)
     assert len(all_tokens) == 2
@@ -67,8 +67,8 @@ def test_get_device_tokens_with_role_filter(session: Session):
     hider = create_player(session, game.id, role=PlayerRole.hider)
     seeker = create_player(session, game.id, role=PlayerRole.seeker)
 
-    upsert_device_token(client_id=hider.client_id, token='hider_token')
-    upsert_device_token(client_id=seeker.client_id, token='seeker_token')
+    upsert_device_token(player_id=hider.id, token='hider_token')
+    upsert_device_token(player_id=seeker.id, token='seeker_token')
 
     hider_tokens = get_device_tokens_for_game(game.id, role_filter=PlayerRole.hider)
     assert len(hider_tokens) == 1
@@ -85,7 +85,7 @@ def test_get_device_tokens_excludes_missing(session: Session):
     hider = create_player(session, game.id, role=PlayerRole.hider)
     create_player(session, game.id, role=PlayerRole.seeker)  # no token
 
-    upsert_device_token(client_id=hider.client_id, token='hider_token')
+    upsert_device_token(player_id=hider.id, token='hider_token')
 
     tokens = get_device_tokens_for_game(game.id)
     assert len(tokens) == 1
@@ -96,10 +96,10 @@ def test_get_device_tokens_excludes_missing(session: Session):
 
 
 def test_delete_device_token(session: Session):
-    client_id = uuid.uuid4()
-    upsert_device_token(client_id=client_id, token='to_delete')
-    delete_device_token(client_id)
-    assert session.get(DeviceToken, client_id) is None
+    player_id = uuid.uuid4()
+    upsert_device_token(player_id=player_id, token='to_delete')
+    delete_device_token(player_id)
+    assert session.get(DeviceToken, player_id) is None
 
 
 def test_delete_nonexistent_token(session: Session):

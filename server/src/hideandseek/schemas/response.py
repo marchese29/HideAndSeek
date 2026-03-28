@@ -208,10 +208,18 @@ class GameResponse(BaseModel):
 
 
 class JoinGameResponse(BaseModel):
-    """Returned when a player joins a game — includes the game state and the caller's player ID."""
+    """Returned when a player joins a game — includes credentials for the session."""
 
     game: GameResponse
     player_id: uuid.UUID = Field(description="The joining player's ID for subsequent requests.")
+    player_secret: str = Field(description='Secret token. Store securely — not retrievable again.')
+
+
+class SessionResponse(BaseModel):
+    """Session validation — confirms the caller is a valid player in the game."""
+
+    player: PlayerResponse
+    game_status: GameStatus
 
 
 # ── Effective map ─────────────────────────────────────────────────────────────

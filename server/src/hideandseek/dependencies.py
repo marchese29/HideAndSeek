@@ -6,7 +6,6 @@ import uuid
 
 import structlog
 from fastapi import Depends, Header, HTTPException, Path, Request
-from sqlalchemy import select
 
 from hideandseek.db import get_session
 from hideandseek.models.game import Game, Player
@@ -15,9 +14,19 @@ from hideandseek.models.types import PlayerRole
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
-def get_client_id(x_client_id: uuid.UUID = Header()) -> uuid.UUID:
-    """Extract and validate the X-Client-Id header."""
-    return x_client_id
+def get_authenticated_player_id(
+    x_player_id: uuid.UUID = Header(),
+    x_player_secret: str = Header(),
+) -> uuid.UUID:
+    """Extract and validate X-Player-Id + X-Player-Secret headers.
+
+    Looks up the Player by PK and verifies the secret hash.
+    """
+    session = get_session()
+    player = session.get(Player, x_player_id)
+    if player is None or not player.verify_secret(x_player_secret):
+        raise HTTPException(status_code=401, detail='Invalid or unknown player credentials.')
+    return x_player_id
 
 
 def get_game(
@@ -38,19 +47,13 @@ def get_game(
 
 def get_player_in_game(
     game: Game = Depends(get_game),
-    client_id: uuid.UUID = Depends(get_client_id),
+    player_id: uuid.UUID = Depends(get_authenticated_player_id),
 ) -> Player:
-    """Resolve the calling player via client_id + game, or 403.
-
-    Requires the session ContextVar to be set (via router-level
-    ``dependencies=[Depends(session_dependency)]``).
-    """
+    """Resolve the calling player via authenticated player_id + game, or 403."""
     session = get_session()
-    player = session.scalars(
-        select(Player).where(Player.client_id == client_id, Player.game == game)
-    ).one_or_none()
-    if not player:
-        logger.warning('player_not_in_game', client_id=str(client_id), game_id=str(game.id))
+    player = session.get(Player, player_id)
+    if not player or player.game_id != game.id:
+        logger.warning('player_not_in_game', player_id=str(player_id), game_id=str(game.id))
         raise HTTPException(status_code=403, detail='You are not a player in this game.')
     return player
 
@@ -73,25 +76,32 @@ def get_seeker_in_game(
     return player
 
 
-def get_optional_client_id(request: Request) -> uuid.UUID | None:
-    """Extract X-Client-Id header if present, otherwise None."""
-    raw = request.headers.get('x-client-id')
-    if raw is None:
+def get_optional_player_id(request: Request) -> uuid.UUID | None:
+    """Extract and validate X-Player-Id + X-Player-Secret if present, otherwise None."""
+    raw_id = request.headers.get('x-player-id')
+    raw_secret = request.headers.get('x-player-secret')
+    if raw_id is None or raw_secret is None:
         return None
     try:
-        return uuid.UUID(raw)
+        player_id = uuid.UUID(raw_id)
     except ValueError:
         return None
+    session = get_session()
+    player = session.get(Player, player_id)
+    if player is None or not player.verify_secret(raw_secret):
+        return None
+    return player_id
 
 
 def get_optional_player_in_game(
     game: Game = Depends(get_game),
-    client_id: uuid.UUID | None = Depends(get_optional_client_id),
+    player_id: uuid.UUID | None = Depends(get_optional_player_id),
 ) -> Player | None:
-    """Resolve the calling player if X-Client-Id is present, otherwise None."""
-    if client_id is None:
+    """Resolve the calling player if auth headers are present, otherwise None."""
+    if player_id is None:
         return None
     session = get_session()
-    return session.scalars(
-        select(Player).where(Player.client_id == client_id, Player.game == game)
-    ).one_or_none()
+    player = session.get(Player, player_id)
+    if not player or player.game_id != game.id:
+        return None
+    return player

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import uuid
@@ -35,6 +36,9 @@ from hideandseek.models.types import (
     category_key,
 )
 from hideandseek.queries.features import get_map_feature_categories
+
+TEST_SECRET = 'test-secret-for-unit-tests'
+TEST_SECRET_HASH = hashlib.sha256(TEST_SECRET.encode()).hexdigest()
 
 
 def pytest_configure() -> None:
@@ -164,8 +168,9 @@ def create_game(session: Session, **overrides: Any) -> Game:
         gm = create_game_map(session)
         overrides['map_id'] = gm.id
     inventory_template = overrides.pop('inventory_template', _DEFAULT_INVENTORY_TEMPLATE)
+    host_player_id = overrides.pop('host_player_id', uuid.uuid4())
     defaults: dict[str, Any] = {
-        'host_client_id': uuid.uuid4(),
+        'host_player_id': host_player_id,
         'join_code': overrides.pop('join_code', uuid.uuid4().hex[:4].upper()),
         'status': GameStatus.lobby,
         'hiding_time_min': 60,
@@ -179,10 +184,11 @@ def create_game(session: Session, **overrides: Any) -> Game:
 
     # Create host player (matches real app behavior — POST /games always creates host as player)
     host_player = Player(
+        id=host_player_id,
         game_id=game.id,
-        client_id=defaults['host_client_id'],
         name='Host',
         color=PlayerColor.red,
+        secret_hash=TEST_SECRET_HASH,
     )
     session.add(host_player)
     session.flush()
@@ -263,9 +269,9 @@ def create_player(session: Session, game_id: uuid.UUID, **overrides: Any) -> Pla
         overrides['color'] = list(PlayerColor)[len(existing)]
     defaults: dict[str, Any] = {
         'game_id': game_id,
-        'client_id': uuid.uuid4(),
         'name': 'Test Player',
         'role': None,
+        'secret_hash': TEST_SECRET_HASH,
     }
     defaults.update(overrides)
     player = Player(**defaults)

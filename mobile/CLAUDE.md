@@ -31,9 +31,9 @@ app/                           # expo-router file-based routes (stack navigator)
 src/
   api/
     schema.d.ts                # Auto-generated from OpenAPI — DO NOT EDIT
-    client.ts                  # openapi-fetch wrapper + X-Client-Id middleware
+    client.ts                  # openapi-fetch wrapper + X-Player-Id + X-Player-Secret middleware
     queryClient.ts             # TanStack Query client instance
-  store.ts                     # Zustand store (client identity + session)
+  store.ts                     # Zustand store (session credentials: playerId, playerSecret, gameId)
   constants/
     colors.ts                  # PlayerColor → hex mapping
   hooks/                       # Custom React hooks
@@ -72,10 +72,21 @@ Copy `.env.example` to `.env` and fill in values.
 
 ## State Management
 
-- **Zustand** (`src/store.ts`) — client identity and session context. `clientId` (UUID, generated once, persisted to AsyncStorage), `gameId`, `playerId`. Does NOT hold game data.
+- **Zustand** (`src/store.ts`) — session context. `gameId`, `playerId`, `playerSecret` (all null initially, set on create/join, cleared on leave/kick). Credentials are per-game and server-minted — returned in `JoinGameResponse`. Does NOT hold game data.
 - **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (game state, maps). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for game state.
-- `X-Client-Id` header is injected at runtime via `api.use()` middleware in `client.ts`. For endpoints where the OpenAPI spec declares `x-client-id` as a required header parameter, also pass `header: authHeader()` in the `params` object to satisfy TypeScript types. Import `authHeader` from `@/api/auth`.
+- `X-Player-Id` and `X-Player-Secret` headers are injected at runtime via `api.use()` middleware in `client.ts` (only when credentials exist). For endpoints where the OpenAPI spec declares these as required header parameters, also pass `header: authHeader()` in the `params` object to satisfy TypeScript types. Import `authHeader` from `@/api/auth`. `POST /games` and `POST /games/join` do not require auth headers (they mint fresh credentials).
 - API base URL is platform-aware: `localhost:8000` for iOS simulator, `10.0.2.2:8000` for Android emulator. Override via `EXPO_PUBLIC_API_BASE_URL`.
+
+## Session Recovery
+
+On app launch, `index.tsx` checks for stored credentials:
+
+1. If `gameId` + `playerId` + `playerSecret` exist in the store, call `GET /games/{game_id}/me`
+2. If 200 and game is in lobby → navigate to lobby screen
+3. If error or game not in lobby → `clearSession()`, show home screen
+4. Shows loading indicator while checking
+
+Kicked players' credentials return 403 on `/me` → clean session clear.
 
 ## Conventions
 

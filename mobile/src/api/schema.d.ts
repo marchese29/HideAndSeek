@@ -104,6 +104,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session Info
+         * @description Validate stored session credentials. Returns player info and game status.
+         */
+        get: operations["get_session_info_games__game_id__me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/inventory": {
         parameters: {
             query?: never;
@@ -1046,7 +1066,7 @@ export interface components {
         };
         /**
          * JoinGameResponse
-         * @description Returned when a player joins a game — includes the game state and the caller's player ID.
+         * @description Returned when a player joins a game — includes credentials for the session.
          */
         JoinGameResponse: {
             game: components["schemas"]["GameResponse"];
@@ -1056,6 +1076,11 @@ export interface components {
              * @description The joining player's ID for subsequent requests.
              */
             player_id: string;
+            /**
+             * Player Secret
+             * @description Secret token. Store securely — not retrievable again.
+             */
+            player_secret: string;
         };
         /**
          * LineString
@@ -1620,6 +1645,14 @@ export interface components {
             stop_ids: string[];
         };
         /**
+         * SessionResponse
+         * @description Session validation — confirms the caller is a valid player in the game.
+         */
+        SessionResponse: {
+            player: components["schemas"]["PlayerResponse"];
+            game_status: components["schemas"]["GameStatus"];
+        };
+        /**
          * SlotResponse
          * @description A slot in the question inventory.
          */
@@ -1804,9 +1837,7 @@ export interface operations {
     create_game_games_post: {
         parameters: {
             query?: never;
-            header: {
-                "x-client-id": string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -1839,9 +1870,7 @@ export interface operations {
     join_game_games_join_post: {
         parameters: {
             query?: never;
-            header: {
-                "x-client-id": string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -1902,6 +1931,40 @@ export interface operations {
             };
         };
     };
+    get_session_info_games__game_id__me_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_inventory_games__game_id__inventory_get: {
         parameters: {
             query?: never;
@@ -1937,7 +2000,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 player_id: string;
@@ -1973,7 +2037,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 player_id: string;
@@ -2011,7 +2076,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2075,7 +2141,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2108,7 +2175,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2150,7 +2218,8 @@ export interface operations {
                 lng: number;
             };
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2186,7 +2255,8 @@ export interface operations {
                 station_id: string;
             };
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2255,7 +2325,8 @@ export interface operations {
                 limit?: number;
             };
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2288,7 +2359,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2356,7 +2428,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2393,7 +2466,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2430,7 +2504,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2467,7 +2542,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2504,7 +2580,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 question_id: string;
@@ -2538,7 +2615,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 question_id: string;
@@ -2574,7 +2652,8 @@ export interface operations {
                 scheduled?: boolean;
             };
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 question_id: string;
@@ -2608,7 +2687,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 question_id: string;
@@ -2642,7 +2722,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2675,7 +2756,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 question_id: string;
@@ -2709,7 +2791,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;
@@ -2747,7 +2830,8 @@ export interface operations {
                 after_question?: number;
             };
             header: {
-                "x-client-id": string;
+                "x-player-id": string;
+                "x-player-secret": string;
             };
             path: {
                 game_id: string;

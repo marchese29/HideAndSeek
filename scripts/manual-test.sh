@@ -15,9 +15,6 @@ DS_ID="00000000-0000-0000-0000-000000000001"
 MAP_ID="00000000-0000-0000-0000-000000000002"
 FEAT_SEEKER="00000000-0000-0000-0000-000000000010"
 FEAT_HIDER="00000000-0000-0000-0000-000000000011"
-HOST_CLIENT="11111111-1111-1111-1111-111111111111"
-SEEKER_CLIENT="22222222-2222-2222-2222-222222222222"
-HIDER_CLIENT="33333333-3333-3333-3333-333333333333"
 
 pp() { python3 -m json.tool; }
 jq_val() { python3 -c "import sys,json; print(json.load(sys.stdin)$1)"; }
@@ -81,13 +78,13 @@ echo ""
 echo "=== POST /games (create game — host is first player) ==="
 CREATE_RESP=$(curl -sf -X POST "$BASE/games" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $HOST_CLIENT" \
   -d "{\"map_id\": \"$MAP_ID\", \"name\": \"Host\"}")
 echo "$CREATE_RESP" | pp
 GAME=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['game']))")
 GAME_ID=$(echo "$GAME" | jq_val "['id']")
 JOIN_CODE=$(echo "$GAME" | jq_val "['join_code']")
 HOST_PLAYER_ID=$(echo "$CREATE_RESP" | jq_val "['player_id']")
+HOST_SECRET=$(echo "$CREATE_RESP" | jq_val "['player_secret']")
 echo "  Game ID:        $GAME_ID"
 echo "  Join code:      $JOIN_CODE"
 echo "  Host player ID: $HOST_PLAYER_ID"
@@ -114,26 +111,24 @@ echo ""
 echo "=== POST /games/join (seeker) ==="
 SEEKER_RESP=$(curl -sf -X POST "$BASE/games/join" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $SEEKER_CLIENT" \
   -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Seeker\",\"device_token\":\"aaa\"}")
 SEEKER_ID=$(echo "$SEEKER_RESP" | jq_val "['player_id']")
+SEEKER_SECRET=$(echo "$SEEKER_RESP" | jq_val "['player_secret']")
 echo "  Seeker ID: $SEEKER_ID"
 
 echo ""
 echo "=== POST /games/join (hider) ==="
 HIDER_RESP=$(curl -sf -X POST "$BASE/games/join" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $HIDER_CLIENT" \
   -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"Hider\",\"device_token\":\"bbb\"}")
 HIDER_ID=$(echo "$HIDER_RESP" | jq_val "['player_id']")
+HIDER_SECRET=$(echo "$HIDER_RESP" | jq_val "['player_secret']")
 echo "  Hider ID: $HIDER_ID"
 
-TEMP_CLIENT="44444444-4444-4444-4444-444444444444"
 echo ""
 echo "=== POST /games/join (temp player for kick test) ==="
 TEMP_RESP=$(curl -sf -X POST "$BASE/games/join" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $TEMP_CLIENT" \
   -d "{\"join_code\":\"$JOIN_CODE\",\"name\":\"TempPlayer\"}")
 TEMP_ID=$(echo "$TEMP_RESP" | jq_val "['player_id']")
 echo "  Temp ID: $TEMP_ID"
@@ -142,7 +137,7 @@ echo ""
 echo "=== DELETE player (host kicks temp player) ==="
 KICK_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
   "$BASE/games/$GAME_ID/players/$TEMP_ID" \
-  -H "X-Client-Id: $HOST_CLIENT")
+  -H "X-Player-Id: $HOST_PLAYER_ID" -H "X-Player-Secret: $HOST_SECRET")
 assert_eq "kick status" "$KICK_STATUS" "204"
 
 echo ""
@@ -153,19 +148,19 @@ assert_eq "player count after kick" "$PLAYER_COUNT" "3"
 echo ""
 echo "=== PATCH players (assign roles — host + joined players) ==="
 curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$HOST_PLAYER_ID" \
-  -H "Content-Type: application/json" -H "X-Client-Id: $HOST_CLIENT" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $HOST_PLAYER_ID" -H "X-Player-Secret: $HOST_SECRET" \
   -d '{"role":"seeker"}' | jq_val "['role']"
 curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$SEEKER_ID" \
-  -H "Content-Type: application/json" -H "X-Client-Id: $SEEKER_CLIENT" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"role":"seeker"}' | jq_val "['role']"
 curl -sf -X PATCH "$BASE/games/$GAME_ID/players/$HIDER_ID" \
-  -H "Content-Type: application/json" -H "X-Client-Id: $HIDER_CLIENT" \
+  -H "Content-Type: application/json" -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET" \
   -d '{"role":"hider"}' | jq_val "['role']"
 
 echo ""
 echo "=== POST /games/{id}/start (host-only) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/start" \
-  -H "X-Client-Id: $HOST_CLIENT" | jq_val "['status']"
+  -H "X-Player-Id: $HOST_PLAYER_ID" -H "X-Player-Secret: $HOST_SECRET" | jq_val "['status']"
 
 STOP_VICTORIA="00000000-0000-0000-0000-000000000020"
 
@@ -182,34 +177,34 @@ assert_eq "no hider_station_id" "$HAS_STATION" "False"
 
 echo ""
 echo "=== GET /games/{id}/hider-station as hider (should see station) ==="
-HIDER_STATION_RESP=$(curl -sf "$BASE/games/$GAME_ID/hider-station" -H "X-Client-Id: $HIDER_CLIENT")
+HIDER_STATION_RESP=$(curl -sf "$BASE/games/$GAME_ID/hider-station" -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET")
 HIDER_STATION=$(echo "$HIDER_STATION_RESP" | jq_val "['hider_station_id']")
 assert_eq "hider_station_id" "$HIDER_STATION" "$STOP_VICTORIA"
 
 echo ""
 echo "=== GET /games/{id}/hider-station as seeker (should 403) ==="
-SEEKER_STATION_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/hider-station" -H "X-Client-Id: $SEEKER_CLIENT")
+SEEKER_STATION_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/hider-station" -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 assert_eq "seeker hider-station status" "$SEEKER_STATION_STATUS" "403"
 
 echo ""
 echo "=== POST /location (seeker at -0.1, 51.5) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/location" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"coordinates":{"type":"Point","coordinates":[-0.1,51.5]},"timestamp":"2026-02-17T10:00:00Z"}' | pp
 
 echo ""
 echo "=== POST /location (hider at 0.0, 51.0) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/location" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $HIDER_CLIENT" \
+  -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET" \
   -d '{"coordinates":{"type":"Point","coordinates":[0.0,51.0]},"timestamp":"2026-02-17T10:01:00Z"}' | pp
 
 echo ""
 echo "=== POST /questions/radar (3km radar) ==="
 Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/radar" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"slot_index":0}')
 echo "$Q" | pp
 Q_ID=$(echo "$Q" | jq_val "['id']")
@@ -219,48 +214,48 @@ assert_eq "no exclusion on detail response" "$HAS_EXCL" "False"
 
 echo ""
 echo "=== GET /questions/{id} as hider (question detail) ==="
-Q_DETAIL=$(curl -sf "$BASE/games/$GAME_ID/questions/$Q_ID" -H "X-Client-Id: $HIDER_CLIENT")
+Q_DETAIL=$(curl -sf "$BASE/games/$GAME_ID/questions/$Q_ID" -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET")
 echo "$Q_DETAIL" | pp
 assert_eq "detail has parameters" "$(echo "$Q_DETAIL" | python3 -c "import sys,json; print('parameters' in json.load(sys.stdin))")" "True"
 
 echo ""
 echo "=== GET /questions/{id} as seeker (should 403) ==="
-Q_DETAIL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/questions/$Q_ID" -H "X-Client-Id: $SEEKER_CLIENT")
+Q_DETAIL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/questions/$Q_ID" -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 assert_eq "seeker question detail status" "$Q_DETAIL_STATUS" "403"
 
 echo ""
 echo "=== POST /questions/{id}/answer (hider answers — expect 'no', ~56km apart) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
-  -H "X-Client-Id: $HIDER_CLIENT" | pp
+  -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET" | pp
 
 echo ""
 echo "=== GET /exclusions as seeker (should have 1 entry) ==="
-EXCL=$(curl -sf "$BASE/games/$GAME_ID/exclusions" -H "X-Client-Id: $SEEKER_CLIENT")
+EXCL=$(curl -sf "$BASE/games/$GAME_ID/exclusions" -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 EXCL_COUNT=$(echo "$EXCL" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['exclusions']))")
 assert_eq "exclusion entries" "$EXCL_COUNT" "1"
 
 echo ""
 echo "=== GET /exclusions as hider (should 403) ==="
-EXCL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/exclusions" -H "X-Client-Id: $HIDER_CLIENT")
+EXCL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/exclusions" -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET")
 assert_eq "hider exclusions status" "$EXCL_STATUS" "403"
 
 echo ""
 echo "=== GET /candidate-stations as seeker ==="
 CANDS=$(curl -sf "$BASE/games/$GAME_ID/candidate-stations" \
-  -H "X-Client-Id: $SEEKER_CLIENT")
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 CAND_COUNT=$(echo "$CANDS" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
 echo "  Candidates: $CAND_COUNT (2 expected — Waterloo hiding zone covered by 3km radar miss)"
 
 echo ""
 echo "=== GET /candidate-stations as hider (should 403) ==="
-CAND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/candidate-stations" -H "X-Client-Id: $HIDER_CLIENT")
+CAND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/candidate-stations" -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET")
 assert_eq "hider candidate-stations status" "$CAND_STATUS" "403"
 
 echo ""
 echo "=== POST /questions/thermometer (500m thermometer) ==="
 Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/thermometer" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"location":{"type":"Point","coordinates":[-0.1,51.5]},"slot_index":0}')
 echo "$Q" | pp
 Q_ID=$(echo "$Q" | jq_val "['id']")
@@ -270,18 +265,18 @@ echo ""
 echo "=== POST /location (seeker moves closer to hider → -0.05, 51.3) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/location" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"coordinates":{"type":"Point","coordinates":[-0.05,51.3]},"timestamp":"2026-02-17T10:05:00Z"}' | pp
 
 echo ""
 echo "=== POST /questions/thermometer/{id}/lock-in ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/thermometer/$Q_ID/lock-in" \
-  -H "X-Client-Id: $SEEKER_CLIENT" | pp
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET" | pp
 
 echo ""
 echo "=== POST /questions/{id}/answer (thermometer — expect 'closer') ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
-  -H "X-Client-Id: $HIDER_CLIENT" | pp
+  -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET" | pp
 
 echo ""
 echo "=== Look up matching slot_index for hospital ==="
@@ -293,7 +288,7 @@ echo ""
 echo "=== POST /questions/matching (hospital category) ==="
 Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/matching" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d "{\"location\":{\"type\":\"Point\",\"coordinates\":[-0.1,51.5]},\"slot_index\":$MATCHING_IDX}")
 echo "$Q" | pp
 Q_ID=$(echo "$Q" | jq_val "['id']")
@@ -302,7 +297,7 @@ echo "  Seeker feature: $(echo "$Q" | jq_val "['parameters']['seeker_resolution'
 echo ""
 echo "=== POST /questions/{id}/answer (matching — expect 'no', different hospitals) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
-  -H "X-Client-Id: $HIDER_CLIENT" | pp
+  -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET" | pp
 
 echo ""
 echo "=== Look up measuring slot_index for hospital ==="
@@ -313,7 +308,7 @@ echo ""
 echo "=== POST /questions/measuring (hospital category) ==="
 Q=$(curl -sf -X POST "$BASE/games/$GAME_ID/questions/measuring" \
   -H "Content-Type: application/json" \
-  -H "X-Client-Id: $SEEKER_CLIENT" \
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d "{\"location\":{\"type\":\"Point\",\"coordinates\":[-0.1,51.5]},\"slot_index\":$MEASURING_IDX}")
 echo "$Q" | pp
 Q_ID=$(echo "$Q" | jq_val "['id']")
@@ -321,12 +316,12 @@ Q_ID=$(echo "$Q" | jq_val "['id']")
 echo ""
 echo "=== POST /questions/{id}/answer (measuring — seeker vs hider distance) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
-  -H "X-Client-Id: $HIDER_CLIENT" | pp
+  -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET" | pp
 
 echo ""
 echo "=== GET /questions (summary only — no params, no locations, no geometry) ==="
 Q_LIST=$(curl -sf "$BASE/games/$GAME_ID/questions" \
-  -H "X-Client-Id: $SEEKER_CLIENT")
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 echo "$Q_LIST" | pp
 HAS_PARAMS=$(echo "$Q_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); print('parameters' in d[0])")
 assert_eq "no parameters on summary" "$HAS_PARAMS" "False"
@@ -335,27 +330,27 @@ assert_eq "no hider_location on summary" "$HAS_HIDER_LOC" "False"
 
 echo ""
 echo "=== GET /exclusions (all 4 exclusions for seeker) ==="
-EXCL=$(curl -sf "$BASE/games/$GAME_ID/exclusions" -H "X-Client-Id: $SEEKER_CLIENT")
+EXCL=$(curl -sf "$BASE/games/$GAME_ID/exclusions" -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 EXCL_COUNT=$(echo "$EXCL" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['exclusions']))")
 assert_eq "exclusion entries" "$EXCL_COUNT" "4"
 
 echo ""
 echo "=== GET /endgame-exclusions as seeker (Victoria station, after_question=0) ==="
 ENDGAME=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=0" \
-  -H "X-Client-Id: $SEEKER_CLIENT")
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 ENTRY_COUNT=$(echo "$ENDGAME" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
 echo "  Entries: $ENTRY_COUNT (should be 4 — all answered questions)"
 echo "  Hiding zone type: $(echo "$ENDGAME" | jq_val "['hiding_zone']['type']")"
 
 echo ""
 echo "=== GET /endgame-exclusions as hider (should 403) ==="
-ENDGAME_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=0" -H "X-Client-Id: $HIDER_CLIENT")
+ENDGAME_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=0" -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET")
 assert_eq "hider endgame-exclusions status" "$ENDGAME_STATUS" "403"
 
 echo ""
 echo "=== GET /endgame-exclusions (after_question=2, only questions 3+4) ==="
 ENDGAME2=$(curl -sf "$BASE/games/$GAME_ID/endgame-exclusions?station_id=$STOP_VICTORIA&after_question=2" \
-  -H "X-Client-Id: $SEEKER_CLIENT")
+  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 ENTRY_COUNT2=$(echo "$ENDGAME2" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['entries']))")
 echo "  Entries: $ENTRY_COUNT2 (should be 2)"
 

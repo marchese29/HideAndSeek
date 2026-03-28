@@ -16,10 +16,20 @@ from hideandseek.models.transit import Stop
 from hideandseek.models.types import GameStatus, PlayerRole, QuestionStatus, QuestionType
 from hideandseek.queries.stops import get_nearest_playable_stop
 
-from .conftest import create_game, create_game_map, create_player, create_transit_dataset
+from .conftest import (
+    TEST_SECRET,
+    create_game,
+    create_game_map,
+    create_player,
+    create_transit_dataset,
+)
 
 # A ~10 km square around (0, 0).
 GAME_MAP = Polygon([(-0.1, -0.1), (0.1, -0.1), (0.1, 0.1), (-0.1, 0.1), (-0.1, -0.1)])
+
+
+def _headers(player_id: uuid.UUID) -> dict[str, str]:
+    return {'X-Player-Id': str(player_id), 'X-Player-Secret': TEST_SECRET}
 
 
 # ── compute_endgame_exclusions (unit tests, no DB) ─────────────────────
@@ -132,7 +142,7 @@ def test_endgame_exclusions_endpoint_seeking(session: Session, client: TestClien
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 0},
-        headers={'X-Client-Id': str(seeker.client_id)},
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -169,7 +179,7 @@ def test_endgame_exclusions_with_answered_questions(session: Session, client: Te
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 0},
-        headers={'X-Client-Id': str(seeker.client_id)},
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -205,7 +215,7 @@ def test_endgame_exclusions_after_question_filters(session: Session, client: Tes
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 1},
-        headers={'X-Client-Id': str(seeker.client_id)},
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     assert len(resp.json()['entries']) == 1
@@ -222,7 +232,7 @@ def test_endgame_exclusions_409_if_not_seeking(session: Session, client: TestCli
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(uuid.uuid4()), 'after_question': 0},
-        headers={'X-Client-Id': str(seeker.client_id)},
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 409
 
@@ -236,7 +246,7 @@ def test_endgame_exclusions_404_invalid_station(session: Session, client: TestCl
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(uuid.uuid4()), 'after_question': 0},
-        headers={'X-Client-Id': str(seeker.client_id)},
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 404
 
@@ -263,7 +273,7 @@ def test_endgame_exclusions_422_wrong_dataset(session: Session, client: TestClie
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 0},
-        headers={'X-Client-Id': str(seeker.client_id)},
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 422
 
@@ -279,7 +289,7 @@ def test_endgame_exclusions_hider_403(session: Session, client: TestClient) -> N
     resp = client.get(
         f'/games/{game.id}/endgame-exclusions',
         params={'station_id': str(stop.id), 'after_question': 0},
-        headers={'X-Client-Id': str(hider.client_id)},
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 403
 
@@ -295,7 +305,7 @@ def test_candidate_stations_409_if_not_seeking(session: Session, client: TestCli
 
     resp = client.get(
         f'/games/{game.id}/candidate-stations',
-        headers={'X-Client-Id': str(seeker.client_id)},
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 409
 
@@ -308,7 +318,7 @@ def test_candidate_stations_hider_403(session: Session, client: TestClient) -> N
 
     resp = client.get(
         f'/games/{game.id}/candidate-stations',
-        headers={'X-Client-Id': str(hider.client_id)},
+        headers=_headers(hider.id),
     )
     assert resp.status_code == 403
 
@@ -356,7 +366,7 @@ def test_candidate_stations_returns_stops(session: Session, client: TestClient) 
 
     resp = client.get(
         f'/games/{game.id}/candidate-stations',
-        headers={'X-Client-Id': str(seeker.client_id)},
+        headers=_headers(seeker.id),
     )
     assert resp.status_code == 200
     data = resp.json()

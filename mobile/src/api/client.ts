@@ -19,8 +19,9 @@ export const api = createClient<paths>({ baseUrl: API_BASE_URL });
 
 api.use({
   onRequest({ request }) {
-    const { clientId } = useAppStore.getState();
-    request.headers.set('x-client-id', clientId);
+    const { playerId, playerSecret } = useAppStore.getState();
+    if (playerId) request.headers.set('x-player-id', playerId);
+    if (playerSecret) request.headers.set('x-player-secret', playerSecret);
     return request;
   },
 });
