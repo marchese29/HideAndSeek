@@ -480,12 +480,8 @@ paths:
             schema:
               $ref: '#/components/schemas/ElectStationRequest'
       responses:
-        '200':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HidingZoneResponse'
         '422':
           description: Validation Error
           content:
@@ -809,12 +805,8 @@ paths:
             schema:
               $ref: '#/components/schemas/AskQuestionRequest'
       responses:
-        '201':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AskQuestionResponse'
         '422':
           description: Validation Error
           content:
@@ -856,12 +848,8 @@ paths:
             schema:
               $ref: '#/components/schemas/AskQuestionRequest'
       responses:
-        '201':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AskQuestionResponse'
         '422':
           description: Validation Error
           content:
@@ -903,12 +891,8 @@ paths:
             schema:
               $ref: '#/components/schemas/AskQuestionRequest'
       responses:
-        '201':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AskQuestionResponse'
         '422':
           description: Validation Error
           content:
@@ -950,12 +934,8 @@ paths:
             schema:
               $ref: '#/components/schemas/AskQuestionRequest'
       responses:
-        '201':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AskQuestionResponse'
         '422':
           description: Validation Error
           content:
@@ -998,12 +978,8 @@ paths:
           type: string
           title: X-Player-Secret
       responses:
-        '200':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -1047,12 +1023,8 @@ paths:
           type: string
           title: X-Player-Secret
       responses:
-        '200':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -1105,12 +1077,8 @@ paths:
           type: string
           title: X-Player-Secret
       responses:
-        '200':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -1153,12 +1121,8 @@ paths:
           type: string
           title: X-Player-Secret
       responses:
-        '200':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/QuestionDetailResponse'
         '422':
           description: Validation Error
           content:
@@ -1409,63 +1373,6 @@ components:
       - location
       title: AskQuestionRequest
       description: Ask a question, identified by slot_index. The URL determines question_type.
-    AskQuestionResponse:
-      properties:
-        id:
-          type: string
-          format: uuid
-          title: Id
-        game_id:
-          type: string
-          format: uuid
-          title: Game Id
-        sequence:
-          type: integer
-          title: Sequence
-          description: 1-based chronological order within the game.
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        ask_count:
-          type: integer
-          title: Ask Count
-          description: Which attempt this was (1 = first ask).
-        parameters:
-          anyOf:
-          - $ref: '#/components/schemas/RadarParamsResponse'
-          - $ref: '#/components/schemas/ThermometerParamsResponse'
-          - $ref: '#/components/schemas/FeatureParamsResponse'
-          title: Parameters
-          description: Type-specific question parameters.
-        asked_by:
-          type: string
-          format: uuid
-          title: Asked By
-          description: Player ID of the seeker who asked.
-        asked_at:
-          type: string
-          format: date-time
-          title: Asked At
-        seeker_location_start:
-          $ref: '#/components/schemas/Point'
-          description: "GeoJSON Point \u2014 seeker position when asked."
-      type: object
-      required:
-      - id
-      - game_id
-      - sequence
-      - question_type
-      - status
-      - ask_count
-      - parameters
-      - asked_by
-      - asked_at
-      - seeker_location_start
-      title: AskQuestionResponse
-      description: "Slim response for ask endpoints \u2014 only fields meaningful\
-        \ at ask time.\n\nNo answer-time fields (seeker_location_end, hider_location,\
-        \ answered_at, answer)."
     CreateGameRequest:
       properties:
         map_id:

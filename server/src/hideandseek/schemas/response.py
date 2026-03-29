@@ -448,41 +448,6 @@ class QuestionSummaryResponse(BaseModel):
         )
 
 
-class AskQuestionResponse(BaseModel):
-    """Slim response for ask endpoints — only fields meaningful at ask time.
-
-    No answer-time fields (seeker_location_end, hider_location, answered_at, answer).
-    """
-
-    id: uuid.UUID
-    game_id: uuid.UUID
-    sequence: int = Field(description='1-based chronological order within the game.')
-    question_type: QuestionType
-    status: QuestionStatus
-    ask_count: int = Field(description='Which attempt this was (1 = first ask).')
-    parameters: QuestionParamsResponse = Field(description='Type-specific question parameters.')
-    asked_by: uuid.UUID = Field(description='Player ID of the seeker who asked.')
-    asked_at: datetime
-    seeker_location_start: GeoJSONPoint = Field(
-        description='GeoJSON Point — seeker position when asked.'
-    )
-
-    @staticmethod
-    def from_model(question: QuestionModel) -> AskQuestionResponse:
-        return AskQuestionResponse(
-            id=question.id,
-            game_id=question.game_id,
-            sequence=question.sequence,
-            question_type=question.question_type,
-            status=question.status,
-            ask_count=question.ask_count,
-            parameters=_build_question_params(question),
-            asked_by=question.asked_by,
-            asked_at=question.asked_at,
-            seeker_location_start=GeoJSONPoint(**mapping(question.seeker_location_start)),
-        )
-
-
 class QuestionDetailResponse(BaseModel):
     """Full question detail for hiders — everything except exclusion geometry.
 

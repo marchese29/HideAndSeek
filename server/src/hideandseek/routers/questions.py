@@ -9,6 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from geojson_pydantic import Point as GeoJSONPoint
 from shapely.geometry import Point as ShapelyPoint
 
+from hideandseek.broadcast.emit import emit_gameplay
+from hideandseek.broadcast.events import (
+    HiderQuestionAnsweredEvent,
+    QuestionAbandonedEvent,
+    QuestionAnswerableEvent,
+    QuestionAskedEvent,
+    QuestionVetoedEvent,
+    SeekerQuestionAnsweredEvent,
+)
 from hideandseek.celery_app import app as celery_app
 from hideandseek.conventions import format_distance_label
 from hideandseek.db import session_dependency
@@ -48,7 +57,6 @@ from hideandseek.queries.questions import (
 )
 from hideandseek.schemas.request import AskQuestionRequest
 from hideandseek.schemas.response import (
-    AskQuestionResponse,
     ExclusionsResponse,
     QuestionDetailResponse,
     QuestionExclusionEntry,
@@ -101,12 +109,12 @@ def _record_seeker_location(location: GeoJSONPoint, player: Player, game: Game) 
 # ── Ask endpoints (per-type) ─────────────────────────────────────────────
 
 
-@router.post('/questions/radar', response_model=AskQuestionResponse, status_code=201)
+@router.post('/questions/radar', status_code=204)
 def ask_radar_question(
     body: AskQuestionRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
-) -> AskQuestionResponse:
+) -> None:
     """Ask a radar question, spending a radar inventory slot."""
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -128,15 +136,15 @@ def ask_radar_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return AskQuestionResponse.from_model(question)
+    emit_gameplay(QuestionAskedEvent.from_question(question))
 
 
-@router.post('/questions/thermometer', response_model=AskQuestionResponse, status_code=201)
+@router.post('/questions/thermometer', status_code=204)
 def ask_thermometer_question(
     body: AskQuestionRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
-) -> AskQuestionResponse:
+) -> None:
     """Ask a thermometer question, spending a thermometer inventory slot."""
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -159,15 +167,15 @@ def ask_thermometer_question(
         question_status=QuestionStatus.in_progress,
     )
 
-    return AskQuestionResponse.from_model(question)
+    emit_gameplay(QuestionAskedEvent.from_question(question))
 
 
-@router.post('/questions/matching', response_model=AskQuestionResponse, status_code=201)
+@router.post('/questions/matching', status_code=204)
 def ask_matching_question(
     body: AskQuestionRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
-) -> AskQuestionResponse:
+) -> None:
     """Ask a matching question about a feature category."""
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -195,15 +203,15 @@ def ask_matching_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return AskQuestionResponse.from_model(question)
+    emit_gameplay(QuestionAskedEvent.from_question(question))
 
 
-@router.post('/questions/measuring', response_model=AskQuestionResponse, status_code=201)
+@router.post('/questions/measuring', status_code=204)
 def ask_measuring_question(
     body: AskQuestionRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_seeker_in_game),
-) -> AskQuestionResponse:
+) -> None:
     """Ask a measuring question about a feature category."""
     _validate_can_ask(game)
     seeker_location = _record_seeker_location(body.location, player, game)
@@ -234,7 +242,7 @@ def ask_measuring_question(
         question_status=QuestionStatus.answerable,
     )
 
-    return AskQuestionResponse.from_model(question)
+    emit_gameplay(QuestionAskedEvent.from_question(question))
 
 
 # ── Lock-in and answer ───────────────────────────────────────────────────
@@ -242,13 +250,13 @@ def ask_measuring_question(
 
 @router.post(
     '/questions/thermometer/{question_id}/lock-in',
-    response_model=QuestionDetailResponse,
+    status_code=204,
 )
 def lock_in_question(
     question_id: uuid.UUID,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionDetailResponse:
+) -> None:
     """Lock in the seeker's end position for a thermometer question."""
     question, seeker_end = validate_lock_in_request(question_id, game, player)
 
@@ -264,18 +272,18 @@ def lock_in_question(
         question_id=str(question.id),
     )
 
-    return QuestionDetailResponse.from_model(question)
+    emit_gameplay(QuestionAnswerableEvent.from_question(question))
 
 
 @router.post(
     '/questions/{question_id}/answer',
-    response_model=QuestionDetailResponse,
+    status_code=204,
 )
 def answer_question(
     question_id: uuid.UUID,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionDetailResponse:
+) -> None:
     """Hider answers a question — snapshot location, compute answer and exclusion."""
     question, hider_location = validate_answer_request(question_id, game, player)
 
@@ -309,7 +317,8 @@ def answer_question(
         answer=question.answer,
     )
 
-    return QuestionDetailResponse.from_model(question)
+    emit_gameplay(HiderQuestionAnsweredEvent.from_question(question))
+    emit_gameplay(SeekerQuestionAnsweredEvent.from_question(question))
 
 
 # ── Veto ─────────────────────────────────────────────────────────────────
@@ -317,14 +326,14 @@ def answer_question(
 
 @router.post(
     '/questions/{question_id}/veto',
-    response_model=QuestionDetailResponse,
+    status_code=204,
 )
 def veto_question(
     question_id: uuid.UUID,
     scheduled: bool = False,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionDetailResponse:
+) -> None:
     """Hider vetoes a question — no answer, no exclusion zone.
 
     With scheduled=true, the veto is deferred: it fires when the auto-answer
@@ -335,7 +344,7 @@ def veto_question(
 
     if scheduled:
         schedule_veto(question)
-        return QuestionDetailResponse.from_model(question)
+        return
 
     # Immediate veto — revoke auto-answer and mark vetoed now
     if not celery_app.conf.task_always_eager:
@@ -352,7 +361,7 @@ def veto_question(
         question_type=question.question_type,
     )
 
-    return QuestionDetailResponse.from_model(question)
+    emit_gameplay(QuestionVetoedEvent.from_question(question))
 
 
 # ── Abandon ───────────────────────────────────────────────────────────
@@ -360,13 +369,13 @@ def veto_question(
 
 @router.post(
     '/questions/{question_id}/abandon',
-    response_model=QuestionDetailResponse,
+    status_code=204,
 )
 def abandon_question_endpoint(
     question_id: uuid.UUID,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> QuestionDetailResponse:
+) -> None:
     """Seeker abandons a question — no answer, no exclusion zone."""
     question = validate_abandon_request(question_id, game, player)
 
@@ -385,7 +394,7 @@ def abandon_question_endpoint(
         question_type=question.question_type,
     )
 
-    return QuestionDetailResponse.from_model(question)
+    emit_gameplay(QuestionAbandonedEvent.from_question(question))
 
 
 # ── List + detail + exclusions ────────────────────────────────────────────

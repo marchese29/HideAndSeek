@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from shapely.geometry import Point
 
-from hideandseek.broadcast import GameStartedEvent, PlayerUpdatedEvent, emit
+from hideandseek.broadcast import GameStartedEvent, PlayerUpdatedEvent, StationElectionEvent, emit
+from hideandseek.broadcast.emit import emit_gameplay
 from hideandseek.celery_app import app as celery_app
 from hideandseek.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
 from hideandseek.db import session_dependency
@@ -304,12 +305,12 @@ def get_hider_station(
     )
 
 
-@router.post('/{game_id}/hider-station', response_model=HidingZoneResponse)
+@router.post('/{game_id}/hider-station', status_code=204)
 def elect_hider_station(
     body: ElectStationRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_hider_in_game),
-) -> HidingZoneResponse:
+) -> None:
     """Elect a station as the hider's hiding zone anchor. Permanent."""
     not_hiding = not game.status.is_hiding
     not_ambiguous = game.station_election_status != StationElectionStatus.ambiguous
@@ -336,7 +337,6 @@ def elect_hider_station(
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     set_hider_station(game, stop, StationElectionStatus.elected)
-    zone = compute_hiding_zone_for_station(game, stop)
 
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
@@ -345,7 +345,13 @@ def elect_hider_station(
         alert=f'Station locked in: {stop.name}',
     )
 
-    return HidingZoneResponse.from_geometry(zone)
+    emit_gameplay(
+        StationElectionEvent(
+            game_id=game.id,
+            station_election_status=StationElectionStatus.elected,
+            hider_station_id=stop.id,
+        )
+    )
 
 
 @router.get('/{game_id}/nearby-stations', response_model=list[NearbyStationResponse])

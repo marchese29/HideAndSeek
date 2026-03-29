@@ -6,6 +6,14 @@ import uuid
 
 import structlog
 
+from hideandseek.broadcast.emit import emit_gameplay
+from hideandseek.broadcast.events import (
+    HiderQuestionAnsweredEvent,
+    PhaseChangedEvent,
+    QuestionVetoedEvent,
+    SeekerQuestionAnsweredEvent,
+    StationElectionEvent,
+)
 from hideandseek.celery_app import app
 from hideandseek.db import session_scope
 from hideandseek.logic.answer import (
@@ -66,6 +74,13 @@ def transition_hiding_to_seeking(game_id: str) -> None:
                 role_filter='hider',
                 alert=f'Your station was auto-assigned: {stop.name}',
             )
+            emit_gameplay(
+                StationElectionEvent(
+                    game_id=game.id,
+                    station_election_status=StationElectionStatus.auto_assigned,
+                    hider_station_id=stop.id,
+                )
+            )
         elif status == StationElectionStatus.ambiguous:
             set_station_ambiguous(game)
             logger.info('station_ambiguous', game_id=game_id)
@@ -74,6 +89,13 @@ def transition_hiding_to_seeking(game_id: str) -> None:
                 PushEventType.station_ambiguous,
                 role_filter='hider',
                 alert='Station could not be determined. Please select your station.',
+            )
+            emit_gameplay(
+                StationElectionEvent(
+                    game_id=game.id,
+                    station_election_status=StationElectionStatus.ambiguous,
+                    hider_station_id=None,
+                )
             )
         # elected: already set, nothing to do
 
@@ -84,6 +106,17 @@ def transition_hiding_to_seeking(game_id: str) -> None:
             game_id,
             PushEventType.phase_changed,
             alert='The seeking phase has begun! Start asking questions.',
+        )
+
+        assert game.seeking_started_at is not None
+        emit_gameplay(
+            PhaseChangedEvent(
+                game_id=game.id,
+                phase=game.status,
+                seeking_started_at=game.seeking_started_at,
+                station_election_status=game.station_election_status,
+                hider_station_id=game.hider_station_id,
+            )
         )
 
 
@@ -120,6 +153,7 @@ def auto_answer_question(question_id: str) -> None:
                 question_id=question_id,
                 question_type=question.question_type,
             )
+            emit_gameplay(QuestionVetoedEvent.from_question(question))
             return
 
         # Resolve ambiguous station before computing the answer
@@ -136,6 +170,13 @@ def auto_answer_question(question_id: str) -> None:
                 PushEventType.station_auto_resolved,
                 role_filter='hider',
                 alert=f'Your station was auto-resolved: {stop.name}',
+            )
+            emit_gameplay(
+                StationElectionEvent(
+                    game_id=game.id,
+                    station_election_status=StationElectionStatus.auto_assigned,
+                    hider_station_id=stop.id,
+                )
             )
 
         # Find the hider's latest location
@@ -175,3 +216,6 @@ def auto_answer_question(question_id: str) -> None:
             question_type=question.question_type,
             answer=question.answer,
         )
+
+        emit_gameplay(HiderQuestionAnsweredEvent.from_question(question))
+        emit_gameplay(SeekerQuestionAnsweredEvent.from_question(question))

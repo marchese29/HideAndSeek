@@ -208,6 +208,14 @@ class LobbyEventType(StrEnum):
 class GameplayEventType(StrEnum):
     game_state = 'game_state'
     player_location = 'player_location'
+    question_asked = 'question_asked'
+    question_answerable = 'question_answerable'
+    question_answered = 'question_answered'
+    question_vetoed = 'question_vetoed'
+    question_abandoned = 'question_abandoned'
+    phase_changed = 'phase_changed'
+    station_election = 'station_election'
+    player_left = 'player_left'
 
 
 class TokenProvider(StrEnum):

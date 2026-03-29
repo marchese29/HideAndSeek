@@ -8,14 +8,23 @@ import uuid
 import structlog
 
 from hideandseek.broadcast.events import (
+    GamePlayerLeftEvent,
     GameplayEvent,
     GameStartedEvent,
+    HiderQuestionAnsweredEvent,
     HostChangedEvent,
     LobbyEvent,
+    PhaseChangedEvent,
     PlayerJoinedEvent,
     PlayerLeftEvent,
     PlayerLocationEvent,
     PlayerUpdatedEvent,
+    QuestionAbandonedEvent,
+    QuestionAnswerableEvent,
+    QuestionAskedEvent,
+    QuestionVetoedEvent,
+    SeekerQuestionAnsweredEvent,
+    StationElectionEvent,
 )
 from hideandseek.models.types import GameplayEventType, LobbyEventType, PlayerRole, PushEventType
 from hideandseek.redis_client import get_sync_redis
@@ -94,12 +103,14 @@ def emit(event: LobbyEvent) -> None:
             )
 
 
-def emit_gameplay(event: GameplayEvent) -> None:
-    """Route a gameplay event to the appropriate SSE channels.
+def _both_channels(game_id: uuid.UUID, event_type: str, data: dict) -> None:
+    """Publish identical data to both hider and seeker channels."""
+    _publish_sse(_hider_channel(game_id), event_type, data, required=True)
+    _publish_sse(_seeker_channel(game_id), event_type, data, required=True)
 
-    Hider location → hider channel only (seekers must not see hider positions).
-    Seeker location → both hider and seeker channels (everyone sees seekers).
-    """
+
+def emit_gameplay(event: GameplayEvent) -> None:
+    """Route a gameplay event to the appropriate SSE channels."""
     match event:
         case PlayerLocationEvent(
             game_id=game_id,
@@ -133,3 +144,98 @@ def emit_gameplay(event: GameplayEvent) -> None:
                     data,
                     required=True,
                 )
+
+        case QuestionAskedEvent(game_id=game_id):
+            data = {
+                'question_id': str(event.question_id),
+                'question_type': event.question_type,
+                'status': event.status,
+                'asked_by': str(event.asked_by),
+                'slot_index': event.slot_index,
+            }
+            _both_channels(game_id, GameplayEventType.question_asked, data)
+
+        case QuestionAnswerableEvent(game_id=game_id):
+            data = {
+                'question_id': str(event.question_id),
+                'question_type': event.question_type,
+                'status': event.status,
+            }
+            _both_channels(game_id, GameplayEventType.question_answerable, data)
+
+        case HiderQuestionAnsweredEvent(game_id=game_id):
+            data = {
+                'question_id': str(event.question_id),
+                'question_type': event.question_type,
+                'status': event.status,
+                'answer': event.answer,
+                'slot_index': event.slot_index,
+                'asked_by': str(event.asked_by),
+            }
+            _publish_sse(
+                _hider_channel(game_id),
+                GameplayEventType.question_answered,
+                data,
+                required=True,
+            )
+
+        case SeekerQuestionAnsweredEvent(game_id=game_id):
+            data = {
+                'question_id': str(event.question_id),
+                'question_type': event.question_type,
+                'status': event.status,
+                'answer': event.answer,
+                'slot_index': event.slot_index,
+                'asked_by': str(event.asked_by),
+                'exclusion': event.exclusion.model_dump(mode='json') if event.exclusion else None,
+                'total_exclusion': event.total_exclusion.model_dump(mode='json')
+                if event.total_exclusion
+                else None,
+            }
+            _publish_sse(
+                _seeker_channel(game_id),
+                GameplayEventType.question_answered,
+                data,
+                required=True,
+            )
+
+        case QuestionVetoedEvent(game_id=game_id):
+            data = {
+                'question_id': str(event.question_id),
+                'question_type': event.question_type,
+                'slot_index': event.slot_index,
+            }
+            _both_channels(game_id, GameplayEventType.question_vetoed, data)
+
+        case QuestionAbandonedEvent(game_id=game_id):
+            data = {
+                'question_id': str(event.question_id),
+                'question_type': event.question_type,
+                'slot_index': event.slot_index,
+            }
+            _both_channels(game_id, GameplayEventType.question_abandoned, data)
+
+        case PhaseChangedEvent(game_id=game_id):
+            data = {
+                'phase': event.phase,
+                'seeking_started_at': event.seeking_started_at.isoformat(),
+                'station_election_status': event.station_election_status,
+                'hider_station_id': str(event.hider_station_id) if event.hider_station_id else None,
+            }
+            _both_channels(game_id, GameplayEventType.phase_changed, data)
+
+        case StationElectionEvent(game_id=game_id):
+            data = {
+                'station_election_status': event.station_election_status,
+                'hider_station_id': str(event.hider_station_id) if event.hider_station_id else None,
+            }
+            _publish_sse(
+                _hider_channel(game_id),
+                GameplayEventType.station_election,
+                data,
+                required=True,
+            )
+
+        case GamePlayerLeftEvent(game_id=game_id):
+            data = {'player_id': str(event.player_id)}
+            _both_channels(game_id, GameplayEventType.player_left, data)

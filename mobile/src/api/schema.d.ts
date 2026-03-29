@@ -653,54 +653,6 @@ export interface components {
             custom_distance?: number | null;
         };
         /**
-         * AskQuestionResponse
-         * @description Slim response for ask endpoints — only fields meaningful at ask time.
-         *
-         *     No answer-time fields (seeker_location_end, hider_location, answered_at, answer).
-         */
-        AskQuestionResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Game Id
-             * Format: uuid
-             */
-            game_id: string;
-            /**
-             * Sequence
-             * @description 1-based chronological order within the game.
-             */
-            sequence: number;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /**
-             * Ask Count
-             * @description Which attempt this was (1 = first ask).
-             */
-            ask_count: number;
-            /**
-             * Parameters
-             * @description Type-specific question parameters.
-             */
-            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"];
-            /**
-             * Asked By
-             * Format: uuid
-             * @description Player ID of the seeker who asked.
-             */
-            asked_by: string;
-            /**
-             * Asked At
-             * Format: date-time
-             */
-            asked_at: string;
-            /** @description GeoJSON Point — seeker position when asked. */
-            seeker_location_start: components["schemas"]["Point"];
-        };
-        /**
          * CreateGameRequest
          * @description Create a new game on a map.
          */
@@ -2160,13 +2112,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["HidingZoneResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2411,13 +2361,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["AskQuestionResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2449,13 +2397,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["AskQuestionResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2487,13 +2433,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["AskQuestionResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2525,13 +2469,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["AskQuestionResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2560,13 +2502,11 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2595,13 +2535,11 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2632,13 +2570,11 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2667,13 +2603,11 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
