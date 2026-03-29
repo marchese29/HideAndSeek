@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Generator
+from unittest.mock import patch
 
+import fakeredis
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -15,6 +19,14 @@ def _headers(player_id: uuid.UUID) -> dict[str, str]:
 
 def _point(lng: float = -0.141, lat: float = 51.515) -> dict:
     return {'type': 'Point', 'coordinates': [lng, lat]}
+
+
+@pytest.fixture(autouse=True)
+def _patch_redis_for_emit() -> Generator[None, None, None]:
+    server = fakeredis.FakeServer()
+    fake = fakeredis.FakeRedis(server=server)
+    with patch('hideandseek.broadcast.emit.get_sync_redis', return_value=fake):
+        yield
 
 
 # ── POST /games/{game_id}/location ──────────────────────────────────────────
@@ -32,103 +44,7 @@ def test_report_location(client: TestClient, session: Session):
         },
         headers=_headers(seeker.id),
     )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['players'] == []  # only player, so nobody else visible
-
-
-def test_report_location_seeker_sees_other_seekers(client: TestClient, session: Session):
-    game = create_game(session, status=GameStatus.seeking)
-    seeker1 = create_player(session, game.id, name='Seeker1', role=PlayerRole.seeker)
-    seeker2 = create_player(session, game.id, name='Seeker2', role=PlayerRole.seeker)
-
-    # seeker2 reports first
-    client.post(
-        f'/games/{game.id}/location',
-        json={'coordinates': _point(0.1, 51.5), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(seeker2.id),
-    )
-
-    # seeker1 reports and should see seeker2
-    resp = client.post(
-        f'/games/{game.id}/location',
-        json={'coordinates': _point(-0.1, 51.5), 'timestamp': '2026-02-11T10:01:00Z'},
-        headers=_headers(seeker1.id),
-    )
-    assert resp.status_code == 200
-    players = resp.json()['players']
-    assert len(players) == 1
-    assert players[0]['name'] == 'Seeker2'
-
-
-def test_hider_sees_seekers(client: TestClient, session: Session):
-    game = create_game(session, status=GameStatus.seeking)
-    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
-    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
-
-    # seeker reports
-    client.post(
-        f'/games/{game.id}/location',
-        json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(seeker.id),
-    )
-
-    # hider reports and should see the seeker
-    resp = client.post(
-        f'/games/{game.id}/location',
-        json={'coordinates': _point(0.0, 52.0), 'timestamp': '2026-02-11T10:01:00Z'},
-        headers=_headers(hider.id),
-    )
-    assert resp.status_code == 200
-    players = resp.json()['players']
-    assert len(players) == 1
-    assert players[0]['name'] == 'Seeker'
-
-
-def test_hider_sees_other_hiders(client: TestClient, session: Session):
-    game = create_game(session, status=GameStatus.seeking)
-    hider1 = create_player(session, game.id, name='Hider1', role=PlayerRole.hider)
-    hider2 = create_player(session, game.id, name='Hider2', role=PlayerRole.hider)
-
-    # hider2 reports
-    client.post(
-        f'/games/{game.id}/location',
-        json={'coordinates': _point(0.1, 51.5), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(hider2.id),
-    )
-
-    # hider1 reports and should see hider2
-    resp = client.post(
-        f'/games/{game.id}/location',
-        json={'coordinates': _point(-0.1, 51.5), 'timestamp': '2026-02-11T10:01:00Z'},
-        headers=_headers(hider1.id),
-    )
-    assert resp.status_code == 200
-    players = resp.json()['players']
-    assert len(players) == 1
-    assert players[0]['name'] == 'Hider2'
-
-
-def test_seeker_does_not_see_hider(client: TestClient, session: Session):
-    game = create_game(session, status=GameStatus.seeking)
-    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
-    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
-
-    # hider reports
-    client.post(
-        f'/games/{game.id}/location',
-        json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
-        headers=_headers(hider.id),
-    )
-
-    # seeker reports — should NOT see the hider
-    resp = client.post(
-        f'/games/{game.id}/location',
-        json={'coordinates': _point(0.0, 52.0), 'timestamp': '2026-02-11T10:01:00Z'},
-        headers=_headers(seeker.id),
-    )
-    assert resp.status_code == 200
-    assert resp.json()['players'] == []
+    assert resp.status_code == 204
 
 
 def test_report_location_not_in_game(client: TestClient, session: Session):

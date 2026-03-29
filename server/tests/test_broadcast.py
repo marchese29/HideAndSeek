@@ -5,21 +5,24 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Generator
+from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import patch
 
 import fakeredis
 import pytest
 from sqlalchemy.orm import Session
 
-from hideandseek.broadcast.emit import _lobby_channel, emit
+from hideandseek.broadcast.emit import _lobby_channel, emit, emit_gameplay
 from hideandseek.broadcast.events import (
     GameStartedEvent,
     HostChangedEvent,
     PlayerJoinedEvent,
     PlayerLeftEvent,
+    PlayerLocationEvent,
     PlayerUpdatedEvent,
 )
-from hideandseek.models.types import LobbyEventType
+from hideandseek.models.types import GameplayEventType, LobbyEventType, PlayerColor, PlayerRole
 from tests.conftest import create_game, create_player
 
 
@@ -193,3 +196,129 @@ class TestEmitGameStarted:
         with patch('hideandseek.tasks.push.send_push') as mock_push:
             emit(GameStartedEvent(game=game))
             mock_push.delay.assert_called_once()
+
+
+# ── Gameplay location events ────────────────────────────────────────────────
+
+
+def _location_event(
+    game_id: uuid.UUID,
+    *,
+    role: PlayerRole = PlayerRole.hider,
+    name: str = 'Alice',
+    color: PlayerColor = PlayerColor.red,
+    lng: float = -0.141,
+    lat: float = 51.515,
+    timestamp: datetime | None = None,
+) -> PlayerLocationEvent:
+    return PlayerLocationEvent(
+        game_id=game_id,
+        player_id=uuid.uuid4(),
+        name=name,
+        color=color,
+        role=role,
+        coordinates={'type': 'Point', 'coordinates': [lng, lat]},
+        timestamp=timestamp or datetime(2026, 2, 11, 10, 0, 0, tzinfo=UTC),
+    )
+
+
+def _drain_channel_messages(pubsub: Any, channels: list[str]) -> dict[str, list[dict]]:
+    """Drain all pending messages from a pubsub, grouped by channel."""
+    result: dict[str, list[dict]] = {ch: [] for ch in channels}
+    for _ in range(50):
+        msg = pubsub.get_message()
+        if msg is None:
+            break
+        if msg['type'] != 'message':
+            continue
+        ch = msg['channel']
+        if isinstance(ch, bytes):
+            ch = ch.decode()
+        if ch in result:
+            result[ch].append(json.loads(msg['data']))
+    return result
+
+
+class TestEmitGameplayHiderLocation:
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_hider_location_on_hider_channel_only(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        game = create_game(session)
+        hider_ch = f'game:{game.id}:hider-events'
+        seeker_ch = f'game:{game.id}:seeker-events'
+
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(hider_ch, seeker_ch)
+
+        emit_gameplay(_location_event(game.id, role=PlayerRole.hider, name='HiderAlice'))
+
+        msgs = _drain_channel_messages(pubsub, [hider_ch, seeker_ch])
+        assert len(msgs[hider_ch]) == 1
+        assert msgs[hider_ch][0]['event'] == GameplayEventType.player_location
+        assert msgs[hider_ch][0]['data']['name'] == 'HiderAlice'
+        assert msgs[seeker_ch] == []
+
+
+class TestEmitGameplaySeekerLocation:
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_seeker_location_on_both_channels(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        game = create_game(session)
+        hider_ch = f'game:{game.id}:hider-events'
+        seeker_ch = f'game:{game.id}:seeker-events'
+
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(hider_ch, seeker_ch)
+
+        emit_gameplay(_location_event(game.id, role=PlayerRole.seeker, name='SeekerBob'))
+
+        msgs = _drain_channel_messages(pubsub, [hider_ch, seeker_ch])
+        assert len(msgs[hider_ch]) == 1
+        assert len(msgs[seeker_ch]) == 1
+        # Both channels get the same data
+        for ch_msgs in [msgs[hider_ch], msgs[seeker_ch]]:
+            assert ch_msgs[0]['event'] == GameplayEventType.player_location
+            data = ch_msgs[0]['data']
+            assert data['name'] == 'SeekerBob'
+            assert data['role'] == PlayerRole.seeker
+            assert data['coordinates'] == {'type': 'Point', 'coordinates': [-0.141, 51.515]}
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_location_data_shape(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        """Verify the event data matches the GamePlayer schema shape."""
+        game = create_game(session)
+        hider_ch = f'game:{game.id}:hider-events'
+
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(hider_ch)
+
+        event = _location_event(
+            game.id,
+            role=PlayerRole.seeker,
+            name='Bob',
+            color=PlayerColor.blue,
+            lng=1.5,
+            lat=52.0,
+        )
+        emit_gameplay(event)
+
+        msgs = _drain_channel_messages(pubsub, [hider_ch])
+        data = msgs[hider_ch][0]['data']
+        assert data['id'] == str(event.player_id)
+        assert data['name'] == 'Bob'
+        assert data['color'] == 'blue'
+        assert data['role'] == 'seeker'
+        assert data['coordinates'] == {'type': 'Point', 'coordinates': [1.5, 52.0]}
+        assert data['timestamp'] == '2026-02-11T10:00:00+00:00'
+
+
+class TestEmitGameplayLocationRedisUnavailable:
+    @pytest.mark.usefixtures('_patch_no_redis')
+    def test_raises_when_redis_unavailable(self, session: Session) -> None:
+        game = create_game(session)
+        with pytest.raises(RuntimeError, match='Redis unavailable'):
+            emit_gameplay(_location_event(game.id))

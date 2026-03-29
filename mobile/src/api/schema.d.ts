@@ -323,7 +323,7 @@ export interface paths {
         put?: never;
         /**
          * Report Location
-         * @description Report the caller's location and receive visible player positions.
+         * @description Report the caller's location. Updates are broadcast via SSE.
          */
         post: operations["report_location_games__game_id__location_post"];
         delete?: never;
@@ -1142,14 +1142,6 @@ export interface components {
             timestamp: string;
         };
         /**
-         * LocationReportResponse
-         * @description Returned after reporting location — includes positions of all visible players.
-         */
-        LocationReportResponse: {
-            /** Players */
-            players: components["schemas"]["VisiblePlayer"][];
-        };
-        /**
          * MapDetail
          * @description Full map detail including geometry for rendering a preview. Omits stops/routes.
          */
@@ -1737,28 +1729,6 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
-        };
-        /**
-         * VisiblePlayer
-         * @description A player visible to the caller, with their latest position.
-         */
-        VisiblePlayer: {
-            /**
-             * Player Id
-             * Format: uuid
-             */
-            player_id: string;
-            /** Name */
-            name: string;
-            color: components["schemas"]["PlayerColor"];
-            role: components["schemas"]["PlayerRole"] | null;
-            /** @description GeoJSON Point — latest reported position. */
-            coordinates: components["schemas"]["Point"];
-            /**
-             * Timestamp
-             * Format: date-time
-             */
-            timestamp: string;
         };
     };
     responses: never;
@@ -2374,13 +2344,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["LocationReportResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

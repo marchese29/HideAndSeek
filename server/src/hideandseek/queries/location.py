@@ -13,7 +13,6 @@ from sqlalchemy import func, select
 from hideandseek.db import get_session
 from hideandseek.models.game import Game, Player
 from hideandseek.models.location import LocationUpdate
-from hideandseek.models.types import PlayerRole
 
 
 def create_location_update(
@@ -43,47 +42,6 @@ class VisiblePlayerData:
     player: Player
     coordinates: Point
     timestamp: datetime
-
-
-def get_visible_players(game: Game, caller: Player) -> list[VisiblePlayerData]:
-    """Return the latest location of each player visible to the caller.
-
-    Hiders see everyone (all hiders + all seekers) except themselves.
-    Seekers see other seekers only — hiders are hidden from seekers.
-    """
-    session = get_session()
-    # Subquery: latest location update per player in this game
-    latest_sq = (
-        select(
-            LocationUpdate.player_id,
-            func.max(LocationUpdate.id).label('max_id'),
-        )
-        .where(LocationUpdate.game == game)
-        .group_by(LocationUpdate.player_id)
-        .subquery()
-    )
-
-    stmt = (
-        select(LocationUpdate, Player)
-        .join(latest_sq, LocationUpdate.id == latest_sq.c.max_id)
-        .join(Player, LocationUpdate.player_id == Player.id)
-        .where(Player.id != caller.id)
-    )
-
-    # Seekers can only see other seekers
-    if caller.role == PlayerRole.seeker:
-        stmt = stmt.where(Player.role == PlayerRole.seeker)
-
-    results: list[VisiblePlayerData] = []
-    for lu, player in session.execute(stmt).all():
-        results.append(
-            VisiblePlayerData(
-                player=player,
-                coordinates=lu.coordinates,
-                timestamp=lu.timestamp,
-            )
-        )
-    return results
 
 
 def get_location_history(game: Game) -> Sequence[LocationUpdate]:

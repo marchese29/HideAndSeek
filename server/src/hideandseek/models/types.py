@@ -207,6 +207,7 @@ class LobbyEventType(StrEnum):
 
 class GameplayEventType(StrEnum):
     game_state = 'game_state'
+    player_location = 'player_location'
 
 
 class TokenProvider(StrEnum):

@@ -104,10 +104,11 @@ docker exec hideandseek-postgres-1 psql -U hideandseek -c \
 curl -s -X POST localhost:8000/games/<game_id>/start \
   -H "X-Player-Id: $HOST_PLAYER_ID" -H "X-Player-Secret: $HOST_SECRET"
 
-# 5. Report hider locations during hiding phase
+# 5. Report hider locations during hiding phase (returns 204, broadcasts via SSE)
 curl -s -X POST localhost:8000/games/<game_id>/location \
   -H "Content-Type: application/json" -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET" \
   -d '{"coordinates": {"type": "Point", "coordinates": [<lon>, <lat>]}, "timestamp": "<ISO8601>"}'
+# → 204 No Content. Location broadcast to hider SSE channel only.
 # The hider's last location when hiding ends determines their assigned station.
 
 # 5b. (Optional) Elect station during hiding — locks in the hider's station early
@@ -125,10 +126,11 @@ curl -s "localhost:8000/games/<game_id>/nearby-stations?lat=<lat>&lng=<lon>" \
 #    - 1 valid candidate → auto_assigned
 #    - 0 or 2+ candidates → ambiguous (hider must elect via POST /hider-station)
 
-# 7. Report seeker location (required before asking questions)
+# 7. Report seeker location (returns 204, broadcasts via SSE to both channels)
 curl -s -X POST localhost:8000/games/<game_id>/location \
   -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"coordinates": {"type": "Point", "coordinates": [<lon>, <lat>]}, "timestamp": "<ISO8601>"}'
+# → 204 No Content. Location broadcast to both hider + seeker SSE channels.
 ```
 
 ### Radar question
@@ -302,11 +304,14 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
   - **SSE endpoint** (`GET /games/{id}/lobby/events`): separate router (`routers/events.py`), no `session_dependency` (SSE outlives the request). Auth via `X-Player-Id` + `X-Player-Secret` headers, validated in a short-lived `session_scope()`. Returns `EventSourceResponse` from `sse-starlette`. Initial `game_state` event sent on connect, then real-time events via Redis subscription. Reconnecting clients get fresh state (no gap recovery needed).
   - **Redis client** (`redis_client.py`): `get_redis_url()` resolves URL (env var → auto-detect → None). `get_sync_redis()` for publish, `get_async_redis()` for subscribe. Returns None when unavailable.
   - **`LobbyEventType` enum** (`models/types.py`): `game_state`, `player_joined`, `player_updated`, `player_left`, `host_changed`, `game_started`.
-  - **Emit call sites**: `logic/lobby.py` (join → `PlayerJoinedEvent`, remove → `PlayerLeftEvent` + `HostChangedEvent`), `routers/games.py` (patch → `PlayerUpdatedEvent` if lobby, start → `GameStartedEvent`). `create_game_with_host()` does NOT emit (no SSE subscribers yet).
+  - **Emit call sites**: `logic/lobby.py` (join → `PlayerJoinedEvent`, remove → `PlayerLeftEvent` + `HostChangedEvent`), `routers/games.py` (patch → `PlayerUpdatedEvent` if lobby, start → `GameStartedEvent`), `routers/location.py` (location report → `PlayerLocationEvent` via `emit_gameplay`). `create_game_with_host()` does NOT emit (no SSE subscribers yet).
   - **Gameplay SSE endpoints** (`GET /games/{id}/hider-state`, `GET /games/{id}/seeker-state`): role-specific SSE streams in `routers/events.py`. Auth inline in `session_scope()` — same pattern as lobby. Phase guard: 409 if game not `is_active`. Role guard: 403 if wrong role. Two Redis channels: `game:{id}:hider-events`, `game:{id}:seeker-events`. Initial `game_state` event delivers full snapshot (`HiderGameStateResponse` or `SeekerGameStateResponse`), then forwards Redis messages. Stream generators: `hider_state_stream` / `seeker_state_stream` in `broadcast/subscribe.py`. Snapshot assembly: `queries/game_state.py` has `build_hider_game_state(game, player)` and `build_seeker_game_state(game, player)`.
-  - **`GameplayEventType` enum** (`models/types.py`): `game_state` (initial snapshot). Delta event types added in Cycle 2/3.
+  - **`GameplayEventType` enum** (`models/types.py`): `game_state` (initial snapshot), `player_location` (location delta).
+  - **`emit_gameplay(event)`** (`broadcast/emit.py`): separate from `emit()` — routes gameplay events to role-specific channels. `PlayerLocationEvent` dataclass carries pre-serialized GeoJSON + player identity. Dual-channel routing: hider location → `hider-events` only, seeker location → both `hider-events` + `seeker-events`. All gameplay events are `required=True` (SSE is primary, no push fallback). Data shape uses `id` (not `player_id`) to match `GamePlayer` schema from initial `game_state` snapshot.
+  - **`POST /location`** returns 204 (no body) — persists the location update, then calls `emit_gameplay(PlayerLocationEvent(...))`. Clients receive location updates via SSE, not the REST response.
+  - **`_publish_sse(channel, ...)`** is parameterized — lobby callers pass `_lobby_channel(game.id)`, gameplay callers pass `_hider_channel`/`_seeker_channel`.
   - **`Question.slot_index`** — stored at ask time from `InventorySlot.slot_index`. Used in gameplay state question schemas.
-  - **Future**: Gameplay delta events (Cycle 2: location broadcasting, Cycle 3: question + phase events). Existing in-game push events will migrate to `emit()`.
+  - **Future**: Gameplay delta events (Cycle 3: question + phase events). Existing in-game push events will migrate to `emit()`.
 - **Test fixtures**: The `session` fixture sets `_session_var` so `db.get_session()` works in tests. The `client` fixture's `_override_get_session` also sets the ContextVar so TestClient requests work. Factory functions (`create_transit_dataset`, `create_game_map`, `create_game`, `create_player`, `create_inventory_slot`, `create_map_feature`, `create_game_map_feature`, `create_question`, `create_location_update`, `create_stop`) create test data with sensible defaults and accept `**overrides`. `create_game` automatically creates a host player (name `'Host'`, color `red`, no role) and all `InventorySlot` rows — radar/thermometer from the default template, plus matching/measuring from map feature categories. `create_player` defaults `secret_hash` to `TEST_SECRET_HASH` (the SHA-256 hash of `TEST_SECRET`). Tests authenticate by passing `X-Player-Id` + `X-Player-Secret: TEST_SECRET` headers.
 - **Structured logging**: All logging uses `structlog`. `setup_logging()` is called in the app lifespan. Two logger namespaces: `hideandseek.access` (request/response, does not propagate to root) and `hideandseek.*` (general app logs, written to stderr). Use `structlog.get_logger(__name__)` to get a logger. Log events use snake_case event names with keyword args for context (e.g., `logger.info('push_noop', event_type=..., game_id=...)`). `AccessLogMiddleware` handles all request/response logging — routers don't need to log requests. Three-tier `ENV`: `local` (default) = DEBUG + console + access file, `development` = DEBUG + console + stderr only, `production` = INFO + JSON + stderr only. `LOG_FORMAT=json` forces JSON in any tier.
 - **Geometry — three layers**: Geometry flows through three representations:

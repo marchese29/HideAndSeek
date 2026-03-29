@@ -298,23 +298,6 @@ class EffectiveMapResponse(BaseModel):
 # ── Location ──────────────────────────────────────────────────────────────────
 
 
-class VisiblePlayer(BaseModel):
-    """A player visible to the caller, with their latest position."""
-
-    player_id: uuid.UUID
-    name: str
-    color: PlayerColor
-    role: PlayerRole | None
-    coordinates: GeoJSONPoint = Field(description='GeoJSON Point — latest reported position.')
-    timestamp: datetime
-
-
-class LocationReportResponse(BaseModel):
-    """Returned after reporting location — includes positions of all visible players."""
-
-    players: list[VisiblePlayer]
-
-
 class LocationHistoryEntry(BaseModel):
     """A single location update in the post-game replay log."""
 

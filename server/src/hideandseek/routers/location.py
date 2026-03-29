@@ -3,36 +3,30 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from geojson_pydantic import Point as GeoJSONPoint
-from shapely.geometry import Point, mapping
+from shapely.geometry import Point
 
+from hideandseek.broadcast.emit import emit_gameplay
+from hideandseek.broadcast.events import PlayerLocationEvent
 from hideandseek.db import session_dependency
 from hideandseek.dependencies import get_game, get_player_in_game
 from hideandseek.models.game import Game, Player
-from hideandseek.queries.location import (
-    create_location_update,
-    get_location_history,
-    get_visible_players,
-)
+from hideandseek.queries.location import create_location_update, get_location_history
 from hideandseek.schemas.request import LocationReportRequest
-from hideandseek.schemas.response import (
-    LocationHistoryEntry,
-    LocationReportResponse,
-    VisiblePlayer,
-)
+from hideandseek.schemas.response import LocationHistoryEntry
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['location'], dependencies=[Depends(session_dependency)]
 )
 
 
-@router.post('/location', response_model=LocationReportResponse)
+@router.post('/location', status_code=204)
 def report_location(
     body: LocationReportRequest,
     game: Game = Depends(get_game),
     player: Player = Depends(get_player_in_game),
-) -> LocationReportResponse:
-    """Report the caller's location and receive visible player positions."""
+) -> None:
+    """Report the caller's location. Updates are broadcast via SSE."""
+    assert player.role is not None  # guaranteed during active gameplay
     coords = body.coordinates.coordinates
     point = Point(float(coords[0]), float(coords[1]))
 
@@ -43,19 +37,16 @@ def report_location(
         timestamp=body.timestamp,
     )
 
-    visible = get_visible_players(game, player)
-    return LocationReportResponse(
-        players=[
-            VisiblePlayer(
-                player_id=vp.player.id,
-                name=vp.player.name,
-                color=vp.player.color,
-                role=vp.player.role,
-                coordinates=GeoJSONPoint(**mapping(vp.coordinates)),
-                timestamp=vp.timestamp,
-            )
-            for vp in visible
-        ]
+    emit_gameplay(
+        PlayerLocationEvent(
+            game_id=game.id,
+            player_id=player.id,
+            name=player.name,
+            color=player.color,
+            role=player.role,
+            coordinates=body.coordinates.model_dump(mode='json'),
+            timestamp=body.timestamp,
+        )
     )
 
 

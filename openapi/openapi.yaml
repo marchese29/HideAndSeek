@@ -704,7 +704,7 @@ paths:
       tags:
       - location
       summary: Report Location
-      description: Report the caller's location and receive visible player positions.
+      description: Report the caller's location. Updates are broadcast via SSE.
       operationId: report_location_games__game_id__location_post
       parameters:
       - name: game_id
@@ -734,12 +734,8 @@ paths:
             schema:
               $ref: '#/components/schemas/LocationReportRequest'
       responses:
-        '200':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LocationReportResponse'
         '422':
           description: Validation Error
           content:
@@ -2141,19 +2137,6 @@ components:
       - timestamp
       title: LocationReportRequest
       description: Report the caller's current position.
-    LocationReportResponse:
-      properties:
-        players:
-          items:
-            $ref: '#/components/schemas/VisiblePlayer'
-          type: array
-          title: Players
-      type: object
-      required:
-      - players
-      title: LocationReportResponse
-      description: "Returned after reporting location \u2014 includes positions of\
-        \ all visible players."
     MapDetail:
       properties:
         id:
@@ -3000,35 +2983,3 @@ components:
       - msg
       - type
       title: ValidationError
-    VisiblePlayer:
-      properties:
-        player_id:
-          type: string
-          format: uuid
-          title: Player Id
-        name:
-          type: string
-          title: Name
-        color:
-          $ref: '#/components/schemas/PlayerColor'
-        role:
-          anyOf:
-          - $ref: '#/components/schemas/PlayerRole'
-          - type: 'null'
-        coordinates:
-          $ref: '#/components/schemas/Point'
-          description: "GeoJSON Point \u2014 latest reported position."
-        timestamp:
-          type: string
-          format: date-time
-          title: Timestamp
-      type: object
-      required:
-      - player_id
-      - name
-      - color
-      - role
-      - coordinates
-      - timestamp
-      title: VisiblePlayer
-      description: A player visible to the caller, with their latest position.
