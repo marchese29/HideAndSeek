@@ -15,6 +15,8 @@ AI-generated design documents and artifacts for the HideAndSeek game.
 - `hider-station-election.md` — Hider station election: voluntary lock-in during hiding, ambiguity handling at hiding→seeking transition, fallback resolution cascade (all-in-radius → any-in-radius → closest pair), nearby-stations and hiding-zone query endpoints. Supersedes Station Selection in `endgame.md`.
 - `lobby-server.md` — Server-side lobby changes: host-as-player on game creation, auth guards (self-only player updates, host-only start), PlayerColor enum (12 server-assigned colors), 12-player cap, player removal (voluntary leave + host kick + host transfer), real-time lobby updates via SSE over Redis pub/sub, broadcast module design.
 - `lobby-mobile.md` — Mobile lobby experience: screen flow (Home → Create/Join → Lobby), map picker, join code input, lobby UI (player list, self-edit sheet, host controls), SSE via react-native-sse, state management (Zustand for client state + TanStack Query for server state), color mapping, navigation patterns.
+- `gameplay-state.md` — Gameplay state & SSE: role-specific SSE state endpoints (hider-state/seeker-state), dual-channel Redis broadcasting with publish-side visibility, location broadcasting, simplified ACK REST responses, player representations (GamePlayer with location vs RosterPlayer without), question history with exclusion zones, inventory in state.
+- `gameplay-mobile.md` — Mobile gameplay experience: single route with role/phase-dependent rendering, map view (boundary, stops, player pins, total exclusion), SSE-driven Zustand state, question drawer (hider) + question banner (seeker), utility belt, location reporting, stale location indicator, permissions at create/join time.
 
 ## Conventions
 
