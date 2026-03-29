@@ -664,3 +664,157 @@ class EndgameExclusionsResponse(BaseModel):
                 for e in result.entries
             ],
         )
+
+
+# ── Gameplay State ──────────────────────────────────────────────────────────
+
+
+class GamePlayer(BaseModel):
+    """A player with optional location — visible to roles that can see this player."""
+
+    id: uuid.UUID
+    name: str
+    color: PlayerColor = Field(description='Server-assigned player color.')
+    role: PlayerRole | None
+    coordinates: GeoJSONPoint | None = Field(
+        default=None, description='Last known position (null if not yet reported).'
+    )
+    timestamp: datetime | None = Field(default=None, description='Time of last location report.')
+
+
+class RosterPlayer(BaseModel):
+    """A player in the roster — identity only, no location fields."""
+
+    id: uuid.UUID
+    name: str
+    color: PlayerColor = Field(description='Server-assigned player color.')
+    role: PlayerRole | None
+
+
+class HiderActiveQuestion(BaseModel):
+    """The active question as seen by the hider."""
+
+    question_id: uuid.UUID
+    question_type: QuestionType
+    status: QuestionStatus
+    asked_by: uuid.UUID = Field(description='Seeker who asked.')
+    slot_index: int = Field(description='Inventory slot used.')
+    question_deadline: datetime | None = Field(
+        default=None, description='When auto-answer fires (null if timer not started).'
+    )
+
+
+class SeekerActiveQuestion(BaseModel):
+    """The active question as seen by the seeker."""
+
+    question_id: uuid.UUID
+    question_type: QuestionType
+    status: QuestionStatus
+    slot_index: int = Field(description='Inventory slot used.')
+    question_deadline: datetime | None = Field(
+        default=None, description='When auto-answer fires (null if timer not started).'
+    )
+
+
+class HiderQuestionHistoryEntry(BaseModel):
+    """A resolved question from the hider's perspective — no geometry."""
+
+    question_id: uuid.UUID
+    question_type: QuestionType
+    status: QuestionStatus = Field(description='Terminal status: answered, vetoed, or abandoned.')
+    asked_by: uuid.UUID = Field(description='Seeker who asked.')
+    slot_index: int = Field(description='Inventory slot used.')
+    answer: str | None = Field(
+        default=None, description='yes/no/closer/farther or null if vetoed/abandoned.'
+    )
+
+
+class SeekerQuestionHistoryEntry(BaseModel):
+    """A resolved question from the seeker's perspective — includes exclusion geometry."""
+
+    question_id: uuid.UUID
+    question_type: QuestionType
+    status: QuestionStatus = Field(description='Terminal status: answered, vetoed, or abandoned.')
+    slot_index: int = Field(description='Inventory slot used.')
+    answer: str | None = Field(
+        default=None, description='yes/no/closer/farther or null if vetoed/abandoned.'
+    )
+    exclusion: GeoJSONGeometry | None = Field(
+        default=None, description="This question's exclusion zone."
+    )
+    total_exclusion: GeoJSONGeometry | None = Field(
+        default=None, description='Cumulative exclusion after this question.'
+    )
+
+
+class InventorySlotResponse(BaseModel):
+    """A single inventory slot in the gameplay state."""
+
+    question_type: QuestionType
+    slot_index: int = Field(description='Original template position (stable across the game).')
+    distance: float | None = Field(
+        default=None, description='Preset distance. Radar/thermometer only.'
+    )
+    category: str | None = Field(
+        default=None, description='Feature category. Matching/measuring only.'
+    )
+    feature_class: int | None = Field(
+        default=None, description='Feature class tier. Classed categories only.'
+    )
+    ask_count: int = Field(description='Number of times this slot has been used.')
+
+
+class HiderGameStateResponse(BaseModel):
+    """Full hider state snapshot — delivered as initial SSE event."""
+
+    game_id: uuid.UUID
+    phase: str = Field(description='Current phase: hiding or seeking.')
+    hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
+    hiding_started_at: datetime | None
+    seeking_started_at: datetime | None
+    base_question_delay_min: int = Field(description='Auto-answer timer duration in minutes.')
+    distance_convention: str = Field(description='metric or imperial.')
+    boundary: GeoJSONPolygon = Field(description='Game map boundary.')
+    districts: list = Field(description='District boundaries.')
+    stops: list[StopResponse] = Field(description='All playable stops.')
+    self_player_id: uuid.UUID = Field(description="Caller's player ID.")
+    hiders: list[GamePlayer] = Field(description='All hiders with last known positions.')
+    seekers: list[GamePlayer] = Field(description='All seekers with last known positions.')
+    station_election_status: StationElectionStatus
+    hider_station_id: uuid.UUID | None = Field(
+        default=None, description='Assigned station (once elected/assigned).'
+    )
+    active_question: HiderActiveQuestion | None = Field(
+        default=None, description='Current unanswered question.'
+    )
+    question_history: list[HiderQuestionHistoryEntry] = Field(description='All resolved questions.')
+
+
+class SeekerGameStateResponse(BaseModel):
+    """Full seeker state snapshot — delivered as initial SSE event."""
+
+    game_id: uuid.UUID
+    phase: str = Field(description='Current phase: hiding or seeking.')
+    hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
+    hiding_started_at: datetime | None
+    seeking_started_at: datetime | None
+    base_question_delay_min: int = Field(description='Auto-answer timer duration in minutes.')
+    distance_convention: str = Field(description='metric or imperial.')
+    boundary: GeoJSONPolygon = Field(description='Game map boundary.')
+    districts: list = Field(description='District boundaries.')
+    stops: list[StopResponse] = Field(description='All playable stops.')
+    self_player_id: uuid.UUID = Field(description="Caller's player ID.")
+    hiders: list[RosterPlayer] = Field(description='Hiders — identity only, no location.')
+    seekers: list[GamePlayer] = Field(description='All seekers with last known positions.')
+    active_question: SeekerActiveQuestion | None = Field(
+        default=None, description='Current in-flight question.'
+    )
+    question_history: list[SeekerQuestionHistoryEntry] = Field(
+        description='Resolved questions with answers and exclusion geometry.'
+    )
+    total_exclusion: GeoJSONGeometry | None = Field(
+        default=None, description='Cumulative exclusion zone.'
+    )
+    inventory: list[InventorySlotResponse] = Field(
+        description='All inventory slots with current ask counts.'
+    )

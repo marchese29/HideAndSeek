@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -91,6 +92,33 @@ def get_location_history(game: Game) -> Sequence[LocationUpdate]:
     return session.scalars(
         select(LocationUpdate).where(LocationUpdate.game == game).order_by(LocationUpdate.id)
     ).all()
+
+
+def get_all_player_locations(game: Game) -> dict[uuid.UUID, VisiblePlayerData]:
+    """Return the latest location per player in a game. No caller or role filtering."""
+    session = get_session()
+    latest_sq = (
+        select(
+            LocationUpdate.player_id,
+            func.max(LocationUpdate.id).label('max_id'),
+        )
+        .where(LocationUpdate.game == game)
+        .group_by(LocationUpdate.player_id)
+        .subquery()
+    )
+    stmt = (
+        select(LocationUpdate, Player)
+        .join(latest_sq, LocationUpdate.id == latest_sq.c.max_id)
+        .join(Player, LocationUpdate.player_id == Player.id)
+    )
+    result: dict[uuid.UUID, VisiblePlayerData] = {}
+    for lu, player in session.execute(stmt).all():
+        result[player.id] = VisiblePlayerData(
+            player=player,
+            coordinates=lu.coordinates,
+            timestamp=lu.timestamp,
+        )
+    return result
 
 
 def get_latest_location_for_player(player: Player, game: Game) -> LocationUpdate | None:

@@ -63,6 +63,23 @@ def get_latest_total_exclusion(game: Game) -> BaseGeometry | None:
     return question.total_exclusion if question else None
 
 
+def get_active_question(game: Game) -> Question | None:
+    """Return the active (non-terminal) question, or None."""
+    session = get_session()
+    return session.scalars(
+        select(Question).where(
+            Question.game_id == game.id,
+            Question.status.not_in(
+                [
+                    QuestionStatus.answered,
+                    QuestionStatus.vetoed,
+                    QuestionStatus.abandoned,
+                ]
+            ),
+        )
+    ).one_or_none()
+
+
 def get_question(question_id: uuid.UUID) -> Question | None:
     """Return a single question by ID."""
     session = get_session()

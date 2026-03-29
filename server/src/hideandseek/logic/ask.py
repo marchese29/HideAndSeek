@@ -34,6 +34,7 @@ def ask_radar(
             asked_by=player.id,
             seeker_location_start=seeker_location,
             ask_count=slot.ask_count,
+            slot_index=slot.slot_index,
             answerable_at=datetime.now(UTC),
             radar_params=RadarParams(radius=slot.distance or custom_distance),
         )
@@ -60,6 +61,7 @@ def ask_thermometer(
             asked_by=player.id,
             seeker_location_start=seeker_location,
             ask_count=slot.ask_count,
+            slot_index=slot.slot_index,
             thermometer_params=ThermometerParams(min_travel=slot.distance or custom_distance),
         )
     )
@@ -98,6 +100,7 @@ def ask_matching(
             asked_by=player.id,
             seeker_location_start=seeker_location,
             ask_count=slot.ask_count,
+            slot_index=slot.slot_index,
             answerable_at=datetime.now(UTC),
             feature_params=FeatureQuestionParams(
                 category=slot.category,
@@ -139,6 +142,7 @@ def ask_measuring(
             asked_by=player.id,
             seeker_location_start=seeker_location,
             ask_count=slot.ask_count,
+            slot_index=slot.slot_index,
             answerable_at=datetime.now(UTC),
             feature_params=FeatureQuestionParams(
                 category=slot.category,

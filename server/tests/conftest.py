@@ -23,8 +23,10 @@ from hideandseek.models.base import Base
 from hideandseek.models.game import Game, Player
 from hideandseek.models.game_map import GameMap
 from hideandseek.models.inventory import InventorySlot
+from hideandseek.models.location import LocationUpdate
 from hideandseek.models.map_feature import GameMapFeature, MapFeature
-from hideandseek.models.transit import TransitDataset
+from hideandseek.models.question import Question
+from hideandseek.models.transit import Stop, TransitDataset
 from hideandseek.models.types import (
     MATCHING_CATEGORIES,
     MEASURING_CATEGORIES,
@@ -32,6 +34,7 @@ from hideandseek.models.types import (
     GameStatus,
     MapSize,
     PlayerColor,
+    QuestionStatus,
     QuestionType,
     category_key,
 )
@@ -304,3 +307,56 @@ def create_game_map_feature(
     session.flush()
     session.refresh(link)
     return link
+
+
+def create_question(session: Session, game_id: uuid.UUID, **overrides: Any) -> Question:
+    """Create a Question for testing. Defaults to an answered radar question."""
+    defaults: dict[str, Any] = {
+        'game_id': game_id,
+        'sequence': 1,
+        'question_type': QuestionType.radar,
+        'status': QuestionStatus.answered,
+        'asked_by': overrides.pop('asked_by', uuid.uuid4()),
+        'seeker_location_start': Point(0.5, 0.5),
+        'ask_count': 1,
+        'slot_index': 0,
+    }
+    defaults.update(overrides)
+    q = Question(**defaults)
+    session.add(q)
+    session.flush()
+    session.refresh(q)
+    return q
+
+
+def create_location_update(
+    session: Session, player_id: uuid.UUID, game_id: uuid.UUID, **overrides: Any
+) -> LocationUpdate:
+    """Create a LocationUpdate for testing."""
+    defaults: dict[str, Any] = {
+        'player_id': player_id,
+        'game_id': game_id,
+        'coordinates': Point(0.5, 0.5),
+    }
+    defaults.update(overrides)
+    lu = LocationUpdate(**defaults)
+    session.add(lu)
+    session.flush()
+    session.refresh(lu)
+    return lu
+
+
+def create_stop(session: Session, dataset_id: uuid.UUID, **overrides: Any) -> Stop:
+    """Create a Stop for testing."""
+    defaults: dict[str, Any] = {
+        'dataset_id': dataset_id,
+        'stable_id': f'stop-{uuid.uuid4().hex[:8]}',
+        'name': 'Test Stop',
+        'coordinates': Point(0.5, 0.5),
+    }
+    defaults.update(overrides)
+    stop = Stop(**defaults)
+    session.add(stop)
+    session.flush()
+    session.refresh(stop)
+    return stop

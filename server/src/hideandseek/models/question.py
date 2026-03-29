@@ -42,6 +42,7 @@ class Question(Base):
         ShapelyGeography('POINT', srid=4326), nullable=True, default=None
     )
     ask_count: Mapped[int] = mapped_column(default=1)
+    slot_index: Mapped[int] = mapped_column(default=0)
     scheduled_veto: Mapped[bool] = mapped_column(default=False)
     answer: Mapped[str | None] = mapped_column(default=None)
     exclusion: Mapped[BaseGeometry | None] = mapped_column(

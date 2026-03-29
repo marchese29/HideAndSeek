@@ -205,6 +205,10 @@ class LobbyEventType(StrEnum):
     game_started = 'game_started'
 
 
+class GameplayEventType(StrEnum):
+    game_state = 'game_state'
+
+
 class TokenProvider(StrEnum):
     apns = 'apns'
     fcm = 'fcm'
