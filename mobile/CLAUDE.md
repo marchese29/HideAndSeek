@@ -33,15 +33,17 @@ src/
     schema.d.ts                # Auto-generated from OpenAPI — DO NOT EDIT
     client.ts                  # openapi-fetch wrapper + X-Player-Id + X-Player-Secret middleware
     queryClient.ts             # TanStack Query client instance
-  store.ts                     # Zustand store (session credentials: playerId, playerSecret, gameId)
+  store.ts                     # Zustand store (session + push token state)
   constants/
     colors.ts                  # PlayerColor → hex mapping
-  hooks/                       # Custom React hooks
+  hooks/
+    useLobbyEvents.ts          # SSE subscription for lobby real-time events
+    usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
   components/                  # Reusable UI components
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types
 assets/                        # Images, fonts
-app.config.ts                  # Expo config (Google Maps key, permissions)
+app.config.ts                  # Expo config (Google Maps key, permissions, notifications)
 .env.example                   # Env var template
 ```
 
@@ -72,7 +74,7 @@ Copy `.env.example` to `.env` and fill in values.
 
 ## State Management
 
-- **Zustand** (`src/store.ts`) — session context. `gameId`, `playerId`, `playerSecret` (all null initially, set on create/join, cleared on leave/kick). Credentials are per-game and server-minted — returned in `JoinGameResponse`. Does NOT hold game data.
+- **Zustand** (`src/store.ts`) — session context. `gameId`, `playerId`, `playerSecret` (all null initially, set on create/join, cleared on leave/kick). Also holds transient `pushToken` + `pushProvider` (not persisted to AsyncStorage — re-fetched each launch). Credentials are per-game and server-minted — returned in `JoinGameResponse`. Does NOT hold game data.
 - **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (game state, maps). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for game state.
 - `X-Player-Id` and `X-Player-Secret` headers are injected at runtime via `api.use()` middleware in `client.ts` (only when credentials exist). For endpoints where the OpenAPI spec declares these as required header parameters, also pass `header: authHeader()` in the `params` object to satisfy TypeScript types. Import `authHeader` from `@/api/auth`. `POST /games` and `POST /games/join` do not require auth headers (they mint fresh credentials).
 - API base URL is platform-aware: `localhost:8000` for iOS simulator, `10.0.2.2:8000` for Android emulator. Override via `EXPO_PUBLIC_API_BASE_URL`.
@@ -87,6 +89,17 @@ On app launch, `index.tsx` checks for stored credentials:
 4. Shows loading indicator while checking
 
 Kicked players' credentials return 403 on `/me` → clean session clear.
+
+## Push Notifications
+
+- **expo-notifications** provides cross-platform push token retrieval and foreground notification handling.
+- `usePushToken()` hook (called on home screen) requests permission and stores the native device token (APNs on iOS, FCM on Android) in Zustand. Uses `getDevicePushTokenAsync()` for the raw native token (not Expo push tokens).
+- Token + provider are sent to the server on game create/join via `device_token` + `device_token_provider` fields.
+- `_layout.tsx` sets `Notifications.setNotificationHandler()` at module level for foreground display behavior.
+- Token rotation is handled by `addPushTokenListener` in the hook; the lobby screen watches for changes and PATCHes the player.
+- `expo-device` is used to skip push registration on simulators (`Device.isDevice` check).
+- Android requires a notification channel (created in `usePushToken`) before the permission prompt appears.
+- FCM on Android requires `google-services.json` from Firebase Console in the project root (referenced in `app.config.ts`).
 
 ## Conventions
 

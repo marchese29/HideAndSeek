@@ -9,7 +9,7 @@ from typing import Any
 import structlog
 
 from hideandseek.celery_app import app
-from hideandseek.config import load_push_config
+from hideandseek.config import load_fcm_config, load_push_config
 from hideandseek.db import session_scope
 from hideandseek.models.types import PlayerRole, PushEventType
 from hideandseek.push import PushService
@@ -24,8 +24,9 @@ def _get_push_service() -> PushService:
     """Lazy singleton for the worker-process PushService."""
     global _push_service  # noqa: PLW0603
     if _push_service is None:
-        config = load_push_config()
-        _push_service = PushService(config)
+        apns_config = load_push_config()
+        fcm_config = load_fcm_config()
+        _push_service = PushService(apns_config, fcm_config)
     return _push_service
 
 
@@ -50,17 +51,17 @@ def send_push(
     with session_scope():
         role = PlayerRole(role_filter) if role_filter is not None else None
         device_tokens = get_device_tokens_for_game(uuid.UUID(game_id), role_filter=role)
-        # Extract plain strings before session closes to avoid DetachedInstanceError
-        tokens = [dt.token for dt in device_tokens]
+        # Extract (token, provider) pairs before session closes to avoid DetachedInstanceError
+        token_pairs = [(dt.token, dt.provider) for dt in device_tokens]
 
-    if not tokens:
+    if not token_pairs:
         logger.info('push_no_tokens', game_id=game_id, event_type=event_type)
         return
 
     push_service = _get_push_service()
     asyncio.run(
         push_service.send_to_tokens(
-            tokens,
+            token_pairs,
             uuid.UUID(game_id),
             PushEventType(event_type),
             alert=alert,
@@ -71,4 +72,9 @@ def send_push(
             answer=kwargs.get('answer'),
         )
     )
-    logger.info('push_sent', game_id=game_id, event_type=event_type, token_count=len(tokens))
+    logger.info(
+        'push_sent',
+        game_id=game_id,
+        event_type=event_type,
+        token_count=len(token_pairs),
+    )

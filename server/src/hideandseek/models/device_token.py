@@ -1,4 +1,4 @@
-"""Device token model for APNS push notifications."""
+"""Device token model for push notifications (APNs + FCM)."""
 
 from __future__ import annotations
 
@@ -9,10 +9,11 @@ from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hideandseek.models.base import Base
+from hideandseek.models.types import TokenProvider
 
 
 class DeviceToken(Base):
-    """Maps a player_id to its APNS device token.
+    """Maps a player_id to its native push token.
 
     Separate from Player — a player_id can span multiple games and may register
     a token before joining any game.
@@ -26,7 +27,7 @@ class DeviceToken(Base):
         default=uuid.uuid4,
     )
     token: Mapped[str]
-    environment: Mapped[str] = mapped_column(default='production')
+    provider: Mapped[TokenProvider] = mapped_column(default=TokenProvider.apns)
     updated_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(UTC),
     )

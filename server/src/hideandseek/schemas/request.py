@@ -28,11 +28,11 @@ class CreateGameRequest(BaseModel):
     )
     device_token: str | None = Field(
         default=None,
-        description='Hex-encoded APNS device token. Optional for game creation.',
+        description='Native push token (APNs or FCM). Optional for game creation.',
     )
-    device_token_environment: str = Field(
-        default='production',
-        description='APNS environment: "production" or "sandbox".',
+    device_token_provider: str = Field(
+        default='apns',
+        description='Push provider: "apns" (iOS) or "fcm" (Android).',
     )
     hiding_time_min: int | None = Field(
         default=None, ge=1, description='Override hiding phase duration. Defaults to map size.'
@@ -52,11 +52,11 @@ class JoinGameRequest(BaseModel):
     )
     device_token: str | None = Field(
         default=None,
-        description='Hex-encoded APNS device token. Optional — can be set later via PATCH.',
+        description='Native push token (APNs or FCM). Optional — can be set later via PATCH.',
     )
-    device_token_environment: str = Field(
-        default='production',
-        description='APNS environment: "production" or "sandbox".',
+    device_token_provider: str = Field(
+        default='apns',
+        description='Push provider: "apns" (iOS) or "fcm" (Android).',
     )
 
 
@@ -69,10 +69,13 @@ class PlayerUpdate(BaseModel):
     name: str | None = Field(default=None, description='New display name.')
     color: PlayerColor | None = Field(default=None, description='New player color.')
     role: PlayerRole | None = Field(default=None, description='Assign hider or seeker role.')
-    device_token: str | None = Field(default=None, description='Hex-encoded APNS device token.')
-    device_token_environment: str = Field(
-        default='production',
-        description='APNS environment: "production" or "sandbox".',
+    device_token: str | None = Field(
+        default=None,
+        description='Native push token (APNs or FCM).',
+    )
+    device_token_provider: str = Field(
+        default='apns',
+        description='Push provider: "apns" (iOS) or "fcm" (Android).',
     )
 
 

@@ -21,6 +21,7 @@ from hideandseek.models.types import (
     QuestionStatus,
     QuestionType,
     RouteType,
+    TokenProvider,
 )
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     'QuestionStatus',
     'QuestionType',
     'RouteType',
+    'TokenProvider',
     # Constants
     'MAX_PLAYERS',
     # Value objects

@@ -101,7 +101,7 @@ def create_game(
         upsert_device_token(
             player_id=player.id,
             token=body.device_token,
-            environment=body.device_token_environment,
+            provider=body.device_token_provider,
         )
 
     return JoinGameResponse(
@@ -133,7 +133,7 @@ def join_game(
         upsert_device_token(
             player_id=player.id,
             token=body.device_token,
-            environment=body.device_token_environment,
+            provider=body.device_token_provider,
         )
 
     return JoinGameResponse(
@@ -201,7 +201,7 @@ def patch_player(
         upsert_device_token(
             player_id=auth_player_id,
             token=updates['device_token'],
-            environment=body.device_token_environment,
+            provider=body.device_token_provider,
         )
     if game.status.is_lobby:
         emit(PlayerUpdatedEvent(game=game, player=player))

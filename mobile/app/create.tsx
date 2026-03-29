@@ -40,11 +40,13 @@ export default function CreateGameScreen() {
     setError(null);
     setLoading(true);
 
+    const { pushToken, pushProvider } = useAppStore.getState();
     const { data, error: apiError } = await api.POST('/games', {
       body: {
         map_id: selectedMapId,
         name: name.trim(),
-        device_token_environment: 'sandbox',
+        device_token: pushToken ?? undefined,
+        device_token_provider: pushProvider ?? 'apns',
       },
     });
 

@@ -33,14 +33,14 @@ export function SelfEditSheet({
   );
 
   async function patchPlayer(
-    updates: Omit<components['schemas']['PlayerUpdate'], 'device_token_environment'>,
+    updates: Omit<components['schemas']['PlayerUpdate'], 'device_token_provider'>,
   ) {
     const { error } = await api.PATCH('/games/{game_id}/players/{player_id}', {
       params: {
         path: { game_id: gameId, player_id: player.id },
         header: authHeader(),
       },
-      body: { ...updates, device_token_environment: 'sandbox' },
+      body: { ...updates, device_token_provider: 'apns' },
     });
     if (error) {
       const detail = (error as { detail?: string }).detail;

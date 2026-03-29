@@ -1500,12 +1500,12 @@ components:
           - type: string
           - type: 'null'
           title: Device Token
-          description: Hex-encoded APNS device token. Optional for game creation.
-        device_token_environment:
+          description: Native push token (APNs or FCM). Optional for game creation.
+        device_token_provider:
           type: string
-          title: Device Token Environment
-          description: 'APNS environment: "production" or "sandbox".'
-          default: production
+          title: Device Token Provider
+          description: 'Push provider: "apns" (iOS) or "fcm" (Android).'
+          default: apns
         hiding_time_min:
           anyOf:
           - type: integer
@@ -2029,13 +2029,13 @@ components:
           - type: string
           - type: 'null'
           title: Device Token
-          description: "Hex-encoded APNS device token. Optional \u2014 can be set\
+          description: "Native push token (APNs or FCM). Optional \u2014 can be set\
             \ later via PATCH."
-        device_token_environment:
+        device_token_provider:
           type: string
-          title: Device Token Environment
-          description: 'APNS environment: "production" or "sandbox".'
-          default: production
+          title: Device Token Provider
+          description: 'Push provider: "apns" (iOS) or "fcm" (Android).'
+          default: apns
       type: object
       required:
       - join_code
@@ -2496,12 +2496,12 @@ components:
           - type: string
           - type: 'null'
           title: Device Token
-          description: Hex-encoded APNS device token.
-        device_token_environment:
+          description: Native push token (APNs or FCM).
+        device_token_provider:
           type: string
-          title: Device Token Environment
-          description: 'APNS environment: "production" or "sandbox".'
-          default: production
+          title: Device Token Provider
+          description: 'Push provider: "apns" (iOS) or "fcm" (Android).'
+          default: apns
       type: object
       title: PlayerUpdate
       description: Partial update to a player. All fields are optional; only provided

@@ -10,21 +10,22 @@ from sqlalchemy import select
 from hideandseek.db import get_session
 from hideandseek.models.device_token import DeviceToken
 from hideandseek.models.game import Player
-from hideandseek.models.types import PlayerRole
+from hideandseek.models.types import PlayerRole, TokenProvider
 
 
 def upsert_device_token(
     *,
     player_id: uuid.UUID,
     token: str,
-    environment: str = 'production',
+    provider: str = 'apns',
 ) -> DeviceToken:
     """Insert or update a device token for a player."""
     session = get_session()
+    token_provider = TokenProvider(provider)
     existing = session.get(DeviceToken, player_id)
     if existing:
         existing.token = token
-        existing.environment = environment
+        existing.provider = token_provider
         existing.updated_at = datetime.now(UTC)
         session.add(existing)
         session.flush()
@@ -33,7 +34,7 @@ def upsert_device_token(
     dt = DeviceToken(
         player_id=player_id,
         token=token,
-        environment=environment,
+        provider=token_provider,
     )
     session.add(dt)
     session.flush()

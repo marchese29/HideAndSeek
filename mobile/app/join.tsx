@@ -18,8 +18,14 @@ export default function JoinGameScreen() {
     setError(null);
     setLoading(true);
 
+    const { pushToken, pushProvider } = useAppStore.getState();
     const { data, error: apiError } = await api.POST('/games/join', {
-      body: { join_code: joinCode, name: name.trim(), device_token_environment: 'sandbox' },
+      body: {
+        join_code: joinCode,
+        name: name.trim(),
+        device_token: pushToken ?? undefined,
+        device_token_provider: pushProvider ?? 'apns',
+      },
     });
 
     setLoading(false);

@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { api } from '@/api/client';
+import { usePushToken } from '@/hooks/usePushToken';
 import { useAppStore } from '@/store';
 
 export default function HomeScreen() {
   const [checking, setChecking] = useState(true);
+  usePushToken();
 
   useEffect(() => {
     const { gameId, playerId, playerSecret } = useAppStore.getState();

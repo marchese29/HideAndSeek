@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef } from 'react';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
@@ -18,6 +18,24 @@ export default function LobbyScreen() {
   const playerId = useAppStore((s) => s.playerId);
 
   useLobbyEvents(game_id);
+
+  // PATCH the player if the push token rotates while in the lobby
+  const pushToken = useAppStore((s) => s.pushToken);
+  const initialToken = useRef(pushToken);
+  useEffect(() => {
+    if (!playerId || !pushToken || pushToken === initialToken.current) return;
+    initialToken.current = pushToken;
+    void api.PATCH('/games/{game_id}/players/{player_id}', {
+      params: {
+        path: { game_id, player_id: playerId },
+        header: authHeader(),
+      },
+      body: {
+        device_token: pushToken,
+        device_token_provider: Platform.OS === 'ios' ? 'apns' : 'fcm',
+      },
+    });
+  }, [pushToken, playerId, game_id]);
 
   const { data: game } = useQuery<GameResponse>({
     queryKey: ['game', game_id],
@@ -67,7 +85,6 @@ export default function LobbyScreen() {
         body: newHostId ? { new_host_id: newHostId } : null,
       });
       useAppStore.getState().clearSession();
-      router.dismissAll();
       router.replace('/');
     }
   }, [game, game_id, playerId]);

@@ -44,5 +44,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           'Allow HideAndSeek to use your location for gameplay.',
       },
     ],
+    [
+      'expo-notifications',
+      {
+        color: '#3498DB',
+      },
+    ],
   ],
 });

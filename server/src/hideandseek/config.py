@@ -1,4 +1,4 @@
-"""APNS configuration loaded from environment variables."""
+"""Push notification configuration loaded from environment variables."""
 
 from __future__ import annotations
 
@@ -15,6 +15,13 @@ class PushConfig:
     team_id: str
     topic: str
     use_sandbox: bool
+
+
+@dataclass(frozen=True)
+class FcmConfig:
+    """Firebase Cloud Messaging credentials."""
+
+    credentials_path: str
 
 
 def load_push_config() -> PushConfig | None:
@@ -39,3 +46,11 @@ def load_push_config() -> PushConfig | None:
         topic=topic,
         use_sandbox=os.environ.get('APNS_USE_SANDBOX', '').lower() in ('1', 'true', 'yes'),
     )
+
+
+def load_fcm_config() -> FcmConfig | None:
+    """Load FCM config from env vars. Returns None when the credential path is missing."""
+    credentials_path = os.environ.get('FCM_CREDENTIALS_PATH')
+    if not credentials_path:
+        return None
+    return FcmConfig(credentials_path=credentials_path)

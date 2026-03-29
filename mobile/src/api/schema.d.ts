@@ -728,15 +728,15 @@ export interface components {
             excluded_route_ids?: string[];
             /**
              * Device Token
-             * @description Hex-encoded APNS device token. Optional for game creation.
+             * @description Native push token (APNs or FCM). Optional for game creation.
              */
             device_token?: string | null;
             /**
-             * Device Token Environment
-             * @description APNS environment: "production" or "sandbox".
-             * @default production
+             * Device Token Provider
+             * @description Push provider: "apns" (iOS) or "fcm" (Android).
+             * @default apns
              */
-            device_token_environment: string;
+            device_token_provider: string;
             /**
              * Hiding Time Min
              * @description Override hiding phase duration. Defaults to map size.
@@ -1054,15 +1054,15 @@ export interface components {
             role?: components["schemas"]["PlayerRole"] | null;
             /**
              * Device Token
-             * @description Hex-encoded APNS device token. Optional — can be set later via PATCH.
+             * @description Native push token (APNs or FCM). Optional — can be set later via PATCH.
              */
             device_token?: string | null;
             /**
-             * Device Token Environment
-             * @description APNS environment: "production" or "sandbox".
-             * @default production
+             * Device Token Provider
+             * @description Push provider: "apns" (iOS) or "fcm" (Android).
+             * @default apns
              */
-            device_token_environment: string;
+            device_token_provider: string;
         };
         /**
          * JoinGameResponse
@@ -1372,15 +1372,15 @@ export interface components {
             role?: components["schemas"]["PlayerRole"] | null;
             /**
              * Device Token
-             * @description Hex-encoded APNS device token.
+             * @description Native push token (APNs or FCM).
              */
             device_token?: string | null;
             /**
-             * Device Token Environment
-             * @description APNS environment: "production" or "sandbox".
-             * @default production
+             * Device Token Provider
+             * @description Push provider: "apns" (iOS) or "fcm" (Android).
+             * @default apns
              */
-            device_token_environment: string;
+            device_token_provider: string;
         };
         /**
          * Point
