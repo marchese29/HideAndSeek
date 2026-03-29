@@ -7,6 +7,7 @@ import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import type { components } from '@/api/schema';
+import { ConnectionDot } from '@/components/ConnectionDot';
 import { PlayerList } from '@/components/PlayerList';
 import { useLobbyEvents } from '@/hooks/useLobbyEvents';
 import { useAppStore } from '@/store';
@@ -17,7 +18,7 @@ export default function LobbyScreen() {
   const { game_id } = useLocalSearchParams<{ game_id: string }>();
   const playerId = useAppStore((s) => s.playerId);
 
-  useLobbyEvents(game_id);
+  const { connected } = useLobbyEvents(game_id);
 
   // PATCH the player if the push token rotates while in the lobby
   const pushToken = useAppStore((s) => s.pushToken);
@@ -121,23 +122,28 @@ export default function LobbyScreen() {
   return (
     <View style={styles.container}>
       {game.join_code && (
-        <Pressable style={styles.codeBanner} onPress={() => void handleCopyCode()}>
+        <Pressable
+          style={styles.codeBanner}
+          onPress={() => void handleCopyCode()}
+          disabled={!connected}
+        >
+          <ConnectionDot connected={connected} />
           <Text style={styles.codeText}>{game.join_code}</Text>
           <Text style={styles.codeSubtext}>Tap to copy join code</Text>
         </Pressable>
       )}
 
-      <View style={styles.listContainer}>
-        <PlayerList game={game} playerId={playerId!} />
+      <View style={[styles.listContainer, !connected && styles.disabled]}>
+        <PlayerList game={game} playerId={playerId!} disabled={!connected} />
       </View>
 
       <View style={styles.footer}>
         {isHost && (
           <View style={styles.startSection}>
             <Pressable
-              style={[styles.startButton, !canStart && styles.buttonDisabled]}
+              style={[styles.startButton, (!canStart || !connected) && styles.buttonDisabled]}
               onPress={() => void handleStart()}
-              disabled={!canStart}
+              disabled={!canStart || !connected}
             >
               <Text style={styles.startButtonText}>Start Game</Text>
             </Pressable>
@@ -145,7 +151,11 @@ export default function LobbyScreen() {
           </View>
         )}
 
-        <Pressable style={styles.leaveButton} onPress={handleLeave}>
+        <Pressable
+          style={[styles.leaveButton, !connected && styles.buttonDisabled]}
+          onPress={handleLeave}
+          disabled={!connected}
+        >
           <Text style={styles.leaveButtonText}>Leave Game</Text>
         </Pressable>
       </View>
@@ -184,6 +194,9 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     flex: 1,
+  },
+  disabled: {
+    opacity: 0.5,
   },
   footer: {
     padding: 16,

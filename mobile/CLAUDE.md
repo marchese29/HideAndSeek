@@ -37,7 +37,7 @@ src/
   constants/
     colors.ts                  # PlayerColor → hex mapping
   hooks/
-    useLobbyEvents.ts          # SSE subscription for lobby real-time events
+    useLobbyEvents.ts          # SSE subscription with auto-reconnect + connection status
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
   components/                  # Reusable UI components
 scripts/
@@ -89,6 +89,14 @@ On app launch, `index.tsx` checks for stored credentials:
 4. Shows loading indicator while checking
 
 Kicked players' credentials return 403 on `/me` → clean session clear.
+
+## SSE Connection & Reconnect
+
+- `useLobbyEvents` manages the SSE connection to `/games/{id}/lobby/events` and returns `{ connected: boolean }`.
+- On disconnect/error, reconnects with exponential backoff (1s → 30s cap). On reconnect, invalidates the game query to re-fetch full state and catch missed events.
+- On app foreground resume (`AppState` change to `active`), forces a fresh connection since stale XHR may not fire errors.
+- `ConnectionDot` component renders a green/red dot in the join code banner to show connection status. All interactive controls (buttons, player edit, kick) are disabled while disconnected.
+- Lobby screen has no back button (`headerBackVisible: false`, `gestureEnabled: false`) — leaving requires the explicit "Leave Game" button.
 
 ## Push Notifications
 

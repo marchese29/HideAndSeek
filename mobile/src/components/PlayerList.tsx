@@ -15,9 +15,10 @@ type GameResponse = components['schemas']['GameResponse'];
 interface PlayerListProps {
   game: GameResponse;
   playerId: string;
+  disabled?: boolean;
 }
 
-export function PlayerList({ game, playerId }: PlayerListProps) {
+export function PlayerList({ game, playerId, disabled }: PlayerListProps) {
   const [editVisible, setEditVisible] = useState(false);
   const isHost = game.host_player_id === playerId;
   const selfPlayer = game.players.find((p) => p.id === playerId);
@@ -50,11 +51,16 @@ export function PlayerList({ game, playerId }: PlayerListProps) {
         <Pressable
           style={styles.cardWrapper}
           onPress={isSelf ? () => setEditVisible(true) : undefined}
+          disabled={disabled}
         >
           <PlayerCard player={player} isHost={playerIsHost} isSelf={isSelf} />
         </Pressable>
         {isHost && !isSelf && (
-          <Pressable style={styles.kickButton} onPress={() => handleKick(player)}>
+          <Pressable
+            style={styles.kickButton}
+            onPress={() => handleKick(player)}
+            disabled={disabled}
+          >
             <Text style={styles.kickText}>X</Text>
           </Pressable>
         )}
