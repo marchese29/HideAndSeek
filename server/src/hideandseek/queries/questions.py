@@ -28,7 +28,7 @@ def has_unanswered_question(game: Game) -> bool:
     return (
         session.scalars(
             select(Question.id).where(
-                Question.game == game,
+                Question.game_id == game.id,
                 Question.status.not_in(
                     [
                         QuestionStatus.answered,
@@ -45,7 +45,7 @@ def has_unanswered_question(game: Game) -> bool:
 def get_question_count(game: Game) -> int:
     """Return the number of questions asked in a game (for sequencing)."""
     session = get_session()
-    return len(session.scalars(select(Question.id).where(Question.game == game)).all())
+    return len(session.scalars(select(Question.id).where(Question.game_id == game.id)).all())
 
 
 def get_latest_total_exclusion(game: Game) -> BaseGeometry | None:
@@ -54,7 +54,7 @@ def get_latest_total_exclusion(game: Game) -> BaseGeometry | None:
     question = session.scalars(
         select(Question)
         .where(
-            Question.game == game,
+            Question.game_id == game.id,
             Question.status == QuestionStatus.answered,
         )
         .order_by(Question.sequence.desc())
@@ -75,7 +75,7 @@ def list_answered_questions_after_sequence(game: Game, after_sequence: int) -> S
     return session.scalars(
         select(Question)
         .where(
-            Question.game == game,
+            Question.game_id == game.id,
             Question.status == QuestionStatus.answered,
             Question.sequence > after_sequence,
         )
@@ -87,7 +87,7 @@ def list_questions(game: Game) -> Sequence[Question]:
     """Return all questions for a game, chronologically."""
     session = get_session()
     return session.scalars(
-        select(Question).where(Question.game == game).order_by(Question.sequence)
+        select(Question).where(Question.game_id == game.id).order_by(Question.sequence)
     ).all()
 
 

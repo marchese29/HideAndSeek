@@ -16,8 +16,6 @@ from hideandseek.models.types import GameStatus, PlayerColor, PlayerRole, Statio
 if TYPE_CHECKING:
     from hideandseek.models.game_map import GameMap
     from hideandseek.models.inventory import InventorySlot
-    from hideandseek.models.location import LocationUpdate
-    from hideandseek.models.question import Question
     from hideandseek.models.transit import Stop
 
 
@@ -45,7 +43,6 @@ class Game(Base):
     game_map: Mapped[GameMap] = relationship(back_populates='games')
     hider_station: Mapped[Stop | None] = relationship()
     players: Mapped[list[Player]] = relationship(back_populates='game')
-    questions: Mapped[list[Question]] = relationship(back_populates='game')
     inventory_slots: Mapped[list[InventorySlot]] = relationship(
         back_populates='game',
         order_by='InventorySlot.slot_index',
@@ -63,10 +60,6 @@ class Player(Base):
     secret_hash: Mapped[str] = mapped_column(default='')
 
     game: Mapped[Game] = relationship(back_populates='players')
-    location_updates: Mapped[list[LocationUpdate]] = relationship(
-        back_populates='player',
-        cascade='all, delete-orphan',
-    )
 
     def verify_secret(self, secret: str) -> bool:
         """Verify a raw secret against the stored SHA-256 hash."""

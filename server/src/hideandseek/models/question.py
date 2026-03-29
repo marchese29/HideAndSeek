@@ -51,7 +51,7 @@ class Question(Base):
         ShapelyGeometry('GEOMETRY', srid=4326), nullable=True, default=None
     )
 
-    game: Mapped[Game] = relationship(back_populates='questions')
+    game: Mapped[Game] = relationship()
     asked_by_player: Mapped[Player] = relationship(foreign_keys=[asked_by])
     radar_params: Mapped[RadarParams | None] = relationship(
         back_populates='question',

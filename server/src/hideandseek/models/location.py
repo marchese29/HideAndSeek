@@ -24,5 +24,5 @@ class LocationUpdate(Base):
     timestamp: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
     coordinates: Mapped[Point] = mapped_column(ShapelyGeography('POINT', srid=4326))
 
-    player: Mapped[Player] = relationship(back_populates='location_updates')
+    player: Mapped[Player] = relationship()
     game: Mapped[Game] = relationship()
