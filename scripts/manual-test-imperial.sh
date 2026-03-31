@@ -303,12 +303,6 @@ ANSWER=$(echo "$A" | jq_val "['answer']")
 echo "  Answer: $ANSWER"
 
 echo ""
-echo "=== GET /questions (summary only — verify no detail fields) ==="
-Q_LIST=$(curl -sf "$BASE/games/$GAME_ID/questions" -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
-HAS_PARAMS=$(echo "$Q_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); print('parameters' in d[0])")
-assert_eq "no parameters on summary" "$HAS_PARAMS" "False"
-
-echo ""
 echo "=== GET /exclusions (4 exclusions for seeker) ==="
 EXCL=$(curl -sf "$BASE/games/$GAME_ID/exclusions" -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
 EXCL_COUNT=$(echo "$EXCL" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['exclusions']))")

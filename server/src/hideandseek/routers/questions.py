@@ -23,7 +23,6 @@ from hideandseek.conventions import format_distance_label
 from hideandseek.db import session_dependency
 from hideandseek.dependencies import (
     get_game,
-    get_hider_in_game,
     get_player_in_game,
     get_seeker_in_game,
 )
@@ -50,16 +49,8 @@ from hideandseek.models.types import (
     QuestionType,
 )
 from hideandseek.queries.location import create_location_update
-from hideandseek.queries.questions import (
-    get_question,
-    has_unanswered_question,
-    list_questions,
-)
+from hideandseek.queries.questions import has_unanswered_question
 from hideandseek.schemas.request import AskQuestionRequest
-from hideandseek.schemas.response import (
-    QuestionDetailResponse,
-    QuestionSummaryResponse,
-)
 from hideandseek.tasks.game_timers import auto_answer_question
 from hideandseek.tasks.push import send_push
 from hideandseek.validators import (
@@ -392,29 +383,3 @@ def abandon_question_endpoint(
     )
 
     emit_gameplay(QuestionAbandonedEvent.from_question(question))
-
-
-# ── List + detail + exclusions ────────────────────────────────────────────
-
-
-@router.get('/questions', response_model=list[QuestionSummaryResponse])
-def list_game_questions(
-    game: Game = Depends(get_game),
-    player: Player = Depends(get_player_in_game),
-) -> list[QuestionSummaryResponse]:
-    """Chronological list of all questions — whitelist summary only."""
-    questions = list_questions(game)
-    return [QuestionSummaryResponse.from_model(q) for q in questions]
-
-
-@router.get('/questions/{question_id}', response_model=QuestionDetailResponse)
-def get_question_detail(
-    question_id: uuid.UUID,
-    game: Game = Depends(get_game),
-    _player: Player = Depends(get_hider_in_game),
-) -> QuestionDetailResponse:
-    """Full question detail — hider only."""
-    question = get_question(question_id)
-    if not question or question.game_id != game.id:
-        raise HTTPException(status_code=404, detail='Question not found.')
-    return QuestionDetailResponse.from_model(question)

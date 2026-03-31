@@ -201,17 +201,12 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
 ### Checking results
 
 ```bash
-# Question list (any player)
-curl -s localhost:8000/games/<game_id>/questions \
-  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
-
-# Question detail (hider only — includes hider_location, parameters)
-curl -s localhost:8000/games/<game_id>/questions/<question_id> \
-  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
-
 # Candidate stations (seeker only — stops not eliminated by exclusions)
 curl -s localhost:8000/games/<game_id>/candidate-stations \
   -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
+
+# Question history is delivered via SSE game state snapshot (no polling endpoints).
+# Connect to hider/seeker SSE to see question_history in the initial game_state event.
 ```
 
 ### Useful DB queries
@@ -261,7 +256,7 @@ src/hideandseek/
   models/                               # SQLAlchemy declarative models (base, types, geo_types,
                                         #   transit, game_map, map_feature, game, inventory,
                                         #   location, question, question_params, device_token)
-  schemas/                              # Pydantic request/response schemas + common utils
+  schemas/                              # Pydantic request/response/params schemas + common utils
   queries/                              # DB query functions by domain (games, maps, questions,
                                         #   location, features, stops, effective_map, device_tokens,
                                         #   game_state)
@@ -305,7 +300,7 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
   - **`GameplayEventType` enum** (`models/types.py`): `game_state` (initial snapshot), `player_location`, `question_asked`, `question_answerable`, `question_answered`, `question_vetoed`, `question_abandoned`, `phase_changed`, `station_election`, `player_left`.
   - **`emit_gameplay(event)`** (`broadcast/emit.py`): separate from `emit()` — routes gameplay events to role-specific channels. All gameplay events are `required=True` (SSE is primary, no push fallback). Helper `_both_channels()` publishes identical data to hider + seeker channels. Channel routing: most events → both channels; `StationElectionEvent` → hider only; `HiderQuestionAnsweredEvent` → hider only; `SeekerQuestionAnsweredEvent` → seeker only; `PlayerLocationEvent` hider loc → hider only, seeker loc → both.
   - **Gameplay event dataclasses** (`broadcast/events.py`): frozen dataclasses with slots. Question events have `from_question(question)` static constructors that extract fields from the ORM model. `QuestionAnswered` uses **two separate classes** — `HiderQuestionAnsweredEvent` (hider-privileged delta: `answered_at`, `hider_location`, flat hider resolution fields) and `SeekerQuestionAnsweredEvent` (exclusion geometry + `answered_at`, no hider data) — so the type system prevents accidental data leakage.
-  - **Enriched question events**: Fields are placed on the event where they become *known*. `QuestionAskedEvent` carries ask-time fields: `parameters` (typed `QuestionEventParams` dataclass), `seeker_location_start`, `asked_at`, `ask_count`, `sequence`. `QuestionAnswerableEvent` carries `seeker_location_end` (thermometer lock-in). Answered events carry only the answer-time delta. History entries in game state snapshots match the answered event shape (no ask-time enrichment duplicated).
+  - **Enriched question events**: Fields are placed on the event where they become *known*. `QuestionAskedEvent` carries ask-time fields: `parameters` (typed `QuestionEventParams` dataclass), `seeker_location_start`, `asked_at`, `ask_count`, `sequence`. `QuestionAnswerableEvent` carries `seeker_location_end` (thermometer lock-in). Answered events carry only the answer-time delta. History entries in game state snapshots carry **both** ask-time and answer-time fields (enriched to replace the removed question GET endpoints). `HiderQuestionHistoryEntry` includes `parameters`, `seeker_location_start/end`, `sequence`, `ask_count`, `asked_at` plus answer-time hider data. `SeekerQuestionHistoryEntry` includes `sequence`, `ask_count`, `asked_by`, `asked_at` plus exclusion geometry.
   - **Question parameter event dataclasses** (`broadcast/events.py`): `RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams` — type-specific frozen dataclasses for event parameters (not Pydantic schemas). `build_event_params(question)` factory constructs the appropriate variant from the Question ORM model's param relationships. Serialized in `emit.py` via `_serialize_event_params()` pattern-matching.
   - **Mutation endpoints return 204**: `POST /questions/*` (ask, lock-in, answer, veto, abandon) and `POST /hider-station` return 204 with no body. State updates flow to clients exclusively through SSE events. Push notifications remain as supplementary wake-up alerts.
   - **`_publish_sse(channel, ...)`** is parameterized — lobby callers pass `_lobby_channel(game.id)`, gameplay callers pass `_hider_channel`/`_seeker_channel`.
@@ -322,13 +317,13 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 
   Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column types bridge Python↔DB automatically. When mixing Geography and Geometry columns in a query (e.g., `ST_Contains` on a Geography column), cast to Geometry explicitly.
 - **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic/` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns, no session access) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic/`. Logic submodules: `logic/ask.py` (question creation + `lock_in_thermometer`), `logic/answer.py` (answer computation + `veto_immediate` + `schedule_veto` + `abandon_question`). Question status: `asked` → `in_progress` (thermometer only) → `answerable` → `answered`, `vetoed`, or `abandoned`. Veto is a hider action (`POST /questions/{qid}/veto`) that skips answer computation — no exclusion zone, no hider location snapshot. Vetoed questions don't block new questions. Scheduled veto (`?scheduled=true`) sets a flag instead of vetoing immediately — the auto-answer task checks `scheduled_veto` and vetoes at timer expiry. The hider can still answer normally before the timer to override. The `scheduled_veto` field is server-only (not in any response schema) so seekers never see it. Abandon is a seeker action (`POST /questions/{qid}/abandon`) — the seeker drops an unwanted question immediately. No answer, no exclusion zone, no hider location needed. Can abandon `answerable` or `in_progress` questions. The ask is consumed (ask_count stays incremented).
-- **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All use a unified `AskQuestionRequest` body (`slot_index`, `location`, optional `custom_distance`). The URL path determines `question_type`; `slot_index` identifies the inventory slot. Seeker `location` is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer and list endpoints remain unified.
+- **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All use a unified `AskQuestionRequest` body (`slot_index`, `location`, optional `custom_distance`). The URL path determines `question_type`; `slot_index` identifies the inventory slot. Seeker `location` is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer endpoints remain unified.
 - **Role-gated endpoint split**: Endpoints are split by role (see `design/game-state-split.md`). Principles: role = access control only (determines *whether* you can call an endpoint, never *what* you get back), fixed response shapes (no conditional field nulling), default-deny on shared endpoints. The split:
-  - **Shared** (any player): `GET /games/{id}` (slim game state with inventory — slots grouped by type with ask counts, no `hider_station_id`), `GET /games/{id}/questions` (whitelist summary — no parameters, locations, or geometry).
-  - **Hider-only** (403 for seekers): `GET /games/{id}/questions/{qid}` (full question detail minus exclusion geometry).
+  - **Shared** (any player): `GET /games/{id}` (slim game state with inventory — slots grouped by type with ask counts, no `hider_station_id`).
   - **Seeker-only** (403 for hiders): `GET /games/{id}/endgame-exclusions`, `GET /games/{id}/candidate-stations`.
   - **Mutation endpoints** (ask ×4, lock-in, answer, veto, abandon, elect hider-station): return **204 No Content** — no response body. State updates are delivered exclusively via SSE gameplay events. Clients should listen on the appropriate SSE channel for confirmation.
-  - Response schemas: `QuestionSummaryResponse` (shared list), `QuestionDetailResponse` (hider detail endpoint), `InventoryResponse` (slots grouped by type with ask counts).
+  - **No question polling endpoints** — `GET /questions` and `GET /questions/{id}` were removed. Question state is delivered via SSE: initial snapshot (`question_history` in `HiderGameStateResponse`/`SeekerGameStateResponse`) plus live events. History entries carry full detail (parameters, seeker locations, answer-time fields) so reconnecting clients have everything.
+  - Response schemas: `InventoryResponse` (slots grouped by type with ask counts). Question parameter schemas live in `schemas/params.py` (shared by history entries and event construction).
   - `GET /games/{id}/inventory`: lightweight inventory check — returns `InventoryResponse` without loading the full game map. Slots grouped by type (radar, thermometer, matching, measuring), each with `slot_index`, `distance`, `ask_count`, and optional `category`/`feature_class`.
 - **Unified inventory model**: All question types share a single `InventorySlot` table, pre-populated at game creation:
   - Radar/thermometer slots: created from the map's `default_inventory` template. Have `distance` (or `None` for custom).

@@ -213,17 +213,6 @@ HAS_EXCL=$(echo "$Q" | python3 -c "import sys,json; print('exclusion' in json.lo
 assert_eq "no exclusion on detail response" "$HAS_EXCL" "False"
 
 echo ""
-echo "=== GET /questions/{id} as hider (question detail) ==="
-Q_DETAIL=$(curl -sf "$BASE/games/$GAME_ID/questions/$Q_ID" -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET")
-echo "$Q_DETAIL" | pp
-assert_eq "detail has parameters" "$(echo "$Q_DETAIL" | python3 -c "import sys,json; print('parameters' in json.load(sys.stdin))")" "True"
-
-echo ""
-echo "=== GET /questions/{id} as seeker (should 403) ==="
-Q_DETAIL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/games/$GAME_ID/questions/$Q_ID" -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
-assert_eq "seeker question detail status" "$Q_DETAIL_STATUS" "403"
-
-echo ""
 echo "=== POST /questions/{id}/answer (hider answers — expect 'no', ~56km apart) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET" | pp
@@ -317,16 +306,6 @@ echo ""
 echo "=== POST /questions/{id}/answer (measuring — seeker vs hider distance) ==="
 curl -sf -X POST "$BASE/games/$GAME_ID/questions/$Q_ID/answer" \
   -H "X-Player-Id: $HIDER_ID" -H "X-Player-Secret: $HIDER_SECRET" | pp
-
-echo ""
-echo "=== GET /questions (summary only — no params, no locations, no geometry) ==="
-Q_LIST=$(curl -sf "$BASE/games/$GAME_ID/questions" \
-  -H "X-Player-Id: $SEEKER_ID" -H "X-Player-Secret: $SEEKER_SECRET")
-echo "$Q_LIST" | pp
-HAS_PARAMS=$(echo "$Q_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); print('parameters' in d[0])")
-assert_eq "no parameters on summary" "$HAS_PARAMS" "False"
-HAS_HIDER_LOC=$(echo "$Q_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); print('hider_location' in d[0])")
-assert_eq "no hider_location on summary" "$HAS_HIDER_LOC" "False"
 
 echo ""
 echo "=== GET /exclusions (all 4 exclusions for seeker) ==="

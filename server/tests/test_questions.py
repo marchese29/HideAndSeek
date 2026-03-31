@@ -4,10 +4,19 @@ import uuid
 
 from fastapi.testclient import TestClient
 from shapely.geometry import Point
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from hideandseek.db import get_session
 from hideandseek.models.game import Game, Player
-from hideandseek.models.types import DistanceConvention, GameStatus, PlayerRole
+from hideandseek.models.question import Question
+from hideandseek.models.types import (
+    DistanceConvention,
+    GameStatus,
+    PlayerRole,
+    QuestionStatus,
+    QuestionType,
+)
 from tests.conftest import (
     TEST_SECRET,
     create_game,
@@ -61,7 +70,7 @@ def _ask_question(
     lat: float = 51.5,
     custom_distance: float | None = None,
 ) -> uuid.UUID:
-    """Ask a question and return its ID from the question list."""
+    """Ask a question and return its ID from the DB."""
     body: dict = {'location': _point(lng, lat), 'slot_index': slot_index}
     if custom_distance is not None:
         body['custom_distance'] = custom_distance
@@ -72,13 +81,30 @@ def _ask_question(
     )
     assert resp.status_code == 204
 
-    # Retrieve the question ID from the list endpoint
-    resp = client.get(
-        f'/games/{game_id}/questions',
-        headers=_headers(seeker_id),
-    )
-    questions = resp.json()
-    return uuid.UUID(questions[-1]['id'])
+    session = get_session()
+    question = session.scalars(
+        select(Question).where(Question.game_id == game_id).order_by(Question.sequence.desc())
+    ).first()
+    assert question is not None
+    return question.id
+
+
+def _get_latest_question(game_id: uuid.UUID) -> Question:
+    """Return the most recent question for a game from the DB."""
+    session = get_session()
+    question = session.scalars(
+        select(Question).where(Question.game_id == game_id).order_by(Question.sequence.desc())
+    ).first()
+    assert question is not None
+    return question
+
+
+def _get_question_by_id(question_id: uuid.UUID) -> Question:
+    """Return a question by ID from the DB, with param relationships loaded."""
+    session = get_session()
+    question = session.get(Question, question_id)
+    assert question is not None
+    return question
 
 
 # ── POST /games/{game_id}/questions/radar ────────────────────────────────────
@@ -188,11 +214,9 @@ def test_reask_radar_slot(client: TestClient, session: Session):
         f'/games/{game.id}/questions/{q1_id}/answer',
         headers=_headers(hider.id),
     )
-    q2_id = _ask_question(client, game.id, seeker.id)
-    # Check ask_count on the second question via list
-    resp = client.get(f'/games/{game.id}/questions', headers=_headers(seeker.id))
-    q2 = [q for q in resp.json() if q['id'] == str(q2_id)][0]
-    assert q2['ask_count'] == 2
+    _ask_question(client, game.id, seeker.id)
+    q2 = _get_latest_question(game.id)
+    assert q2.ask_count == 2
 
 
 # ── POST /games/{game_id}/questions/thermometer ──────────────────────────────
@@ -244,16 +268,12 @@ def test_thermometer_full_flow(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    # Verify via hider detail endpoint
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert data['status'] == 'answered'
-    assert data['answer'] == 'closer'
-    assert data['parameters']['type'] == 'thermometer'
-    assert data['parameters']['min_travel'] == 500
+    # Verify via DB
+    question = _get_latest_question(game.id)
+    assert question.status == QuestionStatus.answered
+    assert question.answer == 'closer'
+    assert question.thermometer_params is not None
+    assert question.thermometer_params.min_travel == 500
 
 
 def test_lock_in_wrong_status(client: TestClient, session: Session):
@@ -281,19 +301,13 @@ def test_answer_question(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    # Verify via hider detail endpoint
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert data['status'] == 'answered'
-    assert data['hider_location'] is not None
-    assert data['answer'] == 'no'
-    assert data['answered_at'] is not None
-    assert data['ask_count'] == 1
-    assert 'exclusion' not in data
-    assert 'total_exclusion' not in data
+    # Verify via DB
+    q = _get_question_by_id(question_id)
+    assert q.status == QuestionStatus.answered
+    assert q.hider_location is not None
+    assert q.answer == 'no'
+    assert q.answered_at is not None
+    assert q.ask_count == 1
 
 
 def test_answer_question_seeker_forbidden(client: TestClient, session: Session):
@@ -302,85 +316,6 @@ def test_answer_question_seeker_forbidden(client: TestClient, session: Session):
 
     resp = client.post(
         f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(seeker.id),
-    )
-    assert resp.status_code == 403
-
-
-# ── GET /games/{game_id}/questions ───────────────────────────────────────────
-
-
-def test_list_questions(client: TestClient, session: Session):
-    """Summary list returns whitelist fields only — no params, locations, or geometry."""
-    game, hider, seeker = _setup_seeking_game(client, session)
-
-    # Ask and answer a question
-    question_id = _ask_question(client, game.id, seeker.id)
-    client.post(
-        f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.id),
-    )
-
-    # List as seeker — summary only
-    resp = client.get(
-        f'/games/{game.id}/questions',
-        headers=_headers(seeker.id),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) == 1
-    q = data[0]
-    # Whitelist fields present
-    assert 'id' in q
-    assert 'sequence' in q
-    assert 'question_type' in q
-    assert 'status' in q
-    assert 'ask_count' in q
-    assert 'asked_by' in q
-    assert 'asked_at' in q
-    assert 'answer' in q
-    # No detail fields
-    assert 'parameters' not in q
-    assert 'hider_location' not in q
-    assert 'seeker_location_start' not in q
-    assert 'exclusion' not in q
-    assert 'total_exclusion' not in q
-
-    # List as hider — same summary shape
-    resp = client.get(
-        f'/games/{game.id}/questions',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert 'parameters' not in data[0]
-    assert 'hider_location' not in data[0]
-
-
-# ── GET /games/{game_id}/questions/{question_id} ─────────────────────────────
-
-
-def test_question_detail_hider_only(client: TestClient, session: Session):
-    """Hider can get question detail; seeker gets 403."""
-    game, hider, seeker = _setup_seeking_game(client, session)
-    question_id = _ask_question(client, game.id, seeker.id)
-
-    # Hider can access
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['parameters']['type'] == 'radar'
-    assert data['seeker_location_start'] is not None
-    assert data['ask_count'] == 1
-    # No exclusion fields on detail
-    assert 'exclusion' not in data
-    assert 'total_exclusion' not in data
-
-    # Seeker gets 403
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
         headers=_headers(seeker.id),
     )
     assert resp.status_code == 403
@@ -470,13 +405,10 @@ def test_answer_matching_no(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{q_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert data['answer'] == 'no'
-    assert data['parameters']['hider_resolution']['feature_id'] == 'hosp_near_hider'
+    q = _get_question_by_id(q_id)
+    assert q.answer == 'no'
+    assert q.feature_params is not None
+    assert q.feature_params.hider_feature_id == 'hosp_near_hider'
 
 
 def test_answer_matching_yes(client: TestClient, session: Session):
@@ -514,11 +446,7 @@ def test_answer_matching_yes(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{q_id}',
-        headers=_headers(hider.id),
-    )
-    assert resp.json()['answer'] == 'yes'
+    assert _get_question_by_id(q_id).answer == 'yes'
 
 
 def test_reask_matching_slot(client: TestClient, session: Session):
@@ -544,8 +472,7 @@ def test_reask_matching_slot(client: TestClient, session: Session):
         lng=-0.115,
         lat=51.499,
     )
-    resp = client.get(f'/games/{game.id}/questions', headers=_headers(seeker.id))
-    assert resp.json()[-1]['ask_count'] == 2
+    assert _get_latest_question(game.id).ask_count == 2
 
 
 def test_matching_no_feature_on_map(client: TestClient, session: Session):
@@ -571,13 +498,9 @@ def test_matching_consumes_inventory(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    # Verify via question summary list
-    resp = client.get(
-        f'/games/{game.id}/questions',
-        headers=_headers(seeker.id),
-    )
-    assert len(resp.json()) == 1
-    assert resp.json()[0]['question_type'] == 'matching'
+    # Verify via DB
+    latest = _get_latest_question(game.id)
+    assert latest.question_type == QuestionType.matching
 
 
 # ── POST /questions/measuring ────────────────────────────────────────────────
@@ -614,15 +537,11 @@ def test_answer_measuring_farther(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{q_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert data['answer'] == 'farther'
-    seeker_dist = data['parameters']['seeker_resolution']['distance']
-    hider_dist = data['parameters']['hider_resolution']['distance']
-    assert seeker_dist > hider_dist
+    q = _get_question_by_id(q_id)
+    assert q.answer == 'farther'
+    assert q.feature_params is not None
+    assert q.feature_params.hider_distance is not None
+    assert q.feature_params.seeker_distance > q.feature_params.hider_distance
 
 
 def test_answer_measuring_closer(client: TestClient, session: Session):
@@ -660,11 +579,7 @@ def test_answer_measuring_closer(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{q_id}',
-        headers=_headers(hider.id),
-    )
-    assert resp.json()['answer'] == 'closer'
+    assert _get_question_by_id(q_id).answer == 'closer'
 
 
 def test_reask_measuring_slot(client: TestClient, session: Session):
@@ -695,31 +610,10 @@ def test_reask_measuring_slot(client: TestClient, session: Session):
         lng=-0.115,
         lat=51.499,
     )
-    resp = client.get(f'/games/{game.id}/questions', headers=_headers(seeker.id))
-    assert resp.json()[-1]['ask_count'] == 2
+    assert _get_latest_question(game.id).ask_count == 2
 
 
 # ── Exclusion zone integration tests ──────────────────────────────────────────
-
-
-def test_radar_answer_has_no_exclusion_in_detail(client: TestClient, session: Session):
-    """Answered radar question detail response has no exclusion fields."""
-    game, hider, seeker = _setup_seeking_game(client, session)
-    question_id = _ask_question(client, game.id, seeker.id)
-
-    resp = client.post(
-        f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.id),
-    )
-    assert resp.status_code == 204
-
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert 'exclusion' not in data
-    assert 'total_exclusion' not in data
 
 
 # ── Veto tests ────────────────────────────────────────────────────────────────
@@ -736,15 +630,11 @@ def test_veto_question(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert data['status'] == 'vetoed'
-    assert data['answer'] is None
-    assert data['hider_location'] is None
-    assert data['answered_at'] is not None
+    q = _get_question_by_id(question_id)
+    assert q.status == QuestionStatus.vetoed
+    assert q.answer is None
+    assert q.hider_location is None
+    assert q.answered_at is not None
 
 
 def test_veto_then_reask(client: TestClient, session: Session):
@@ -756,9 +646,9 @@ def test_veto_then_reask(client: TestClient, session: Session):
         headers=_headers(hider.id),
     )
     _ask_question(client, game.id, seeker.id)
-    resp = client.get(f'/games/{game.id}/questions', headers=_headers(seeker.id))
-    assert resp.json()[-1]['ask_count'] == 2
-    assert resp.json()[-1]['status'] == 'answerable'
+    latest = _get_latest_question(game.id)
+    assert latest.ask_count == 2
+    assert latest.status == QuestionStatus.answerable
 
 
 def test_veto_non_answerable(client: TestClient, session: Session):
@@ -806,14 +696,10 @@ def test_scheduled_veto_sets_flag(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert data['status'] == 'answerable'
-    assert data['answer'] is None
-    assert data['answered_at'] is None
+    q = _get_question_by_id(question_id)
+    assert q.status == QuestionStatus.answerable
+    assert q.answer is None
+    assert q.answered_at is None
 
 
 def test_scheduled_veto_answer_overrides(client: TestClient, session: Session):
@@ -830,12 +716,9 @@ def test_scheduled_veto_answer_overrides(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    assert resp.json()['status'] == 'answered'
-    assert resp.json()['answer'] is not None
+    q = _get_question_by_id(question_id)
+    assert q.status == QuestionStatus.answered
+    assert q.answer is not None
 
 
 def test_scheduled_veto_immediate_still_works(client: TestClient, session: Session):
@@ -849,11 +732,7 @@ def test_scheduled_veto_immediate_still_works(client: TestClient, session: Sessi
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    assert resp.json()['status'] == 'vetoed'
+    assert _get_question_by_id(question_id).status == QuestionStatus.vetoed
 
 
 # ── Imperial convention tests ──────────────────────────────────────────────
@@ -899,17 +778,10 @@ def test_imperial_radar_stores_miles(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    # Verify via hider detail endpoint
-    resp = client.get(
-        f'/games/{game.id}/questions',
-        headers=_headers(seeker.id),
-    )
-    question_id = resp.json()[-1]['id']
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    assert resp.json()['parameters']['radius'] == 1  # 1 mile
+    # Verify via DB
+    q = _get_latest_question(game.id)
+    assert q.radar_params is not None
+    assert q.radar_params.radius == 1  # 1 mile
 
 
 def test_imperial_radar_conversion_for_answer(client: TestClient, session: Session):
@@ -941,11 +813,7 @@ def test_imperial_radar_conversion_for_answer(client: TestClient, session: Sessi
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{q_id}',
-        headers=_headers(hider.id),
-    )
-    assert resp.json()['answer'] == 'yes'
+    assert _get_question_by_id(q_id).answer == 'yes'
 
 
 def test_imperial_measuring_distances_in_miles(client: TestClient, session: Session):
@@ -990,18 +858,14 @@ def test_imperial_measuring_distances_in_miles(client: TestClient, session: Sess
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{q_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert data['answer'] == 'closer'  # seeker much closer
-    seeker_dist = data['parameters']['seeker_resolution']['distance']
-    hider_dist = data['parameters']['hider_resolution']['distance']
+    q = _get_question_by_id(q_id)
+    assert q.answer == 'closer'  # seeker much closer
+    assert q.feature_params is not None
+    assert q.feature_params.hider_distance is not None
     # Seeker is ~10-15 meters from hospital → should be a small fraction of a mile
-    assert seeker_dist < 0.1  # less than 0.1 miles
+    assert q.feature_params.seeker_distance < 0.1  # less than 0.1 miles
     # Hider ~8 miles from hospital
-    assert hider_dist > 1  # more than 1 mile
+    assert q.feature_params.hider_distance > 1  # more than 1 mile
 
 
 # ── Inventory includes matching/measuring slots ──────────────────────────────
@@ -1034,15 +898,11 @@ def test_abandon_answerable_question(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(
-        f'/games/{game.id}/questions/{question_id}',
-        headers=_headers(hider.id),
-    )
-    data = resp.json()
-    assert data['status'] == 'abandoned'
-    assert data['answer'] is None
-    assert data['hider_location'] is None
-    assert data['answered_at'] is not None
+    q = _get_question_by_id(question_id)
+    assert q.status == QuestionStatus.abandoned
+    assert q.answer is None
+    assert q.hider_location is None
+    assert q.answered_at is not None
 
 
 def test_abandon_in_progress_thermometer(client: TestClient, session: Session):
@@ -1056,8 +916,7 @@ def test_abandon_in_progress_thermometer(client: TestClient, session: Session):
     )
     assert resp.status_code == 204
 
-    resp = client.get(f'/games/{game.id}/questions', headers=_headers(seeker.id))
-    assert resp.json()[-1]['status'] == 'abandoned'
+    assert _get_latest_question(game.id).status == QuestionStatus.abandoned
 
 
 def test_abandon_as_hider_forbidden(client: TestClient, session: Session):
@@ -1102,5 +961,4 @@ def test_abandon_then_reask(client: TestClient, session: Session):
 
     # Should be able to ask a new question
     _ask_question(client, game.id, seeker.id)
-    resp = client.get(f'/games/{game.id}/questions', headers=_headers(seeker.id))
-    assert resp.json()[-1]['ask_count'] == 2
+    assert _get_latest_question(game.id).ask_count == 2

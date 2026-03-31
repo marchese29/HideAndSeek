@@ -18,6 +18,7 @@ from hideandseek.queries.questions import (
     list_questions,
 )
 from hideandseek.queries.stops import get_playable_stops
+from hideandseek.schemas.params import build_question_params
 from hideandseek.schemas.response import (
     GamePlayer,
     HiderActiveQuestion,
@@ -85,10 +86,16 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
     history = [
         HiderQuestionHistoryEntry(
             question_id=q.id,
+            sequence=q.sequence,
             question_type=q.question_type,
             status=q.status,
+            ask_count=q.ask_count,
             asked_by=q.asked_by,
+            asked_at=q.asked_at,
             slot_index=q.slot_index,
+            parameters=build_question_params(q),
+            seeker_location_start=GeoJSONPoint(**mapping(q.seeker_location_start)),
+            seeker_location_end=point_or_none(q.seeker_location_end),
             answer=q.answer,
             answered_at=q.answered_at,
             hider_location=point_or_none(q.hider_location),
@@ -172,8 +179,12 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
     history = [
         SeekerQuestionHistoryEntry(
             question_id=q.id,
+            sequence=q.sequence,
             question_type=q.question_type,
             status=q.status,
+            ask_count=q.ask_count,
+            asked_by=q.asked_by,
+            asked_at=q.asked_at,
             slot_index=q.slot_index,
             answer=q.answer,
             exclusion=geom_or_none(q.exclusion),

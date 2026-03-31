@@ -512,46 +512,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/games/{game_id}/questions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Game Questions
-         * @description Chronological list of all questions — whitelist summary only.
-         */
-        get: operations["list_game_questions_games__game_id__questions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/games/{game_id}/questions/{question_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Question Detail
-         * @description Full question detail — hider only.
-         */
-        get: operations["get_question_detail_games__game_id__questions__question_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/games/{game_id}/endgame-exclusions": {
         parameters: {
             query?: never;
@@ -749,57 +709,6 @@ export interface components {
             hiding_zone: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
             /** Entries */
             entries: components["schemas"]["EndgameExclusionEntryResponse"][];
-        };
-        /**
-         * FeatureParamsResponse
-         * @description Parameters for a matching or measuring question.
-         */
-        FeatureParamsResponse: {
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "matching" | "measuring";
-            /**
-             * Category
-             * @description Feature category.
-             */
-            category: string;
-            /**
-             * Feature Class
-             * @description Feature class tier, if applicable.
-             */
-            feature_class?: number | null;
-            /**
-             * Source
-             * @description Data source (e.g. map_data).
-             */
-            source: string;
-            /** @description Seeker feature resolution. */
-            seeker_resolution: components["schemas"]["FeatureResolution"];
-            /** @description Hider feature resolution (populated at answer time). */
-            hider_resolution?: components["schemas"]["FeatureResolution"] | null;
-        };
-        /**
-         * FeatureResolution
-         * @description Resolution result for one player's feature lookup.
-         */
-        FeatureResolution: {
-            /**
-             * Feature Id
-             * @description Stable identifier of the resolved feature.
-             */
-            feature_id: string;
-            /**
-             * Name
-             * @description Human-readable name.
-             */
-            name: string;
-            /**
-             * Distance
-             * @description Distance in convention units.
-             */
-            distance: number;
         };
         /**
          * GameResponse
@@ -1340,137 +1249,6 @@ export interface components {
             number
         ];
         /**
-         * QuestionDetailResponse
-         * @description Full question detail for hiders — everything except exclusion geometry.
-         *
-         *     Used by the hider detail endpoint and write endpoints (answer/lock-in).
-         */
-        QuestionDetailResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Game Id
-             * Format: uuid
-             */
-            game_id: string;
-            /**
-             * Sequence
-             * @description 1-based chronological order within the game.
-             */
-            sequence: number;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /**
-             * Ask Count
-             * @description Which attempt this was (1 = first ask).
-             */
-            ask_count: number;
-            /**
-             * Parameters
-             * @description Type-specific question parameters.
-             */
-            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"];
-            /**
-             * Asked By
-             * Format: uuid
-             * @description Player ID of the seeker who asked.
-             */
-            asked_by: string;
-            /**
-             * Asked At
-             * Format: date-time
-             */
-            asked_at: string;
-            /** @description GeoJSON Point — seeker position when asked. */
-            seeker_location_start: components["schemas"]["Point"];
-            /** @description GeoJSON Point — seeker position at lock-in (thermometer only). */
-            seeker_location_end: components["schemas"]["Point"] | null;
-            /** Answered At */
-            answered_at: string | null;
-            /** @description GeoJSON Point — hider position at answer time. */
-            hider_location: components["schemas"]["Point"] | null;
-            /**
-             * Answer
-             * @description yes/no for radar, closer/farther for thermometer.
-             */
-            answer: string | null;
-        };
-        /**
-         * QuestionStatus
-         * @enum {string}
-         */
-        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned";
-        /**
-         * QuestionSummaryResponse
-         * @description Lightweight question summary — whitelist of safe fields for shared polling.
-         *
-         *     No parameters, no locations, no geometry. Both roles use this to detect
-         *     new activity. New fields added to the question model do not appear here
-         *     until consciously included.
-         */
-        QuestionSummaryResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Sequence
-             * @description 1-based chronological order within the game.
-             */
-            sequence: number;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /**
-             * Ask Count
-             * @description Which attempt this was (1 = first ask).
-             */
-            ask_count: number;
-            /**
-             * Asked By
-             * Format: uuid
-             * @description Player ID of the seeker who asked.
-             */
-            asked_by: string;
-            /**
-             * Asked At
-             * Format: date-time
-             */
-            asked_at: string;
-            /** Answered At */
-            answered_at: string | null;
-            /**
-             * Answer
-             * @description yes/no for radar, closer/farther for thermometer, etc.
-             */
-            answer: string | null;
-        };
-        /**
-         * QuestionType
-         * @enum {string}
-         */
-        QuestionType: "radar" | "thermometer" | "matching" | "measuring";
-        /**
-         * RadarParamsResponse
-         * @description Parameters for a radar question.
-         */
-        RadarParamsResponse: {
-            /**
-             * Type
-             * @default radar
-             * @constant
-             */
-            type: "radar";
-            /**
-             * Radius
-             * @description Radar radius in convention units.
-             */
-            radius: number;
-        };
-        /**
          * RemovePlayerRequest
          * @description Body for DELETE /games/{game_id}/players/{player_id}.
          */
@@ -1574,23 +1352,6 @@ export interface components {
             name: string;
             /** @description GeoJSON Point. */
             coordinates: components["schemas"]["Point"];
-        };
-        /**
-         * ThermometerParamsResponse
-         * @description Parameters for a thermometer question.
-         */
-        ThermometerParamsResponse: {
-            /**
-             * Type
-             * @default thermometer
-             * @constant
-             */
-            type: "thermometer";
-            /**
-             * Min Travel
-             * @description Minimum travel distance in convention units.
-             */
-            min_travel: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -2497,75 +2258,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_game_questions_games__game_id__questions_get: {
-        parameters: {
-            query?: never;
-            header: {
-                "x-player-id": string;
-                "x-player-secret": string;
-            };
-            path: {
-                game_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QuestionSummaryResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_question_detail_games__game_id__questions__question_id__get: {
-        parameters: {
-            query?: never;
-            header: {
-                "x-player-id": string;
-                "x-player-secret": string;
-            };
-            path: {
-                question_id: string;
-                game_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QuestionDetailResponse"];
-                };
             };
             /** @description Validation Error */
             422: {
