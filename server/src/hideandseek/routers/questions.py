@@ -57,11 +57,8 @@ from hideandseek.queries.questions import (
 )
 from hideandseek.schemas.request import AskQuestionRequest
 from hideandseek.schemas.response import (
-    ExclusionsResponse,
     QuestionDetailResponse,
-    QuestionExclusionEntry,
     QuestionSummaryResponse,
-    geom_or_none,
 )
 from hideandseek.tasks.game_timers import auto_answer_question
 from hideandseek.tasks.push import send_push
@@ -421,26 +418,3 @@ def get_question_detail(
     if not question or question.game_id != game.id:
         raise HTTPException(status_code=404, detail='Question not found.')
     return QuestionDetailResponse.from_model(question)
-
-
-@router.get('/exclusions', response_model=ExclusionsResponse)
-def get_exclusions(
-    game: Game = Depends(get_game),
-    _player: Player = Depends(get_seeker_in_game),
-) -> ExclusionsResponse:
-    """Seeker tactical map — per-question exclusion geometry."""
-    questions = list_questions(game)
-    entries = [
-        QuestionExclusionEntry(
-            question_id=q.id,
-            sequence=q.sequence,
-            question_type=q.question_type,
-            exclusion=geom_or_none(q.exclusion),
-        )
-        for q in questions
-        if q.status == QuestionStatus.answered
-    ]
-    # total_exclusion from the last answered question
-    answered = [q for q in questions if q.status == QuestionStatus.answered]
-    total = geom_or_none(answered[-1].total_exclusion) if answered else None
-    return ExclusionsResponse(exclusions=entries, total_exclusion=total)

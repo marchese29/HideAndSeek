@@ -54,7 +54,6 @@ from hideandseek.schemas.request import (
 from hideandseek.schemas.response import (
     EffectiveMapResponse,
     GameResponse,
-    HiderStationResponse,
     HidingZoneResponse,
     InventoryResponse,
     JoinGameResponse,
@@ -287,22 +286,6 @@ def end_game(
 
     game = update_game_status(game, GameStatus.finished)
     return GameResponse.from_model(game)
-
-
-@router.get('/{game_id}/hider-station', response_model=HiderStationResponse)
-def get_hider_station(
-    game: Game = Depends(get_game),
-    _player: Player = Depends(get_hider_in_game),
-) -> HiderStationResponse:
-    """The hider's station and election status. Available during hiding and seeking."""
-    if not game.status.is_active:
-        raise HTTPException(
-            status_code=409, detail='Hider station is only available during hiding or seeking.'
-        )
-    return HiderStationResponse(
-        hider_station_id=game.hider_station_id,
-        station_election_status=game.station_election_status,
-    )
 
 
 @router.post('/{game_id}/hider-station', status_code=204)

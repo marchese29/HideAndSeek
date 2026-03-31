@@ -500,20 +500,6 @@ class QuestionDetailResponse(BaseModel):
         )
 
 
-# ── Hider Station ────────────────────────────────────────────────────────
-
-
-class HiderStationResponse(BaseModel):
-    """The hider's assigned station — includes election status."""
-
-    hider_station_id: uuid.UUID | None = Field(
-        description='Station UUID, or null if not yet assigned (ambiguous/pending).'
-    )
-    station_election_status: StationElectionStatus = Field(
-        description='Current station election status.'
-    )
-
-
 class NearbyStationResponse(BaseModel):
     """A playable stop near a given point, with its hiding zone polygon."""
 
@@ -551,27 +537,6 @@ class HidingZoneResponse(BaseModel):
         return HidingZoneResponse(
             hiding_zone=_geojson_adapter.validate_python(mapping(zone)),
         )
-
-
-# ── Exclusions ───────────────────────────────────────────────────────────
-
-
-class QuestionExclusionEntry(BaseModel):
-    """Per-question exclusion geometry for seekers."""
-
-    question_id: uuid.UUID
-    sequence: int = Field(description='1-based chronological order within the game.')
-    question_type: QuestionType
-    exclusion: GeoJSONGeometry | None = Field(description='GeoJSON geometry — the exclusion zone.')
-
-
-class ExclusionsResponse(BaseModel):
-    """Seeker tactical view — per-question exclusion geometry and cumulative total."""
-
-    exclusions: list[QuestionExclusionEntry]
-    total_exclusion: GeoJSONGeometry | None = Field(
-        description='Cumulative exclusion across all answered questions.'
-    )
 
 
 # ── Endgame ──────────────────────────────────────────────────────────────────

@@ -405,47 +405,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/hider-station:
-    get:
-      tags:
-      - games
-      summary: Get Hider Station
-      description: The hider's station and election status. Available during hiding
-        and seeking.
-      operationId: get_hider_station_games__game_id__hider_station_get
-      parameters:
-      - name: game_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Game Id
-      - name: x-player-id
-        in: header
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: X-Player-Id
-      - name: x-player-secret
-        in: header
-        required: true
-        schema:
-          type: string
-          title: X-Player-Secret
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HiderStationResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
     post:
       tags:
       - games
@@ -1221,47 +1180,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /games/{game_id}/exclusions:
-    get:
-      tags:
-      - questions
-      summary: Get Exclusions
-      description: "Seeker tactical map \u2014 per-question exclusion geometry."
-      operationId: get_exclusions_games__game_id__exclusions_get
-      parameters:
-      - name: game_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Game Id
-      - name: x-player-id
-        in: header
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: X-Player-Id
-      - name: x-player-secret
-        in: header
-        required: true
-        schema:
-          type: string
-          title: X-Player-Secret
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExclusionsResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/endgame-exclusions:
     get:
       tags:
@@ -1586,43 +1504,6 @@ components:
       title: EndgameExclusionsResponse
       description: "Endgame exclusion view \u2014 hiding zone geometry and per-question\
         \ intersected exclusions."
-    ExclusionsResponse:
-      properties:
-        exclusions:
-          items:
-            $ref: '#/components/schemas/QuestionExclusionEntry'
-          type: array
-          title: Exclusions
-        total_exclusion:
-          anyOf:
-          - oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-            discriminator:
-              propertyName: type
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-          - type: 'null'
-          title: Total Exclusion
-          description: Cumulative exclusion across all answered questions.
-      type: object
-      required:
-      - exclusions
-      - total_exclusion
-      title: ExclusionsResponse
-      description: "Seeker tactical view \u2014 per-question exclusion geometry and\
-        \ cumulative total."
     FeatureParamsResponse:
       properties:
         type:
@@ -1832,24 +1713,6 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
-    HiderStationResponse:
-      properties:
-        hider_station_id:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          title: Hider Station Id
-          description: Station UUID, or null if not yet assigned (ambiguous/pending).
-        station_election_status:
-          $ref: '#/components/schemas/StationElectionStatus'
-          description: Current station election status.
-      type: object
-      required:
-      - hider_station_id
-      - station_election_status
-      title: HiderStationResponse
-      description: "The hider's assigned station \u2014 includes election status."
     HidingZoneResponse:
       properties:
         hiding_zone:
@@ -2582,49 +2445,6 @@ components:
       title: QuestionDetailResponse
       description: "Full question detail for hiders \u2014 everything except exclusion\
         \ geometry.\n\nUsed by the hider detail endpoint and write endpoints (answer/lock-in)."
-    QuestionExclusionEntry:
-      properties:
-        question_id:
-          type: string
-          format: uuid
-          title: Question Id
-        sequence:
-          type: integer
-          title: Sequence
-          description: 1-based chronological order within the game.
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        exclusion:
-          anyOf:
-          - oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-            discriminator:
-              propertyName: type
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-          - type: 'null'
-          title: Exclusion
-          description: "GeoJSON geometry \u2014 the exclusion zone."
-      type: object
-      required:
-      - question_id
-      - sequence
-      - question_type
-      - exclusion
-      title: QuestionExclusionEntry
-      description: Per-question exclusion geometry for seekers.
     QuestionStatus:
       type: string
       enum:
@@ -2816,14 +2636,6 @@ components:
       - ask_count
       title: SlotResponse
       description: A slot in the question inventory.
-    StationElectionStatus:
-      type: string
-      enum:
-      - pending
-      - elected
-      - auto_assigned
-      - ambiguous
-      title: StationElectionStatus
     StopResponse:
       properties:
         id:

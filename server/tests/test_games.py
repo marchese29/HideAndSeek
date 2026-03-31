@@ -186,7 +186,7 @@ def test_set_hider_station(session: Session):
     assert game.station_election_status == StationElectionStatus.auto_assigned
 
 
-# ── GET /games/{game_id}/hider-station ───────────────────────────────────
+# ── Hider station helpers ────────────────────────────────────────────────
 
 
 def _set_hider_station(session: Session, game: Game, stop_id: uuid.UUID):
@@ -208,36 +208,6 @@ def _create_stop(session: Session, dataset_id: uuid.UUID) -> uuid.UUID:
     return stop.id
 
 
-def test_hider_station_endpoint_hider_sees_station(client: TestClient, session: Session):
-    """GET /hider-station as hider returns the station UUID."""
-    game = create_game(session, status=GameStatus.seeking)
-    hider = create_player(session, game.id, role=PlayerRole.hider)
-    game_map = session.get(GameMap, game.map_id)
-    assert game_map is not None
-    stop_id = _create_stop(session, game_map.transit_dataset_id)
-    _set_hider_station(session, game, stop_id)
-
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.id))
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['hider_station_id'] == str(stop_id)
-    assert data['station_election_status'] == 'pending'
-
-
-def test_hider_station_endpoint_seeker_403(client: TestClient, session: Session):
-    """GET /hider-station as seeker returns 403."""
-    game = create_game(session, status=GameStatus.seeking)
-    create_player(session, game.id, role=PlayerRole.hider)
-    seeker = create_player(session, game.id, role=PlayerRole.seeker)
-    game_map = session.get(GameMap, game.map_id)
-    assert game_map is not None
-    stop_id = _create_stop(session, game_map.transit_dataset_id)
-    _set_hider_station(session, game, stop_id)
-
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(seeker.id))
-    assert resp.status_code == 403
-
-
 def test_hider_station_not_in_shared_game_state(client: TestClient, session: Session):
     """GET /games/{id} does not include hider_station_id."""
     game = create_game(session, status=GameStatus.seeking)
@@ -249,38 +219,6 @@ def test_hider_station_not_in_shared_game_state(client: TestClient, session: Ses
     resp = client.get(f'/games/{game.id}')
     assert resp.status_code == 200
     assert 'hider_station_id' not in resp.json()
-
-
-def test_hider_station_pending_when_not_assigned(client: TestClient, session: Session):
-    """GET /hider-station returns 200 with null station and pending status."""
-    game = create_game(session, status=GameStatus.seeking)
-    hider = create_player(session, game.id, role=PlayerRole.hider)
-
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.id))
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['hider_station_id'] is None
-    assert data['station_election_status'] == 'pending'
-
-
-def test_hider_station_409_when_lobby(client: TestClient, session: Session):
-    """GET /hider-station returns 409 when game is in lobby."""
-    game = create_game(session, status=GameStatus.lobby)
-    hider = create_player(session, game.id, role=PlayerRole.hider)
-
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.id))
-    assert resp.status_code == 409
-
-
-def test_hider_station_available_during_hiding(client: TestClient, session: Session):
-    """GET /hider-station returns 200 during hiding with pending status."""
-    game = create_game(session, status=GameStatus.hiding)
-    hider = create_player(session, game.id, role=PlayerRole.hider)
-
-    resp = client.get(f'/games/{game.id}/hider-station', headers=_headers(hider.id))
-    assert resp.status_code == 200
-    assert resp.json()['station_election_status'] == 'pending'
-    assert resp.json()['hider_station_id'] is None
 
 
 # ── PATCH /games/{game_id}/players/{player_id} ──────────────────────────────

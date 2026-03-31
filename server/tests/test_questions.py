@@ -386,40 +386,6 @@ def test_question_detail_hider_only(client: TestClient, session: Session):
     assert resp.status_code == 403
 
 
-# ── GET /games/{game_id}/exclusions ──────────────────────────────────────────
-
-
-def test_exclusions_seeker_only(client: TestClient, session: Session):
-    """Hider gets 403 on /exclusions; seeker gets geometry."""
-    game, hider, seeker = _setup_seeking_game(client, session)
-
-    # Ask + answer a question to generate exclusion
-    question_id = _ask_question(client, game.id, seeker.id)
-    client.post(
-        f'/games/{game.id}/questions/{question_id}/answer',
-        headers=_headers(hider.id),
-    )
-
-    # Hider gets 403
-    resp = client.get(
-        f'/games/{game.id}/exclusions',
-        headers=_headers(hider.id),
-    )
-    assert resp.status_code == 403
-
-    # Seeker gets exclusion data
-    resp = client.get(
-        f'/games/{game.id}/exclusions',
-        headers=_headers(seeker.id),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data['exclusions']) == 1
-    assert data['exclusions'][0]['question_id'] == str(question_id)
-    # Exclusion may be None if geometry is empty (seeker outside map boundary)
-    assert 'exclusion' in data['exclusions'][0]
-
-
 # ── Matching / Measuring helpers ─────────────────────────────────────────────
 
 
@@ -756,41 +722,6 @@ def test_radar_answer_has_no_exclusion_in_detail(client: TestClient, session: Se
     assert 'total_exclusion' not in data
 
 
-def test_exclusions_accumulate(client: TestClient, session: Session):
-    """Exclusions endpoint accumulates entries across answered questions."""
-    game, hider, seeker = _setup_seeking_game(client, session)
-
-    # Ask + answer first radar question (slot 0)
-    q1_id = _ask_question(client, game.id, seeker.id)
-    client.post(
-        f'/games/{game.id}/questions/{q1_id}/answer',
-        headers=_headers(hider.id),
-    )
-
-    resp = client.get(
-        f'/games/{game.id}/exclusions',
-        headers=_headers(seeker.id),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data['exclusions']) == 1
-
-    # Ask + answer second radar question (slot 1)
-    q2_id = _ask_question(client, game.id, seeker.id, slot_index=1)
-    client.post(
-        f'/games/{game.id}/questions/{q2_id}/answer',
-        headers=_headers(hider.id),
-    )
-
-    resp = client.get(
-        f'/games/{game.id}/exclusions',
-        headers=_headers(seeker.id),
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data['exclusions']) == 2
-
-
 # ── Veto tests ────────────────────────────────────────────────────────────────
 
 
@@ -859,26 +790,6 @@ def test_veto_as_seeker(client: TestClient, session: Session):
         headers=_headers(seeker.id),
     )
     assert resp.status_code == 403
-
-
-def test_veto_no_exclusion_generated(client: TestClient, session: Session):
-    """Vetoed question should not appear in exclusions list."""
-    game, hider, seeker = _setup_seeking_game(client, session)
-    question_id = _ask_question(client, game.id, seeker.id)
-
-    client.post(
-        f'/games/{game.id}/questions/{question_id}/veto',
-        headers=_headers(hider.id),
-    )
-
-    # Exclusions endpoint should have no entries
-    resp = client.get(
-        f'/games/{game.id}/exclusions',
-        headers=_headers(seeker.id),
-    )
-    assert resp.status_code == 200
-    assert len(resp.json()['exclusions']) == 0
-    assert resp.json()['total_exclusion'] is None
 
 
 # ── Scheduled veto tests ──────────────────────────────────────────────────────

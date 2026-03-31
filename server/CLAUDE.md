@@ -209,10 +209,6 @@ curl -s localhost:8000/games/<game_id>/questions \
 curl -s localhost:8000/games/<game_id>/questions/<question_id> \
   -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
 
-# Exclusion zones (seeker only — per-question + cumulative total)
-curl -s localhost:8000/games/<game_id>/exclusions \
-  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
-
 # Candidate stations (seeker only — stops not eliminated by exclusions)
 curl -s localhost:8000/games/<game_id>/candidate-stations \
   -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
@@ -327,10 +323,10 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 - **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All use a unified `AskQuestionRequest` body (`slot_index`, `location`, optional `custom_distance`). The URL path determines `question_type`; `slot_index` identifies the inventory slot. Seeker `location` is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer and list endpoints remain unified.
 - **Role-gated endpoint split**: Endpoints are split by role (see `design/game-state-split.md`). Principles: role = access control only (determines *whether* you can call an endpoint, never *what* you get back), fixed response shapes (no conditional field nulling), default-deny on shared endpoints. The split:
   - **Shared** (any player): `GET /games/{id}` (slim game state with inventory — slots grouped by type with ask counts, no `hider_station_id`), `GET /games/{id}/questions` (whitelist summary — no parameters, locations, or geometry).
-  - **Hider-only** (403 for seekers): `GET /games/{id}/hider-station` (assigned station UUID), `GET /games/{id}/questions/{qid}` (full question detail minus exclusion geometry).
-  - **Seeker-only** (403 for hiders): `GET /games/{id}/exclusions` (per-question exclusion geometry + cumulative total), `GET /games/{id}/endgame-exclusions`, `GET /games/{id}/candidate-stations`.
+  - **Hider-only** (403 for seekers): `GET /games/{id}/questions/{qid}` (full question detail minus exclusion geometry).
+  - **Seeker-only** (403 for hiders): `GET /games/{id}/endgame-exclusions`, `GET /games/{id}/candidate-stations`.
   - **Mutation endpoints** (ask ×4, lock-in, answer, veto, abandon, elect hider-station): return **204 No Content** — no response body. State updates are delivered exclusively via SSE gameplay events. Clients should listen on the appropriate SSE channel for confirmation.
-  - Response schemas: `QuestionSummaryResponse` (shared list), `QuestionDetailResponse` (hider detail endpoint), `HiderStationResponse`, `ExclusionsResponse`, `InventoryResponse` (slots grouped by type with ask counts).
+  - Response schemas: `QuestionSummaryResponse` (shared list), `QuestionDetailResponse` (hider detail endpoint), `InventoryResponse` (slots grouped by type with ask counts).
   - `GET /games/{id}/inventory`: lightweight inventory check — returns `InventoryResponse` without loading the full game map. Slots grouped by type (radar, thermometer, matching, measuring), each with `slot_index`, `distance`, `ask_count`, and optional `category`/`feature_class`.
 - **Unified inventory model**: All question types share a single `InventorySlot` table, pre-populated at game creation:
   - Radar/thermometer slots: created from the map's `default_inventory` template. Have `distance` (or `None` for custom).
@@ -371,7 +367,7 @@ Hiders can voluntarily elect their station during hiding, or the system assigns 
 
 Questions cannot be answered while status is `ambiguous`. The auto-answer timer resolves ambiguity via a 3-tier fallback cascade (all-in-radius → any-in-radius → closest pair) before computing the answer. See `design/hider-station-election.md` for full design.
 
-**Endpoints**: `GET /nearby-stations` (query nearby playable stops), `POST /hider-station` (elect), `GET /hiding-zone` (preview zone polygon), `GET /hider-station` (check status — available during hiding + seeking).
+**Endpoints**: `GET /nearby-stations` (query nearby playable stops), `POST /hider-station` (elect), `GET /hiding-zone` (preview zone polygon). Station status is delivered via SSE (`HiderGameStateResponse` + `StationElectionEvent`).
 
 **Key files**: `logic/station.py` (election validation, transition resolution, fallback cascade, centroid), `logic/endgame.py` (hiding zone radius + computation), `queries/stops.py` (PostGIS spatial queries), `exclusion.py` (`compute_hiding_zone`), `tasks/game_timers.py` (transition + auto-answer ambiguity handling), `validators.py` (ambiguity check on answer requests).
 

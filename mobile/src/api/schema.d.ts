@@ -215,11 +215,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Hider Station
-         * @description The hider's station and election status. Available during hiding and seeking.
-         */
-        get: operations["get_hider_station_games__game_id__hider_station_get"];
+        get?: never;
         put?: never;
         /**
          * Elect Hider Station
@@ -556,26 +552,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/games/{game_id}/exclusions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Exclusions
-         * @description Seeker tactical map — per-question exclusion geometry.
-         */
-        get: operations["get_exclusions_games__game_id__exclusions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/games/{game_id}/endgame-exclusions": {
         parameters: {
             query?: never;
@@ -775,19 +751,6 @@ export interface components {
             entries: components["schemas"]["EndgameExclusionEntryResponse"][];
         };
         /**
-         * ExclusionsResponse
-         * @description Seeker tactical view — per-question exclusion geometry and cumulative total.
-         */
-        ExclusionsResponse: {
-            /** Exclusions */
-            exclusions: components["schemas"]["QuestionExclusionEntry"][];
-            /**
-             * Total Exclusion
-             * @description Cumulative exclusion across all answered questions.
-             */
-            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-        };
-        /**
          * FeatureParamsResponse
          * @description Parameters for a matching or measuring question.
          */
@@ -936,19 +899,6 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /**
-         * HiderStationResponse
-         * @description The hider's assigned station — includes election status.
-         */
-        HiderStationResponse: {
-            /**
-             * Hider Station Id
-             * @description Station UUID, or null if not yet assigned (ambiguous/pending).
-             */
-            hider_station_id: string | null;
-            /** @description Current station election status. */
-            station_election_status: components["schemas"]["StationElectionStatus"];
         };
         /**
          * HidingZoneResponse
@@ -1449,28 +1399,6 @@ export interface components {
             answer: string | null;
         };
         /**
-         * QuestionExclusionEntry
-         * @description Per-question exclusion geometry for seekers.
-         */
-        QuestionExclusionEntry: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            /**
-             * Sequence
-             * @description 1-based chronological order within the game.
-             */
-            sequence: number;
-            question_type: components["schemas"]["QuestionType"];
-            /**
-             * Exclusion
-             * @description GeoJSON geometry — the exclusion zone.
-             */
-            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-        };
-        /**
          * QuestionStatus
          * @enum {string}
          */
@@ -1627,11 +1555,6 @@ export interface components {
              */
             ask_count: number;
         };
-        /**
-         * StationElectionStatus
-         * @enum {string}
-         */
-        StationElectionStatus: "pending" | "elected" | "auto_assigned" | "ambiguous";
         /**
          * StopResponse
          * @description A transit stop on the effective game map.
@@ -2046,40 +1969,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_hider_station_games__game_id__hider_station_get: {
-        parameters: {
-            query?: never;
-            header: {
-                "x-player-id": string;
-                "x-player-secret": string;
-            };
-            path: {
-                game_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HiderStationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2676,40 +2565,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuestionDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_exclusions_games__game_id__exclusions_get: {
-        parameters: {
-            query?: never;
-            header: {
-                "x-player-id": string;
-                "x-player-secret": string;
-            };
-            path: {
-                game_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExclusionsResponse"];
                 };
             };
             /** @description Validation Error */
