@@ -380,6 +380,13 @@ def geom_or_none(geom: object) -> GeoJSONGeometry | None:
     return _geojson_adapter.validate_python(mapping(geom))  # type: ignore[arg-type]
 
 
+def point_or_none(val: object) -> GeoJSONPoint | None:
+    """Convert a shapely Point (or None) to a GeoJSON Point."""
+    if val is None:
+        return None
+    return GeoJSONPoint(**mapping(val))  # type: ignore[arg-type]
+
+
 def _build_question_params(question: QuestionModel) -> QuestionParamsResponse:
     """Build typed parameters from the question's param relationships."""
     if question.question_type == QuestionType.radar:
@@ -477,11 +484,6 @@ class QuestionDetailResponse(BaseModel):
 
     @staticmethod
     def from_model(question: QuestionModel) -> QuestionDetailResponse:
-        def _point_or_none(val: object) -> GeoJSONPoint | None:
-            if val is None:
-                return None
-            return GeoJSONPoint(**mapping(val))  # type: ignore[arg-type]
-
         return QuestionDetailResponse(
             id=question.id,
             game_id=question.game_id,
@@ -493,9 +495,9 @@ class QuestionDetailResponse(BaseModel):
             asked_by=question.asked_by,
             asked_at=question.asked_at,
             seeker_location_start=GeoJSONPoint(**mapping(question.seeker_location_start)),
-            seeker_location_end=_point_or_none(question.seeker_location_end),
+            seeker_location_end=point_or_none(question.seeker_location_end),
             answered_at=question.answered_at,
-            hider_location=_point_or_none(question.hider_location),
+            hider_location=point_or_none(question.hider_location),
             answer=question.answer,
         )
 
@@ -630,7 +632,12 @@ class SeekerActiveQuestion(BaseModel):
 
 
 class HiderQuestionHistoryEntry(BaseModel):
-    """A resolved question from the hider's perspective — no geometry."""
+    """A resolved question from the hider's perspective.
+
+    Carries the same fields as HiderQuestionAnsweredEvent (answer-time delta).
+    Ask-time fields (parameters, seeker_location_start, etc.) were delivered
+    with QuestionAskedEvent.
+    """
 
     question_id: uuid.UUID
     question_type: QuestionType
@@ -640,10 +647,30 @@ class HiderQuestionHistoryEntry(BaseModel):
     answer: str | None = Field(
         default=None, description='yes/no/closer/farther or null if vetoed/abandoned.'
     )
+    answered_at: datetime | None = Field(
+        default=None, description='When the question was resolved.'
+    )
+    hider_location: GeoJSONPoint | None = Field(
+        default=None, description='GeoJSON Point — hider position at answer time.'
+    )
+    hider_feature_id: str | None = Field(
+        default=None, description='Hider feature ID (matching/measuring only).'
+    )
+    hider_feature_name: str | None = Field(
+        default=None, description='Hider feature name (matching/measuring only).'
+    )
+    hider_distance: float | None = Field(
+        default=None,
+        description='Hider distance to feature in convention units (matching/measuring only).',
+    )
 
 
 class SeekerQuestionHistoryEntry(BaseModel):
-    """A resolved question from the seeker's perspective — includes exclusion geometry."""
+    """A resolved question from the seeker's perspective.
+
+    Carries the same fields as SeekerQuestionAnsweredEvent (answer-time delta).
+    No hider-privileged data (no hider_location, no hider feature resolution).
+    """
 
     question_id: uuid.UUID
     question_type: QuestionType
@@ -657,6 +684,9 @@ class SeekerQuestionHistoryEntry(BaseModel):
     )
     total_exclusion: GeoJSONGeometry | None = Field(
         default=None, description='Cumulative exclusion after this question.'
+    )
+    answered_at: datetime | None = Field(
+        default=None, description='When the question was resolved.'
     )
 
 

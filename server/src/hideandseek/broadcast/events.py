@@ -7,10 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from geojson_pydantic import Point as GeoJSONPoint
 from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
+from shapely.geometry import mapping
 
-from hideandseek.models.types import PlayerColor, PlayerRole
-from hideandseek.schemas.response import geom_or_none
+from hideandseek.models.types import PlayerColor, PlayerRole, QuestionType
+from hideandseek.schemas.response import geom_or_none, point_or_none
 
 if TYPE_CHECKING:
     from hideandseek.models.game import Game, Player
@@ -54,6 +56,61 @@ LobbyEvent = (
 )
 
 
+# ── Question parameter dataclasses ──────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class RadarEventParams:
+    """Radar question parameters."""
+
+    radius: float
+
+
+@dataclass(frozen=True, slots=True)
+class ThermometerEventParams:
+    """Thermometer question parameters."""
+
+    min_travel: float
+
+
+@dataclass(frozen=True, slots=True)
+class FeatureEventParams:
+    """Matching/measuring question parameters (seeker resolution only)."""
+
+    category: str
+    feature_class: int | None
+    source: str
+    seeker_feature_id: str
+    seeker_feature_name: str
+    seeker_distance: float
+
+
+QuestionEventParams = RadarEventParams | ThermometerEventParams | FeatureEventParams
+
+
+def build_event_params(question: Question) -> QuestionEventParams:
+    """Build event parameters from a Question's param relationships."""
+    if question.question_type == QuestionType.radar:
+        rp = question.radar_params
+        assert rp is not None
+        return RadarEventParams(radius=rp.radius)
+    elif question.question_type == QuestionType.thermometer:
+        tp = question.thermometer_params
+        assert tp is not None
+        return ThermometerEventParams(min_travel=tp.min_travel)
+    else:
+        fp = question.feature_params
+        assert fp is not None
+        return FeatureEventParams(
+            category=str(fp.category),
+            feature_class=fp.feature_class,
+            source=fp.source,
+            seeker_feature_id=fp.seeker_feature_id,
+            seeker_feature_name=fp.seeker_feature_name,
+            seeker_distance=fp.seeker_distance,
+        )
+
+
 # ── Gameplay events ──────────────────────────────────────────────────────
 
 
@@ -78,6 +135,11 @@ class QuestionAskedEvent:
     status: str
     asked_by: uuid.UUID
     slot_index: int
+    parameters: QuestionEventParams
+    seeker_location_start: GeoJSONPoint
+    asked_at: datetime
+    ask_count: int
+    sequence: int
 
     @staticmethod
     def from_question(question: Question) -> QuestionAskedEvent:
@@ -88,6 +150,11 @@ class QuestionAskedEvent:
             status=question.status,
             asked_by=question.asked_by,
             slot_index=question.slot_index,
+            parameters=build_event_params(question),
+            seeker_location_start=GeoJSONPoint(**mapping(question.seeker_location_start)),
+            asked_at=question.asked_at,
+            ask_count=question.ask_count,
+            sequence=question.sequence,
         )
 
 
@@ -99,20 +166,28 @@ class QuestionAnswerableEvent:
     question_id: uuid.UUID
     question_type: str
     status: str
+    seeker_location_end: GeoJSONPoint
 
     @staticmethod
     def from_question(question: Question) -> QuestionAnswerableEvent:
+        assert question.seeker_location_end is not None
         return QuestionAnswerableEvent(
             game_id=question.game_id,
             question_id=question.id,
             question_type=question.question_type,
             status=question.status,
+            seeker_location_end=GeoJSONPoint(**mapping(question.seeker_location_end)),
         )
 
 
 @dataclass(frozen=True, slots=True)
 class HiderQuestionAnsweredEvent:
-    """A question was answered — hider channel only (no geometry)."""
+    """A question was answered — hider channel only.
+
+    Carries answer-time delta fields only (ask-time fields were sent
+    with QuestionAskedEvent). Includes hider-privileged data: location
+    and feature resolution.
+    """
 
     game_id: uuid.UUID
     question_id: uuid.UUID
@@ -121,10 +196,16 @@ class HiderQuestionAnsweredEvent:
     answer: str
     slot_index: int
     asked_by: uuid.UUID
+    answered_at: datetime | None
+    hider_location: GeoJSONPoint | None
+    hider_feature_id: str | None
+    hider_feature_name: str | None
+    hider_distance: float | None
 
     @staticmethod
     def from_question(question: Question) -> HiderQuestionAnsweredEvent:
         assert question.answer is not None
+        fp = question.feature_params
         return HiderQuestionAnsweredEvent(
             game_id=question.game_id,
             question_id=question.id,
@@ -133,12 +214,21 @@ class HiderQuestionAnsweredEvent:
             answer=question.answer,
             slot_index=question.slot_index,
             asked_by=question.asked_by,
+            answered_at=question.answered_at,
+            hider_location=point_or_none(question.hider_location),
+            hider_feature_id=fp.hider_feature_id if fp else None,
+            hider_feature_name=fp.hider_feature_name if fp else None,
+            hider_distance=fp.hider_distance if fp else None,
         )
 
 
 @dataclass(frozen=True, slots=True)
 class SeekerQuestionAnsweredEvent:
-    """A question was answered — seeker channel only (with exclusion geometry)."""
+    """A question was answered — seeker channel only (with exclusion geometry).
+
+    Carries answer-time delta fields only. No hider-privileged data
+    (no hider_location, no hider feature resolution).
+    """
 
     game_id: uuid.UUID
     question_id: uuid.UUID
@@ -149,6 +239,7 @@ class SeekerQuestionAnsweredEvent:
     asked_by: uuid.UUID
     exclusion: GeoJSONGeometry | None
     total_exclusion: GeoJSONGeometry | None
+    answered_at: datetime | None
 
     @staticmethod
     def from_question(question: Question) -> SeekerQuestionAnsweredEvent:
@@ -163,6 +254,7 @@ class SeekerQuestionAnsweredEvent:
             asked_by=question.asked_by,
             exclusion=geom_or_none(question.exclusion),
             total_exclusion=geom_or_none(question.total_exclusion),
+            answered_at=question.answered_at,
         )
 
 

@@ -26,6 +26,7 @@ from hideandseek.models.inventory import InventorySlot
 from hideandseek.models.location import LocationUpdate
 from hideandseek.models.map_feature import GameMapFeature, MapFeature
 from hideandseek.models.question import Question
+from hideandseek.models.question_params import RadarParams, ThermometerParams
 from hideandseek.models.transit import Stop, TransitDataset
 from hideandseek.models.types import (
     MATCHING_CATEGORIES,
@@ -310,7 +311,12 @@ def create_game_map_feature(
 
 
 def create_question(session: Session, game_id: uuid.UUID, **overrides: Any) -> Question:
-    """Create a Question for testing. Defaults to an answered radar question."""
+    """Create a Question for testing. Defaults to an answered radar question.
+
+    Automatically creates the corresponding param row (RadarParams or
+    ThermometerParams) so that build_event_params() works in tests.
+    Feature question params must be created explicitly by the caller.
+    """
     defaults: dict[str, Any] = {
         'game_id': game_id,
         'sequence': 1,
@@ -325,6 +331,15 @@ def create_question(session: Session, game_id: uuid.UUID, **overrides: Any) -> Q
     q = Question(**defaults)
     session.add(q)
     session.flush()
+
+    # Auto-create param row for radar/thermometer
+    if q.question_type == QuestionType.radar and q.radar_params is None:
+        session.add(RadarParams(question_id=q.id, radius=1.0))
+        session.flush()
+    elif q.question_type == QuestionType.thermometer and q.thermometer_params is None:
+        session.add(ThermometerParams(question_id=q.id, min_travel=0.5))
+        session.flush()
+
     session.refresh(q)
     return q
 

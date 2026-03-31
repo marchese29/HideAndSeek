@@ -7,7 +7,15 @@ from datetime import UTC, datetime, timedelta
 from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
+from hideandseek.broadcast.events import (
+    QuestionAskedEvent,
+    RadarEventParams,
+    ThermometerEventParams,
+    build_event_params,
+)
+from hideandseek.models.question_params import FeatureQuestionParams
 from hideandseek.models.types import (
+    FeatureCategory,
     GameStatus,
     PlayerColor,
     PlayerRole,
@@ -319,3 +327,167 @@ class TestBuildSeekerGameState:
         assert isinstance(seeker_data, dict)
         assert hider_data['game_id'] == str(game.id)
         assert seeker_data['game_id'] == str(game.id)
+
+
+# ── Enriched History Tests ─────────────────────────────────────────────────
+
+
+class TestHiderHistoryEnrichment:
+    """Tests for enriched fields on HiderQuestionHistoryEntry."""
+
+    def test_answered_at_populated(self, session: Session) -> None:
+        game, hider, seeker, _ds = _create_active_game(session)
+        answered_at = datetime.now(UTC)
+        create_question(
+            session,
+            game.id,
+            status=QuestionStatus.answered,
+            asked_by=seeker.id,
+            answer='yes',
+            answered_at=answered_at,
+            hider_location=Point(-122.3, 47.6),
+        )
+
+        state = build_hider_game_state(game, hider)
+        entry = state.question_history[0]
+        assert entry.answered_at is not None
+        assert entry.hider_location is not None
+        assert entry.hider_location.type == 'Point'
+
+    def test_hider_feature_resolution_on_matching(self, session: Session) -> None:
+        game, hider, seeker, _ds = _create_active_game(session)
+        q = create_question(
+            session,
+            game.id,
+            question_type=QuestionType.matching,
+            status=QuestionStatus.answered,
+            asked_by=seeker.id,
+            answer='yes',
+            answered_at=datetime.now(UTC),
+        )
+        # create_question auto-creates RadarParams for radar only;
+        # for matching we need to create FeatureQuestionParams manually
+        session.add(
+            FeatureQuestionParams(
+                question_id=q.id,
+                category=FeatureCategory.park,
+                source='map_data',
+                seeker_feature_id='park-1',
+                seeker_feature_name='Green Park',
+                seeker_distance=0.5,
+                hider_feature_id='park-2',
+                hider_feature_name='Blue Park',
+                hider_distance=1.2,
+            )
+        )
+        session.flush()
+        session.refresh(q)
+
+        state = build_hider_game_state(game, hider)
+        entry = state.question_history[0]
+        assert entry.hider_feature_id == 'park-2'
+        assert entry.hider_feature_name == 'Blue Park'
+        assert entry.hider_distance == 1.2
+
+    def test_hider_resolution_null_for_radar(self, session: Session) -> None:
+        game, hider, seeker, _ds = _create_active_game(session)
+        create_question(
+            session,
+            game.id,
+            status=QuestionStatus.answered,
+            asked_by=seeker.id,
+            answer='no',
+        )
+
+        state = build_hider_game_state(game, hider)
+        entry = state.question_history[0]
+        assert entry.hider_feature_id is None
+        assert entry.hider_feature_name is None
+        assert entry.hider_distance is None
+
+
+class TestSeekerHistoryEnrichment:
+    """Tests for enriched fields on SeekerQuestionHistoryEntry."""
+
+    def test_answered_at_populated(self, session: Session) -> None:
+        game, _hider, seeker, _ds = _create_active_game(session)
+        answered_at = datetime.now(UTC)
+        create_question(
+            session,
+            game.id,
+            status=QuestionStatus.answered,
+            asked_by=seeker.id,
+            answer='yes',
+            answered_at=answered_at,
+        )
+
+        state = build_seeker_game_state(game, seeker)
+        entry = state.question_history[0]
+        assert entry.answered_at is not None
+
+    def test_no_hider_fields(self, session: Session) -> None:
+        """SeekerQuestionHistoryEntry must not expose hider-privileged data."""
+        game, _hider, seeker, _ds = _create_active_game(session)
+        create_question(
+            session,
+            game.id,
+            status=QuestionStatus.answered,
+            asked_by=seeker.id,
+            answer='yes',
+        )
+
+        state = build_seeker_game_state(game, seeker)
+        entry = state.question_history[0]
+        assert not hasattr(entry, 'hider_location')
+        assert not hasattr(entry, 'hider_feature_id')
+        assert not hasattr(entry, 'hider_feature_name')
+        assert not hasattr(entry, 'hider_distance')
+
+
+# ── Event Construction Tests ───────────────────────────────────────────────
+
+
+class TestQuestionAskedEvent:
+    """Tests for QuestionAskedEvent.from_question() enrichment."""
+
+    def test_enriched_fields(self, session: Session) -> None:
+        game, _hider, seeker, _ds = _create_active_game(session)
+        q = create_question(
+            session,
+            game.id,
+            status=QuestionStatus.answerable,
+            asked_by=seeker.id,
+            sequence=3,
+            ask_count=2,
+        )
+
+        event = QuestionAskedEvent.from_question(q)
+        assert event.sequence == 3
+        assert event.ask_count == 2
+        assert event.asked_at == q.asked_at
+        assert event.seeker_location_start.type == 'Point'
+        assert isinstance(event.parameters, RadarEventParams)
+        assert event.parameters.radius == 1.0
+
+
+class TestBuildEventParams:
+    """Tests for build_event_params across question types."""
+
+    def test_radar(self, session: Session) -> None:
+        game, _hider, seeker, _ds = _create_active_game(session)
+        q = create_question(session, game.id, asked_by=seeker.id)
+        params = build_event_params(q)
+        assert isinstance(params, RadarEventParams)
+        assert params.radius == 1.0
+
+    def test_thermometer(self, session: Session) -> None:
+        game, _hider, seeker, _ds = _create_active_game(session)
+        q = create_question(
+            session,
+            game.id,
+            question_type=QuestionType.thermometer,
+            asked_by=seeker.id,
+        )
+        params = build_event_params(q)
+        assert isinstance(params, ThermometerEventParams)
+        assert params.min_travel == 0.5

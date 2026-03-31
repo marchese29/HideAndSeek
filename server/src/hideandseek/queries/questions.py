@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from hideandseek.db import get_session
 from hideandseek.models.game import Game
@@ -101,11 +102,26 @@ def list_answered_questions_after_sequence(game: Game, after_sequence: int) -> S
 
 
 def list_questions(game: Game) -> Sequence[Question]:
-    """Return all questions for a game, chronologically."""
+    """Return all questions for a game, chronologically.
+
+    Eager-loads param relationships to avoid N+1 queries when building
+    event parameters or history entries.
+    """
     session = get_session()
-    return session.scalars(
-        select(Question).where(Question.game_id == game.id).order_by(Question.sequence)
-    ).all()
+    return (
+        session.scalars(
+            select(Question)
+            .where(Question.game_id == game.id)
+            .options(
+                joinedload(Question.radar_params),
+                joinedload(Question.thermometer_params),
+                joinedload(Question.feature_params),
+            )
+            .order_by(Question.sequence)
+        )
+        .unique()
+        .all()
+    )
 
 
 # ── Inventory slot queries ──────────────────────────────────────────────

@@ -8,6 +8,7 @@ import uuid
 import structlog
 
 from hideandseek.broadcast.events import (
+    FeatureEventParams,
     GamePlayerLeftEvent,
     GameplayEvent,
     GameStartedEvent,
@@ -22,15 +23,37 @@ from hideandseek.broadcast.events import (
     QuestionAbandonedEvent,
     QuestionAnswerableEvent,
     QuestionAskedEvent,
+    QuestionEventParams,
     QuestionVetoedEvent,
+    RadarEventParams,
     SeekerQuestionAnsweredEvent,
     StationElectionEvent,
+    ThermometerEventParams,
 )
 from hideandseek.models.types import GameplayEventType, LobbyEventType, PlayerRole, PushEventType
 from hideandseek.redis_client import get_sync_redis
 from hideandseek.schemas.response import GameResponse, PlayerResponse
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _serialize_event_params(params: QuestionEventParams) -> dict:
+    """Serialize event parameters to a JSON-ready dict."""
+    match params:
+        case RadarEventParams(radius=radius):
+            return {'type': 'radar', 'radius': radius}
+        case ThermometerEventParams(min_travel=min_travel):
+            return {'type': 'thermometer', 'min_travel': min_travel}
+        case FeatureEventParams():
+            return {
+                'type': 'feature',
+                'category': params.category,
+                'feature_class': params.feature_class,
+                'source': params.source,
+                'seeker_feature_id': params.seeker_feature_id,
+                'seeker_feature_name': params.seeker_feature_name,
+                'seeker_distance': params.seeker_distance,
+            }
 
 
 def _lobby_channel(game_id: uuid.UUID) -> str:
@@ -152,6 +175,11 @@ def emit_gameplay(event: GameplayEvent) -> None:
                 'status': event.status,
                 'asked_by': str(event.asked_by),
                 'slot_index': event.slot_index,
+                'parameters': _serialize_event_params(event.parameters),
+                'seeker_location_start': event.seeker_location_start.model_dump(mode='json'),
+                'asked_at': event.asked_at.isoformat(),
+                'ask_count': event.ask_count,
+                'sequence': event.sequence,
             }
             _both_channels(game_id, GameplayEventType.question_asked, data)
 
@@ -160,6 +188,7 @@ def emit_gameplay(event: GameplayEvent) -> None:
                 'question_id': str(event.question_id),
                 'question_type': event.question_type,
                 'status': event.status,
+                'seeker_location_end': event.seeker_location_end.model_dump(mode='json'),
             }
             _both_channels(game_id, GameplayEventType.question_answerable, data)
 
@@ -171,6 +200,13 @@ def emit_gameplay(event: GameplayEvent) -> None:
                 'answer': event.answer,
                 'slot_index': event.slot_index,
                 'asked_by': str(event.asked_by),
+                'answered_at': event.answered_at.isoformat() if event.answered_at else None,
+                'hider_location': event.hider_location.model_dump(mode='json')
+                if event.hider_location
+                else None,
+                'hider_feature_id': event.hider_feature_id,
+                'hider_feature_name': event.hider_feature_name,
+                'hider_distance': event.hider_distance,
             }
             _publish_sse(
                 _hider_channel(game_id),
@@ -191,6 +227,7 @@ def emit_gameplay(event: GameplayEvent) -> None:
                 'total_exclusion': event.total_exclusion.model_dump(mode='json')
                 if event.total_exclusion
                 else None,
+                'answered_at': event.answered_at.isoformat() if event.answered_at else None,
             }
             _publish_sse(
                 _seeker_channel(game_id),

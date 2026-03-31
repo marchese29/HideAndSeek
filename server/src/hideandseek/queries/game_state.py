@@ -30,6 +30,7 @@ from hideandseek.schemas.response import (
     SeekerQuestionHistoryEntry,
     StopResponse,
     geom_or_none,
+    point_or_none,
 )
 
 _TERMINAL_STATUSES = {QuestionStatus.answered, QuestionStatus.vetoed, QuestionStatus.abandoned}
@@ -89,6 +90,11 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
             asked_by=q.asked_by,
             slot_index=q.slot_index,
             answer=q.answer,
+            answered_at=q.answered_at,
+            hider_location=point_or_none(q.hider_location),
+            hider_feature_id=q.feature_params.hider_feature_id if q.feature_params else None,
+            hider_feature_name=q.feature_params.hider_feature_name if q.feature_params else None,
+            hider_distance=q.feature_params.hider_distance if q.feature_params else None,
         )
         for q in all_questions
         if q.status in _TERMINAL_STATUSES
@@ -172,6 +178,7 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
             answer=q.answer,
             exclusion=geom_or_none(q.exclusion),
             total_exclusion=geom_or_none(q.total_exclusion),
+            answered_at=q.answered_at,
         )
         for q in all_questions
         if q.status in _TERMINAL_STATUSES
