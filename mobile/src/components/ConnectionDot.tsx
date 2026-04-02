@@ -13,7 +13,7 @@ const styles = StyleSheet.create({
   dot: {
     position: 'absolute',
     top: 10,
-    right: 10,
+    left: 10,
     width: 10,
     height: 10,
     borderRadius: 5,

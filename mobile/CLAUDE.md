@@ -46,7 +46,13 @@ src/
     useGameplayEvents.ts       # Gameplay SSE (role-aware endpoint, hydrates GameplayStore)
     useLobbyEvents.ts          # Lobby SSE subscription with auto-reconnect + connection status
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
+  utils/
+    geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary
   components/                  # Reusable UI components
+    GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins)
+    BoundaryOverlay.tsx        # Game boundary polygon (outline-only stroke)
+    StopMarker.tsx             # Transit stop dot marker (non-tappable)
+    PlayerPin.tsx              # Player map pin (colored circle + initial + self ring + hider badge + stack count)
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types
 assets/                        # Images, fonts
@@ -125,6 +131,19 @@ Both hooks:
 - `expo-device` is used to skip push registration on simulators (`Device.isDevice` check).
 - Android requires a notification channel (created in `usePushToken`) before the permission prompt appears.
 - FCM on Android requires `google-services.json` from Firebase Console in the project root (referenced in `app.config.ts`).
+
+## Map Rendering
+
+- **Map provider**: Platform default (Apple Maps on iOS, Google Maps on Android) — no `provider` prop on `<MapView>`.
+- **GeoJSON conversion**: All server geometries are GeoJSON (`[lon, lat]`). `src/utils/geo.ts` provides `toLatLng()` and `polygonToCoords()` to convert to `react-native-maps` `{ latitude, longitude }` format.
+- **Initial region**: Computed from boundary polygon via `regionFromBoundary()` with 10% padding. Uses `initialRegion` (not `region`) so users can pan/zoom freely.
+- **Boundary**: Outline-only `<Polygon>` stroke, no fill.
+- **Stops**: Small gray dots, non-tappable (`tappable={false}`). Visual indicators only.
+- **Player pins**: Custom `<View>` markers — colored circle with first initial. Self pin has white ring. Hider pins have "?" badge. Stale locations (>60s) render at 0.4 opacity.
+- **Stack detection**: Co-located players are detected by rounding coordinates to 4 decimal places (~11m). The topmost pin shows a "+N" count badge.
+- **Rendering order**: Players sorted by self-last (highest `zIndex`), then alphabetical. Self pin always renders on top.
+- **`tracksViewChanges={false}`**: All markers use this for performance. Marker appearance updates require app restart or SSE reconnect to re-snapshot.
+- **Zustand selectors**: Use individual primitive/reference selectors (e.g., `s.status`, `s.role`, `s.state`) — never return new object literals from selectors (causes infinite re-render loops with Zustand's `===` equality check).
 
 ## Conventions
 

@@ -4,6 +4,7 @@ import { ActivityIndicator, BackHandler, StyleSheet, Text, View } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ConnectionDot } from '@/components/ConnectionDot';
+import { GameMap } from '@/components/GameMap';
 import { useGameplayEvents } from '@/hooks/useGameplayEvents';
 import { useGameplayStore } from '@/stores/gameplayStore';
 
@@ -11,6 +12,8 @@ export default function GameplayScreen() {
   const { game_id } = useLocalSearchParams<{ game_id: string }>();
   const { connected } = useGameplayEvents(game_id);
   const status = useGameplayStore((s) => s.status);
+  const role = useGameplayStore((s) => s.role);
+  const state = useGameplayStore((s) => s.state);
 
   // Suppress Android hardware back button
   useEffect(() => {
@@ -19,15 +22,14 @@ export default function GameplayScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Map placeholder */}
-      <View style={styles.mapPlaceholder}>
-        {status === 'connecting' ? (
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {status === 'connecting' || !role || !state ? (
+        <View style={styles.loading}>
           <ActivityIndicator size="large" color="#7F8C8D" />
-        ) : (
-          <Text style={styles.placeholderText}>Map</Text>
-        )}
-      </View>
+        </View>
+      ) : (
+        <GameMap role={role} state={state} />
+      )}
 
       {/* Utility belt placeholder */}
       <View style={styles.utilityBelt}>
@@ -43,24 +45,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  mapPlaceholder: {
+  loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#ECF0F1',
   },
-  placeholderText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#BDC3C7',
-  },
   utilityBelt: {
     height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: '#2C3E50',
     borderTopWidth: 1,
     borderTopColor: '#1A252F',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   utilityBeltText: {
     fontSize: 16,
