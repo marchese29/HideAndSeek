@@ -28,16 +28,23 @@ app/                           # expo-router file-based routes (stack navigator)
   join.tsx                     # Join Game screen
   lobby/
     [game_id].tsx              # Lobby screen
+  game/
+    [game_id].tsx              # Gameplay screen (full-screen, no header)
 src/
   api/
     schema.d.ts                # Auto-generated from OpenAPI — DO NOT EDIT
     client.ts                  # openapi-fetch wrapper + X-Player-Id + X-Player-Secret middleware
     queryClient.ts             # TanStack Query client instance
   store.ts                     # Zustand store (session + push token state)
+  stores/
+    gameplayStore.ts           # Zustand store for gameplay state (SSE-driven, not persisted)
+  types/
+    gameplay.ts                # Gameplay SSE state types (manual — not from OpenAPI)
   constants/
     colors.ts                  # PlayerColor → hex mapping
   hooks/
-    useLobbyEvents.ts          # SSE subscription with auto-reconnect + connection status
+    useGameplayEvents.ts       # Gameplay SSE (role-aware endpoint, hydrates GameplayStore)
+    useLobbyEvents.ts          # Lobby SSE subscription with auto-reconnect + connection status
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
   components/                  # Reusable UI components
 scripts/
@@ -74,8 +81,9 @@ Copy `.env.example` to `.env` and fill in values.
 
 ## State Management
 
-- **Zustand** (`src/store.ts`) — session context. `gameId`, `playerId`, `playerSecret` (all null initially, set on create/join, cleared on leave/kick). Also holds transient `pushToken` + `pushProvider` (not persisted to AsyncStorage — re-fetched each launch). Credentials are per-game and server-minted — returned in `JoinGameResponse`. Does NOT hold game data.
-- **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (game state, maps). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for game state.
+- **Zustand — AppStore** (`src/store.ts`) — session context. `gameId`, `playerId`, `playerSecret`, `role` (all null initially; credentials set on create/join, role set on game start, all cleared on leave/kick). Also holds transient `pushToken` + `pushProvider` (not persisted to AsyncStorage — re-fetched each launch). Credentials are per-game and server-minted — returned in `JoinGameResponse`. Does NOT hold game data.
+- **Zustand — GameplayStore** (`src/stores/gameplayStore.ts`) — gameplay state hydrated from SSE. Not persisted — rebuilt from the SSE snapshot on every connection. Discriminated union: `{ status: 'connecting' }` or `{ status: 'connected', role, state }`. The `hydrate()` action replaces state from a `game_state` SSE event; `reset()` reverts to connecting. Used by `useGameplayEvents` hook.
+- **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (lobby game state, maps). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for lobby game state. Gameplay state uses the GameplayStore instead (SSE deltas mutate nested state that doesn't fit the query cache model).
 - `X-Player-Id` and `X-Player-Secret` headers are injected at runtime via `api.use()` middleware in `client.ts` (only when credentials exist). For endpoints where the OpenAPI spec declares these as required header parameters, also pass `header: authHeader()` in the `params` object to satisfy TypeScript types. Import `authHeader` from `@/api/auth`. `POST /games` and `POST /games/join` do not require auth headers (they mint fresh credentials).
 - API base URL is platform-aware: `localhost:8000` for iOS simulator, `10.0.2.2:8000` for Android emulator. Override via `EXPO_PUBLIC_API_BASE_URL`.
 
@@ -84,19 +92,28 @@ Copy `.env.example` to `.env` and fill in values.
 On app launch, `index.tsx` checks for stored credentials:
 
 1. If `gameId` + `playerId` + `playerSecret` exist in the store, call `GET /games/{game_id}/me`
-2. If 200 and game is in lobby → navigate to lobby screen
-3. If error or game not in lobby → `clearSession()`, show home screen
-4. Shows loading indicator while checking
+2. If 200 and `game_status === 'lobby'` → navigate to lobby screen
+3. If 200 and `game_status === 'hiding' | 'seeking'` → restore role from response, navigate to gameplay screen
+4. If error, finished, dissolved, or unknown → `clearSession()`, show home screen
+5. Shows loading indicator while checking
 
 Kicked players' credentials return 403 on `/me` → clean session clear.
 
 ## SSE Connection & Reconnect
 
-- `useLobbyEvents` manages the SSE connection to `/games/{id}/lobby/events` and returns `{ connected: boolean }`.
-- On disconnect/error, reconnects with exponential backoff (1s → 30s cap). On reconnect, invalidates the game query to re-fetch full state and catch missed events.
-- On app foreground resume (`AppState` change to `active`), forces a fresh connection since stale XHR may not fire errors.
-- `ConnectionDot` component renders a green/red dot in the join code banner to show connection status. All interactive controls (buttons, player edit, kick) are disabled while disconnected.
-- Lobby screen has no back button (`headerBackVisible: false`, `gestureEnabled: false`) — leaving requires the explicit "Leave Game" button.
+Two SSE hooks, same reconnection pattern (exponential backoff 1s → 30s, foreground resume):
+
+- **`useLobbyEvents`** — connects to `/games/{id}/lobby/events`, updates TanStack Query cache. On `game_started`, persists role and navigates to gameplay screen.
+- **`useGameplayEvents`** — connects to `/games/{id}/hider-state` or `/games/{id}/seeker-state` (role-aware), hydrates `GameplayStore`. The server SSE endpoints use `include_in_schema=False` so their types are defined manually in `src/types/gameplay.ts` (not from the OpenAPI spec).
+
+Both hooks:
+
+- Use `react-native-sse` `EventSource` with auth headers (`x-player-id`, `x-player-secret`)
+- Reconnect with exponential backoff on error. Force fresh connection on foreground resume.
+- Return `{ connected: boolean }` for `ConnectionDot` and disabled state.
+
+- `ConnectionDot` component renders a green/red dot to show connection status. All interactive controls are disabled while disconnected.
+- Lobby and gameplay screens both suppress back navigation (`gestureEnabled: false`, `BackHandler` on Android).
 
 ## Push Notifications
 

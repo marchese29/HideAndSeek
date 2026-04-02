@@ -33,8 +33,14 @@ export default function HomeScreen() {
         }
         if (data.game_status === 'lobby') {
           router.replace(`/lobby/${gameId}`);
+        } else if (data.game_status === 'hiding' || data.game_status === 'seeking') {
+          // Active game — restore role and navigate to gameplay
+          if (data.player.role) {
+            useAppStore.getState().setRole(data.player.role);
+          }
+          router.replace(`/game/${gameId}`);
         } else {
-          // Game is no longer in lobby — clear session for now
+          // finished, dissolved, or unknown — clear session
           useAppStore.getState().clearSession();
           setChecking(false);
         }

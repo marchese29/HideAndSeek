@@ -140,9 +140,16 @@ export function useLobbyEvents(gameId: string): { connected: boolean } {
 
       es.addEventListener('game_started', (event) => {
         const game = parseData<GameResponse>(event);
-        if (game) queryClient.setQueryData(queryKey, game);
-        // Future: navigate to gameplay screen
-        Alert.alert('Game Started', 'The game has begun!');
+        if (!game) return;
+        queryClient.setQueryData(queryKey, game);
+
+        // Persist role before navigating to gameplay
+        const myId = useAppStore.getState().playerId;
+        const me = game.players.find((p) => p.id === myId);
+        if (me?.role) {
+          useAppStore.getState().setRole(me.role);
+        }
+        router.replace(`/game/${gameId}`);
       });
     }
 
