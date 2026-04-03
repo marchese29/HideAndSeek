@@ -1286,8 +1286,11 @@ export interface components {
              * @description metro, bus, tram, rail, or ferry.
              */
             route_type: string;
-            /** @description GeoJSON LineString. */
-            shape: components["schemas"]["LineString"];
+            /**
+             * Shape
+             * @description GeoJSON LineString or MultiLineString (clipped to game boundary).
+             */
+            shape: components["schemas"]["LineString"] | components["schemas"]["MultiLineString"];
             /**
              * Stop Ids
              * @description Ordered stop IDs along this route.

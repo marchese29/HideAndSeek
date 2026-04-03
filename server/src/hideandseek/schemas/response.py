@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from geojson_pydantic import LineString as GeoJSONLineString
+from geojson_pydantic import MultiLineString as GeoJSONMultiLineString
 from geojson_pydantic import Point as GeoJSONPoint
 from geojson_pydantic import Polygon as GeoJSONPolygon
 from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
@@ -27,6 +28,9 @@ from hideandseek.models.types import (
 from hideandseek.schemas.params import QuestionParamsResponse
 
 if TYPE_CHECKING:
+    from shapely.geometry import LineString as LineStringType
+    from shapely.geometry import MultiLineString as MultiLineStringType
+
     from hideandseek.exclusion import EndgameExclusionResult
     from hideandseek.models.game import Game as GameModel
     from hideandseek.models.game import Player as PlayerModel
@@ -251,8 +255,31 @@ class RouteResponse(BaseModel):
     name: str
     color: str = Field(description='Hex color for rendering.')
     route_type: str = Field(description='metro, bus, tram, rail, or ferry.')
-    shape: GeoJSONLineString = Field(description='GeoJSON LineString.')
+    shape: GeoJSONLineString | GeoJSONMultiLineString = Field(
+        description='GeoJSON LineString or MultiLineString (clipped to game boundary).'
+    )
     stop_ids: list[uuid.UUID] = Field(description='Ordered stop IDs along this route.')
+
+    @staticmethod
+    def from_gameplay_route(
+        route: RouteModel,
+        clipped_shape: LineStringType | MultiLineStringType,
+        stop_ids: list[uuid.UUID],
+    ) -> RouteResponse:
+        geojson = mapping(clipped_shape)
+        if geojson['type'] == 'LineString':
+            shape: GeoJSONLineString | GeoJSONMultiLineString = GeoJSONLineString(**geojson)
+        else:
+            shape = GeoJSONMultiLineString(**geojson)
+        return RouteResponse(
+            id=route.id,
+            stable_id=route.stable_id,
+            name=route.name,
+            color=route.color,
+            route_type=route.route_type,
+            shape=shape,
+            stop_ids=stop_ids,
+        )
 
     @staticmethod
     def from_model(route: RouteModel, stop_ids: list[uuid.UUID]) -> RouteResponse:
@@ -577,6 +604,7 @@ class HiderGameStateResponse(BaseModel):
     boundary: GeoJSONPolygon = Field(description='Game map boundary.')
     districts: list = Field(description='District boundaries.')
     stops: list[StopResponse] = Field(description='All playable stops.')
+    routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
     self_player_id: uuid.UUID = Field(description="Caller's player ID.")
     hiders: list[GamePlayer] = Field(description='All hiders with last known positions.')
     seekers: list[GamePlayer] = Field(description='All seekers with last known positions.')
@@ -603,6 +631,7 @@ class SeekerGameStateResponse(BaseModel):
     boundary: GeoJSONPolygon = Field(description='Game map boundary.')
     districts: list = Field(description='District boundaries.')
     stops: list[StopResponse] = Field(description='All playable stops.')
+    routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
     self_player_id: uuid.UUID = Field(description="Caller's player ID.")
     hiders: list[RosterPlayer] = Field(description='Hiders — identity only, no location.')
     seekers: list[GamePlayer] = Field(description='All seekers with last known positions.')

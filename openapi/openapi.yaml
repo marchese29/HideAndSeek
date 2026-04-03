@@ -2246,8 +2246,11 @@ components:
           title: Route Type
           description: metro, bus, tram, rail, or ferry.
         shape:
-          $ref: '#/components/schemas/LineString'
-          description: GeoJSON LineString.
+          anyOf:
+          - $ref: '#/components/schemas/LineString'
+          - $ref: '#/components/schemas/MultiLineString'
+          title: Shape
+          description: GeoJSON LineString or MultiLineString (clipped to game boundary).
         stop_ids:
           items:
             type: string

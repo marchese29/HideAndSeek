@@ -51,7 +51,8 @@ src/
   components/                  # Reusable UI components
     GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins)
     BoundaryOverlay.tsx        # Game boundary polygon (outline-only stroke)
-    StopMarker.tsx             # Transit stop dot marker (non-tappable)
+    StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
+    TransitRoute.tsx           # Transit route polyline + white stop dots
     PlayerPin.tsx              # Player map pin (colored circle + initial + self ring + hider badge + stack count)
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types
@@ -135,10 +136,11 @@ Both hooks:
 ## Map Rendering
 
 - **Map provider**: Platform default (Apple Maps on iOS, Google Maps on Android) — no `provider` prop on `<MapView>`.
-- **GeoJSON conversion**: All server geometries are GeoJSON (`[lon, lat]`). `src/utils/geo.ts` provides `toLatLng()` and `polygonToCoords()` to convert to `react-native-maps` `{ latitude, longitude }` format.
+- **GeoJSON conversion**: All server geometries are GeoJSON (`[lon, lat]`). `src/utils/geo.ts` provides `toLatLng()`, `lineStringToCoords()`, and `polygonToCoords()` to convert to `react-native-maps` `{ latitude, longitude }` format.
 - **Initial region**: Computed from boundary polygon via `regionFromBoundary()` with 10% padding. Uses `initialRegion` (not `region`) so users can pan/zoom freely.
 - **Boundary**: Outline-only `<Polygon>` stroke, no fill.
-- **Stops**: Small gray dots, non-tappable (`tappable={false}`). Visual indicators only.
+- **Transit routes**: Colored `<Polyline>` per route (using the route's hex color from the server) with white dot `<Marker>`s at each stop along the route. Rendered by `TransitRoute` component. Stops on multiple routes get overlapping dots (no deduplication needed).
+- **Stops**: Rendered as white dots along route polylines (not standalone markers). Stop data is still delivered as a flat `stops` array; `routes` carry `stop_ids` referencing into that array.
 - **Player pins**: Custom `<View>` markers — colored circle with first initial. Self pin has white ring. Hider pins have "?" badge. Stale locations (>60s) render at 0.4 opacity.
 - **Stack detection**: Co-located players are detected by rounding coordinates to 4 decimal places (~11m). The topmost pin shows a "+N" count badge.
 - **Rendering order**: Players sorted by self-last (highest `zIndex`), then alphabetical. Self pin always renders on top.

@@ -3,7 +3,7 @@ import MapView from 'react-native-maps';
 
 import { BoundaryOverlay } from '@/components/BoundaryOverlay';
 import { PlayerPin } from '@/components/PlayerPin';
-import { StopMarker } from '@/components/StopMarker';
+import { TransitRoute } from '@/components/TransitRoute';
 import type { GamePlayer, HiderGameState, SeekerGameState } from '@/types/gameplay';
 import { regionFromBoundary } from '@/utils/geo';
 
@@ -71,8 +71,8 @@ export function GameMap({ role, state }: GameMapProps) {
   return (
     <MapView style={{ flex: 1 }} initialRegion={initialRegion} onPress={() => {}}>
       <BoundaryOverlay boundary={state.boundary} />
-      {state.stops.map((stop) => (
-        <StopMarker key={stop.id} stop={stop} />
+      {state.routes.map((route) => (
+        <TransitRoute key={route.id} route={route} stops={state.stops} />
       ))}
       {players.map(({ player, isSelf, isHider, index, stackCount }) => (
         <PlayerPin

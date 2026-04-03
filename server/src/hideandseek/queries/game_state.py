@@ -17,6 +17,7 @@ from hideandseek.queries.questions import (
     get_latest_total_exclusion,
     list_questions,
 )
+from hideandseek.queries.routes import get_gameplay_routes
 from hideandseek.queries.stops import get_playable_stops
 from hideandseek.schemas.params import build_question_params
 from hideandseek.schemas.response import (
@@ -26,6 +27,7 @@ from hideandseek.schemas.response import (
     HiderQuestionHistoryEntry,
     InventorySlotResponse,
     RosterPlayer,
+    RouteResponse,
     SeekerActiveQuestion,
     SeekerGameStateResponse,
     SeekerQuestionHistoryEntry,
@@ -49,6 +51,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
     game_map = game.game_map
     locations = get_all_player_locations(game)
     stops = get_playable_stops(game)
+    routes = get_gameplay_routes(game)
     active_q = get_active_question(game)
     all_questions = list_questions(game)
 
@@ -118,6 +121,9 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         boundary=GeoJSONPolygon(**mapping(game_map.boundary)),
         districts=game_map.districts,
         stops=[StopResponse.from_model(s) for s in stops],
+        routes=[
+            RouteResponse.from_gameplay_route(r.route, r.clipped_shape, r.stop_ids) for r in routes
+        ],
         self_player_id=player.id,
         hiders=hiders,
         seekers=seekers,
@@ -133,6 +139,7 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
     game_map = game.game_map
     locations = get_all_player_locations(game)
     stops = get_playable_stops(game)
+    routes = get_gameplay_routes(game)
     active_q = get_active_question(game)
     all_questions = list_questions(game)
     total_exclusion = get_latest_total_exclusion(game)
@@ -218,6 +225,9 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
         boundary=GeoJSONPolygon(**mapping(game_map.boundary)),
         districts=game_map.districts,
         stops=[StopResponse.from_model(s) for s in stops],
+        routes=[
+            RouteResponse.from_gameplay_route(r.route, r.clipped_shape, r.stop_ids) for r in routes
+        ],
         self_player_id=player.id,
         hiders=hiders,
         seekers=seekers,

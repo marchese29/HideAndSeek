@@ -1,6 +1,11 @@
 import type { Region } from 'react-native-maps';
 
-import type { GeoJSONPoint, GeoJSONPolygon } from '@/types/gameplay';
+import type {
+  GeoJSONLineString,
+  GeoJSONMultiLineString,
+  GeoJSONPoint,
+  GeoJSONPolygon,
+} from '@/types/gameplay';
 
 export interface LatLng {
   latitude: number;
@@ -10,6 +15,17 @@ export interface LatLng {
 /** Convert a GeoJSON Point ([lon, lat]) to a react-native-maps LatLng. */
 export function toLatLng(point: GeoJSONPoint): LatLng {
   return { latitude: point.coordinates[1], longitude: point.coordinates[0] };
+}
+
+/** Convert a GeoJSON LineString or MultiLineString to arrays of LatLng (one per segment). */
+export function shapeToCoordArrays(shape: GeoJSONLineString | GeoJSONMultiLineString): LatLng[][] {
+  const lines = shape.type === 'MultiLineString' ? shape.coordinates : [shape.coordinates];
+  return lines.map((coords) =>
+    coords.map((pair) => ({
+      latitude: pair[1],
+      longitude: pair[0],
+    })),
+  );
 }
 
 /** Convert a GeoJSON Polygon's outer ring to an array of LatLng. */

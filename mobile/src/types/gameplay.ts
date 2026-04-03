@@ -18,6 +18,16 @@ export interface GeoJSONPolygon {
   coordinates: number[][][];
 }
 
+export interface GeoJSONLineString {
+  type: 'LineString';
+  coordinates: [number, number][];
+}
+
+export interface GeoJSONMultiLineString {
+  type: 'MultiLineString';
+  coordinates: [number, number][][];
+}
+
 /** Flexible GeoJSON geometry for exclusion zones (Polygon, MultiPolygon, etc.) */
 export type GeoJSONGeometry = Record<string, unknown>;
 
@@ -48,6 +58,18 @@ export interface StopResponse {
   stable_id: string;
   name: string;
   coordinates: GeoJSONPoint;
+}
+
+// ── Routes ──────────────────────────────────────────────────────────────────
+
+export interface RouteResponse {
+  id: string;
+  stable_id: string;
+  name: string;
+  color: string;
+  route_type: string;
+  shape: GeoJSONLineString | GeoJSONMultiLineString;
+  stop_ids: string[];
 }
 
 // ── Question Parameters ──────────────────────────────────────────────────────
@@ -162,6 +184,7 @@ export interface HiderGameState {
   boundary: GeoJSONPolygon;
   districts: unknown[];
   stops: StopResponse[];
+  routes: RouteResponse[];
   self_player_id: string;
   hiders: GamePlayer[];
   seekers: GamePlayer[];
@@ -182,6 +205,7 @@ export interface SeekerGameState {
   boundary: GeoJSONPolygon;
   districts: unknown[];
   stops: StopResponse[];
+  routes: RouteResponse[];
   self_player_id: string;
   hiders: RosterPlayer[];
   seekers: GamePlayer[];
