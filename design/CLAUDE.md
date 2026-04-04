@@ -18,6 +18,7 @@ AI-generated design documents and artifacts for the HideAndSeek game.
 - `gameplay-state.md` — Gameplay state & SSE: role-specific SSE state endpoints (hider-state/seeker-state), dual-channel Redis broadcasting with publish-side visibility, location broadcasting, simplified ACK REST responses, player representations (GamePlayer with location vs RosterPlayer without), question history with exclusion zones, inventory in state.
 - `gameplay-mobile.md` — Mobile gameplay experience: single route with role/phase-dependent rendering, map view (boundary, stops, player pins, total exclusion), SSE-driven Zustand state, question drawer (hider) + question banner (seeker), utility belt, location reporting, stale location indicator, permissions at create/join time.
 - `utility-belt.md` — Utility belt HUD redesign: zone-based layout (state action + timer, toolbelt, info + leave), context strip (hider station name, seeker question timeline with exclusion scrubbing), connection status via timer color, phase/role-specific state action button.
+- `question-flow-mobile.md` — Mobile question flow: seeker question selection via belt takeover (type → parameter → preview → ask), unified Question Banner for both roles (replaces drawer + old banner), boundary-line exclusion previews, thermometer two-phase UX, hider answer/veto/randomize actions, server preview endpoint. Supersedes question UI in `gameplay-mobile.md` sections 6–7.
 
 ## Conventions
 
