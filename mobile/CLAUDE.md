@@ -44,6 +44,7 @@ src/
     colors.ts                  # PlayerColor → hex mapping
   hooks/
     useGameplayEvents.ts       # Gameplay SSE (role-aware endpoint, hydrates GameplayStore)
+    useGameTimer.ts            # 1s-tick timer: countdown (hiding) / elapsed (seeking)
     useLocationTracking.ts     # Foreground GPS tracking + POST /location + optimistic self update
     useLobbyEvents.ts          # Lobby SSE subscription with auto-reconnect + connection status
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
@@ -57,6 +58,13 @@ src/
     TransitRoute.tsx           # Transit route polyline + white stop dots
     PlayerPin.tsx              # Player map pin (animated — colored circle + initial + self ring + hider badge + stack count)
     LocationDeniedBanner.tsx   # Warning banner when location permission denied
+    ConnectionDot.tsx          # SSE connection status dot (green/red) — used in lobby
+    utility-belt/              # Gameplay utility belt (Cycle A)
+      index.ts                 # Barrel export
+      UtilityBelt.tsx          # Container — three-section layout (left/center/right)
+      StateAction.tsx          # Role/phase action button (icon + label)
+      GameTimer.tsx            # Live timer with connection-colored background
+      BeltActions.tsx          # Info + leave icon buttons
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types
 assets/                        # Images, fonts
@@ -122,7 +130,8 @@ Both hooks:
 - Reconnect with exponential backoff on error. Force fresh connection on foreground resume.
 - Return `{ connected: boolean }` for `ConnectionDot` and disabled state.
 
-- `ConnectionDot` component renders a green/red dot to show connection status. All interactive controls are disabled while disconnected.
+- **Lobby** uses `ConnectionDot` (green/red dot) for connection status.
+- **Gameplay** uses the utility belt timer background color instead: orange (hiding), green (seeking), gray (disconnected). All belt actions are disabled while disconnected; the map remains interactive.
 - Lobby and gameplay screens both suppress back navigation (`gestureEnabled: false`, `BackHandler` on Android).
 
 ## Push Notifications

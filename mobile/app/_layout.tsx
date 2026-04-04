@@ -1,4 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
+import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack } from 'expo-router';
 
@@ -15,6 +16,11 @@ Notifications.setNotificationHandler({
 });
 
 export default function RootLayout() {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const [fontsLoaded] = useFonts({ DSEG7: require('../assets/fonts/DSEG7Classic-Regular.ttf') });
+
+  if (!fontsLoaded) return null;
+
   return (
     <QueryClientProvider client={queryClient}>
       <Stack>

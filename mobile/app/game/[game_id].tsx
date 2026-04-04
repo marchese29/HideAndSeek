@@ -1,11 +1,11 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, BackHandler, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ConnectionDot } from '@/components/ConnectionDot';
 import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
+import { UtilityBelt } from '@/components/utility-belt';
 import { useGameplayEvents } from '@/hooks/useGameplayEvents';
 import { useLocationTracking } from '@/hooks/useLocationTracking';
 import { useGameplayStore } from '@/stores/gameplayStore';
@@ -36,11 +36,7 @@ export default function GameplayScreen() {
 
       {permissionDenied && <LocationDeniedBanner />}
 
-      {/* Utility belt placeholder */}
-      <View style={styles.utilityBelt}>
-        <ConnectionDot connected={connected} />
-        <Text style={styles.utilityBeltText}>Utility Belt</Text>
-      </View>
+      {role && state && <UtilityBelt role={role} state={state} connected={connected} />}
     </SafeAreaView>
   );
 }
@@ -55,18 +51,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#ECF0F1',
-  },
-  utilityBelt: {
-    height: 80,
-    backgroundColor: '#2C3E50',
-    borderTopWidth: 1,
-    borderTopColor: '#1A252F',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  utilityBeltText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#7F8C8D',
   },
 });
