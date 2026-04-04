@@ -1,17 +1,18 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { Marker } from 'react-native-maps';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
+import { AnimatedRegion, Marker } from 'react-native-maps';
 
 import { COLOR_HEX, type PlayerColor } from '@/constants/colors';
 import type { GamePlayer } from '@/types/gameplay';
 import { toLatLng } from '@/utils/geo';
 
-const STALE_THRESHOLD_MS = 60_000;
+const ANIMATE_DURATION_MS = 500;
 
 interface PlayerPinProps {
   player: GamePlayer;
   isSelf: boolean;
   isHider: boolean;
+  isStale: boolean;
   zIndex: number;
   stackCount: number;
 }
@@ -20,39 +21,77 @@ export const PlayerPin = React.memo(function PlayerPin({
   player,
   isSelf,
   isHider,
+  isStale,
   zIndex,
   stackCount,
 }: PlayerPinProps) {
-  const isStale = player.timestamp
-    ? Date.now() - new Date(player.timestamp).getTime() > STALE_THRESHOLD_MS
-    : false;
+  const { latitude, longitude } = toLatLng(player.coordinates!);
 
-  const bgColor = COLOR_HEX[player.color as PlayerColor] ?? '#999';
+  const animatedCoord = useRef(
+    new AnimatedRegion({ latitude, longitude, latitudeDelta: 0, longitudeDelta: 0 }),
+  ).current;
+
+  useEffect(() => {
+    animatedCoord
+      .timing({
+        latitude,
+        longitude,
+        latitudeDelta: 0,
+        longitudeDelta: 0,
+        duration: ANIMATE_DURATION_MS,
+        useNativeDriver: false,
+        toValue: 0,
+      })
+      .start();
+  }, [latitude, longitude, animatedCoord]);
+
+  // Animate the color transition when staleness changes. Pulse
+  // tracksViewChanges for the duration so the native map re-snapshots
+  // each frame of the color interpolation.
+  const staleAnim = useRef(new Animated.Value(isStale ? 1 : 0)).current;
+  const [trackChanges, setTrackChanges] = useState(false);
+  const prevStaleRef = useRef(isStale);
+  useEffect(() => {
+    if (prevStaleRef.current !== isStale) {
+      prevStaleRef.current = isStale;
+      setTrackChanges(true);
+      Animated.timing(staleAnim, {
+        toValue: isStale ? 1 : 0,
+        duration: ANIMATE_DURATION_MS,
+        useNativeDriver: false,
+      }).start(() => setTrackChanges(false));
+    }
+  }, [isStale, staleAnim]);
+
+  const playerColor = COLOR_HEX[player.color as PlayerColor] ?? '#999';
+  const bgColor = staleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [playerColor, '#95A5A6'],
+  });
   const initial = player.name.charAt(0).toUpperCase();
 
   return (
-    <Marker
-      coordinate={toLatLng(player.coordinates!)}
+    <Marker.Animated
+      // AnimatedRegion is structurally compatible at runtime but the TS types
+      // for Marker.Animated expect WithAnimatedObject<LatLng>, not AnimatedMapRegion.
+      coordinate={animatedCoord as unknown as { latitude: number; longitude: number }}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={false}
+      tracksViewChanges={trackChanges}
       zIndex={zIndex}
     >
-      <View style={{ opacity: isStale ? 0.4 : 1 }}>
-        <View style={[styles.circle, { backgroundColor: bgColor }, isSelf && styles.selfRing]}>
-          <Text style={styles.initial}>{initial}</Text>
-        </View>
-        {isHider && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>?</Text>
-          </View>
-        )}
+      <View style={{ opacity: isHider ? 0.4 : 1 }}>
+        <Animated.View
+          style={[styles.circle, { backgroundColor: bgColor }, isSelf && styles.selfRing]}
+        >
+          <Text style={[styles.initial, isHider && styles.initialHider]}>{initial}</Text>
+        </Animated.View>
         {stackCount > 0 && (
           <View style={styles.stackBadge}>
             <Text style={styles.stackBadgeText}>+{stackCount - 1}</Text>
           </View>
         )}
       </View>
-    </Marker>
+    </Marker.Animated>
   );
 });
 
@@ -78,21 +117,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#2C3E50',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#fff',
+  initialHider: {
+    fontStyle: 'italic',
   },
   stackBadge: {
     position: 'absolute',

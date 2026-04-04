@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { api } from '@/api/client';
 import { queryClient } from '@/api/queryClient';
 import { useAppStore } from '@/store';
+import { requestLocationPermission } from '@/utils/locationPermission';
 
 export default function JoinGameScreen() {
   const [joinCode, setJoinCode] = useState('');
@@ -17,6 +18,8 @@ export default function JoinGameScreen() {
   async function handleJoin() {
     setError(null);
     setLoading(true);
+
+    await requestLocationPermission();
 
     const { pushToken, pushProvider } = useAppStore.getState();
     const { data, error: apiError } = await api.POST('/games/join', {

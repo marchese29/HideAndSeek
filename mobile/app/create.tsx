@@ -15,6 +15,7 @@ import { api } from '@/api/client';
 import { queryClient } from '@/api/queryClient';
 import type { components } from '@/api/schema';
 import { useAppStore } from '@/store';
+import { requestLocationPermission } from '@/utils/locationPermission';
 
 type MapSummary = components['schemas']['MapSummary'];
 
@@ -39,6 +40,8 @@ export default function CreateGameScreen() {
     if (!selectedMapId) return;
     setError(null);
     setLoading(true);
+
+    await requestLocationPermission();
 
     const { pushToken, pushProvider } = useAppStore.getState();
     const { data, error: apiError } = await api.POST('/games', {

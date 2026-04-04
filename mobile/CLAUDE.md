@@ -44,16 +44,19 @@ src/
     colors.ts                  # PlayerColor → hex mapping
   hooks/
     useGameplayEvents.ts       # Gameplay SSE (role-aware endpoint, hydrates GameplayStore)
+    useLocationTracking.ts     # Foreground GPS tracking + POST /location + optimistic self update
     useLobbyEvents.ts          # Lobby SSE subscription with auto-reconnect + connection status
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
   utils/
     geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary
+    locationPermission.ts      # requestLocationPermission() — foreground permission helper
   components/                  # Reusable UI components
     GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins)
     BoundaryOverlay.tsx        # Game boundary polygon (outline-only stroke)
     StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
     TransitRoute.tsx           # Transit route polyline + white stop dots
-    PlayerPin.tsx              # Player map pin (colored circle + initial + self ring + hider badge + stack count)
+    PlayerPin.tsx              # Player map pin (animated — colored circle + initial + self ring + hider badge + stack count)
+    LocationDeniedBanner.tsx   # Warning banner when location permission denied
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types
 assets/                        # Images, fonts
@@ -141,11 +144,24 @@ Both hooks:
 - **Boundary**: Outline-only `<Polygon>` stroke, no fill.
 - **Transit routes**: Colored `<Polyline>` per route (using the route's hex color from the server) with white dot `<Marker>`s at each stop along the route. Rendered by `TransitRoute` component. Stops on multiple routes get overlapping dots (no deduplication needed).
 - **Stops**: Rendered as white dots along route polylines (not standalone markers). Stop data is still delivered as a flat `stops` array; `routes` carry `stop_ids` referencing into that array.
-- **Player pins**: Custom `<View>` markers — colored circle with first initial. Self pin has white ring. Hider pins have "?" badge. Stale locations (>60s) render at 0.4 opacity.
+- **Player pins**: `Marker.Animated` with `AnimatedRegion` — colored circle with first initial. Pins glide smoothly (500ms timing animation) when coordinates update. Self pin has white ring. Hider pins are semi-transparent (0.4 opacity) with italic initial — signals their location is approximate/private. Stale locations (>60s) turn gray instead of using the player's color.
 - **Stack detection**: Co-located players are detected by rounding coordinates to 4 decimal places (~11m). The topmost pin shows a "+N" count badge.
 - **Rendering order**: Players sorted by self-last (highest `zIndex`), then alphabetical. Self pin always renders on top.
-- **`tracksViewChanges={false}`**: All markers use this for performance. Marker appearance updates require app restart or SSE reconnect to re-snapshot.
+- **`tracksViewChanges`**: Normally `false` for performance. `Marker.Animated` doesn't reliably re-snapshot on its own, so `PlayerPin` briefly pulses `tracksViewChanges={true}` for 200ms when staleness transitions — just enough for the native map to capture the new color. This preserves position animations (key-based recreation would destroy the `AnimatedRegion`).
 - **Zustand selectors**: Use individual primitive/reference selectors (e.g., `s.status`, `s.role`, `s.state`) — never return new object literals from selectors (causes infinite re-render loops with Zustand's `===` equality check).
+
+## Location Tracking
+
+- **Permission flow**: `requestLocationPermission()` in `utils/locationPermission.ts` is called at create/join time (before entering the game). This prompts the OS dialog early. The gameplay screen checks existing status — no re-prompt.
+- **Foreground tracking**: `useLocationTracking` hook polls `Location.getCurrentPositionAsync()` on a manual 10s `setInterval`. Uses polling instead of `watchPositionAsync` because iOS ignores `timeInterval` — a stationary player would stop reporting entirely. Stops on unmount. Re-checks permission on foreground resume (user may toggle in Settings).
+- **Server-confirmed self-location**: Each GPS fix is POSTed to the server; `selfLocation` in `GameplayStore` is only updated on successful response (not optimistic). This means the self pin correctly goes gray if the server is unreachable. `GameMap` prefers `selfLocation` over SSE data for the self player. `hydrate()` clears `selfLocation` once the SSE snapshot's timestamp catches up.
+- **Permission denied**: `LocationDeniedBanner` renders between map and utility belt when location access is refused. Links to device Settings via `Linking.openSettings()`.
+
+## SSE Delta Events
+
+- **`game_state`**: Full snapshot on connect — `hydrate()` replaces entire `GameplayStore` state.
+- **`player_location`**: Real-time position delta — `updatePlayerLocation()` patches a single player's coordinates in the `hiders`/`seekers` arrays without replacing the full state. For seeker state, only `seekers` is patched (hiders are `RosterPlayer[]` with no coordinates).
+- Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 
 ## Conventions
 

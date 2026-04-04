@@ -5,9 +5,9 @@ import EventSource, { type EventSourceEvent } from 'react-native-sse';
 import { API_BASE_URL } from '@/api/client';
 import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { HiderGameState, SeekerGameState } from '@/types/gameplay';
+import type { HiderGameState, PlayerLocationDelta, SeekerGameState } from '@/types/gameplay';
 
-type GameplayEventType = 'game_state';
+type GameplayEventType = 'game_state' | 'player_location';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
@@ -68,6 +68,15 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         const data = parseData<HiderGameState | SeekerGameState>(event);
         if (data) {
           useGameplayStore.getState().hydrate(role!, data);
+        }
+      });
+
+      es.addEventListener('player_location', (event) => {
+        const data = parseData<PlayerLocationDelta>(event);
+        if (data) {
+          useGameplayStore
+            .getState()
+            .updatePlayerLocation(data.id, data.coordinates, data.timestamp);
         }
       });
     }

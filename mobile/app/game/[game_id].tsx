@@ -5,12 +5,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ConnectionDot } from '@/components/ConnectionDot';
 import { GameMap } from '@/components/GameMap';
+import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
 import { useGameplayEvents } from '@/hooks/useGameplayEvents';
+import { useLocationTracking } from '@/hooks/useLocationTracking';
 import { useGameplayStore } from '@/stores/gameplayStore';
 
 export default function GameplayScreen() {
   const { game_id } = useLocalSearchParams<{ game_id: string }>();
   const { connected } = useGameplayEvents(game_id);
+  const { permissionDenied } = useLocationTracking(game_id);
   const status = useGameplayStore((s) => s.status);
   const role = useGameplayStore((s) => s.role);
   const state = useGameplayStore((s) => s.state);
@@ -30,6 +33,8 @@ export default function GameplayScreen() {
       ) : (
         <GameMap role={role} state={state} />
       )}
+
+      {permissionDenied && <LocationDeniedBanner />}
 
       {/* Utility belt placeholder */}
       <View style={styles.utilityBelt}>

@@ -51,6 +51,18 @@ export interface RosterPlayer {
   role: 'hider' | 'seeker' | null;
 }
 
+// ── SSE Delta Events ────────────────────────────────────────────────────────
+
+/** Wire format of a player_location SSE delta event. */
+export interface PlayerLocationDelta {
+  id: string;
+  name: string;
+  color: string;
+  role: 'hider' | 'seeker';
+  coordinates: GeoJSONPoint;
+  timestamp: string;
+}
+
 // ── Stops ────────────────────────────────────────────────────────────────────
 
 export interface StopResponse {
