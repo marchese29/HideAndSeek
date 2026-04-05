@@ -164,7 +164,7 @@ class TestEmitHostChanged:
 
 class TestEmitGameStarted:
     @pytest.mark.usefixtures('_patch_sync_redis')
-    def test_publishes_sse_and_push(
+    def test_publishes_sse_best_effort(
         self, session: Session, fake_sync_redis: fakeredis.FakeRedis
     ) -> None:
         game = create_game(session)
@@ -172,9 +172,7 @@ class TestEmitGameStarted:
         pubsub = fake_sync_redis.pubsub()
         pubsub.subscribe(_lobby_channel(game.id))
 
-        with patch('hideandseek.tasks.push.send_push') as mock_push:
-            emit(GameStartedEvent(game=game))
-            mock_push.delay.assert_called_once()
+        emit(GameStartedEvent(game=game))
 
         messages = []
         for _ in range(10):
@@ -190,12 +188,14 @@ class TestEmitGameStarted:
         assert 'host_player_id' in parsed['data']
 
     @pytest.mark.usefixtures('_patch_no_redis')
-    def test_still_sends_push_when_redis_unavailable(self, session: Session) -> None:
-        """game_started is dual-channel — push should still fire even if Redis is down."""
+    def test_swallows_error_when_redis_unavailable(self, session: Session) -> None:
+        """game_started SSE is best-effort — no exception when Redis is down.
+
+        Push is now the router's responsibility (not emit's).
+        """
         game = create_game(session)
-        with patch('hideandseek.tasks.push.send_push') as mock_push:
-            emit(GameStartedEvent(game=game))
-            mock_push.delay.assert_called_once()
+        # Should not raise — SSE failure is logged and swallowed
+        emit(GameStartedEvent(game=game))
 
 
 # ── Gameplay location events ────────────────────────────────────────────────

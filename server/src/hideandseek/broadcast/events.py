@@ -11,7 +11,7 @@ from geojson_pydantic import Point as GeoJSONPoint
 from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
 from shapely.geometry import mapping
 
-from hideandseek.schemas.response import geom_or_none, point_or_none
+from hideandseek.geo_helpers import geom_or_none, point_or_none
 from hideandseek_models.types import PlayerColor, PlayerRole, QuestionType
 
 if TYPE_CHECKING:

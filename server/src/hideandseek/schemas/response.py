@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
 
+from hideandseek.geo_helpers import geom_or_none
 from hideandseek.schemas.params import QuestionParamsResponse
 from hideandseek_models.types import (
     GameStatus,
@@ -368,19 +369,6 @@ class PreviewQuestionResponse(BaseModel):
 
 
 _geojson_adapter: TypeAdapter[GeoJSONGeometry] = TypeAdapter(GeoJSONGeometry)
-
-
-def geom_or_none(geom: object) -> GeoJSONGeometry | None:
-    if geom is None:
-        return None
-    return _geojson_adapter.validate_python(mapping(geom))  # type: ignore[arg-type]
-
-
-def point_or_none(val: object) -> GeoJSONPoint | None:
-    """Convert a shapely Point (or None) to a GeoJSON Point."""
-    if val is None:
-        return None
-    return GeoJSONPoint(**mapping(val))  # type: ignore[arg-type]
 
 
 class NearbyStationResponse(BaseModel):

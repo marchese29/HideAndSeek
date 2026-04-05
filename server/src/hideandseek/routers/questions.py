@@ -26,6 +26,7 @@ from hideandseek.dependencies import (
     get_player_in_game,
     get_seeker_in_game,
 )
+from hideandseek.geo_helpers import geom_or_none
 from hideandseek.logic.answer import (
     abandon_question,
     answer_matching,
@@ -49,7 +50,6 @@ from hideandseek.schemas.request import AskQuestionRequest
 from hideandseek.schemas.response import (
     FeaturePreviewResponse,
     PreviewQuestionResponse,
-    geom_or_none,
 )
 from hideandseek.tasks.game_timers import auto_answer_question
 from hideandseek.tasks.push import send_push

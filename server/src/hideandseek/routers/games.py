@@ -8,7 +8,15 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from shapely.geometry import Point
 
-from hideandseek.broadcast import GameStartedEvent, PlayerUpdatedEvent, StationElectionEvent, emit
+from hideandseek.broadcast import (
+    GameStartedEvent,
+    HostChangedEvent,
+    PlayerJoinedEvent,
+    PlayerLeftEvent,
+    PlayerUpdatedEvent,
+    StationElectionEvent,
+    emit,
+)
 from hideandseek.broadcast.emit import emit_gameplay
 from hideandseek.celery_app import app as celery_app
 from hideandseek.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
@@ -90,11 +98,13 @@ def create_game(
     )
 
     game, player = create_game_with_host(
-        body,
+        name=body.name,
         game_map=game_map,
         secret_hash=secret_hash,
         hiding_time_min=hiding_time,
         base_question_delay_min=question_delay,
+        excluded_stop_ids=body.excluded_stop_ids,
+        excluded_route_ids=body.excluded_route_ids,
     )
 
     if body.device_token:
@@ -125,9 +135,11 @@ def join_game(
     raw_secret, secret_hash = generate_credentials()
 
     try:
-        player = lobby_join_game(body, game, secret_hash=secret_hash)
+        player = lobby_join_game(game, name=body.name, role=body.role, secret_hash=secret_hash)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+
+    emit(PlayerJoinedEvent(game=game, player=player))
 
     if body.device_token:
         upsert_device_token(
@@ -221,7 +233,7 @@ def remove_player(
         raise HTTPException(status_code=404, detail='Player not found in this game.')
 
     try:
-        lobby_remove_player(
+        result = lobby_remove_player(
             game,
             player,
             caller_player_id=auth_player_id,
@@ -231,6 +243,11 @@ def remove_player(
         raise HTTPException(status_code=403, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+    if not result.game_dissolved:
+        emit(PlayerLeftEvent(game=game, player_id=result.removed_player_id))
+        if result.new_host_id is not None:
+            emit(HostChangedEvent(game=game, new_host_player_id=result.new_host_id))
 
 
 @router.post('/{game_id}/start', response_model=GameResponse)
@@ -265,6 +282,11 @@ def start_game(
     )
 
     emit(GameStartedEvent(game=game))
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.game_started,
+        alert='Game on! The hiding phase has begun.',
+    )
 
     return GameResponse.from_model(game)
 

@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
-from hideandseek.broadcast import HostChangedEvent, PlayerJoinedEvent, PlayerLeftEvent, emit
 from hideandseek.queries.games import add_player, delete_player, update_game_status
 from hideandseek.queries.games import create_game as query_create_game
-from hideandseek.schemas.request import CreateGameRequest, JoinGameRequest
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap
-from hideandseek_models.types import MAX_PLAYERS, GameStatus, PlayerColor
+from hideandseek_models.types import MAX_PLAYERS, GameStatus, PlayerColor, PlayerRole
+
+
+@dataclass(frozen=True, slots=True)
+class RemovalResult:
+    """What happened when a player was removed."""
+
+    removed_player_id: uuid.UUID
+    game_dissolved: bool
+    new_host_id: uuid.UUID | None  # set when host was transferred
 
 
 def assign_color(game: Game) -> PlayerColor:
@@ -32,12 +40,14 @@ def validate_color_available(game: Game, player: Player, color: PlayerColor) -> 
 
 
 def create_game_with_host(
-    body: CreateGameRequest,
     *,
+    name: str,
     game_map: GameMap,
     secret_hash: str,
     hiding_time_min: int,
     base_question_delay_min: int,
+    excluded_stop_ids: list[uuid.UUID],
+    excluded_route_ids: list[uuid.UUID],
 ) -> tuple[Game, Player]:
     """Create a game and its host player with an auto-assigned color.
 
@@ -53,14 +63,14 @@ def create_game_with_host(
         default_inventory=game_map.default_inventory,
         convention=game_map.convention,
         size=game_map.size,
-        excluded_stop_ids=body.excluded_stop_ids,
-        excluded_route_ids=body.excluded_route_ids,
+        excluded_stop_ids=excluded_stop_ids,
+        excluded_route_ids=excluded_route_ids,
     )
     color = assign_color(game)
     player = add_player(
         game,
         player_id=host_player_id,
-        name=body.name,
+        name=name,
         color=color,
         secret_hash=secret_hash,
     )
@@ -68,9 +78,10 @@ def create_game_with_host(
 
 
 def join_game(
-    body: JoinGameRequest,
     game: Game,
     *,
+    name: str,
+    role: PlayerRole | None = None,
     secret_hash: str,
 ) -> Player:
     """Join a game with an auto-assigned color. Enforces player cap."""
@@ -78,9 +89,7 @@ def join_game(
         msg = 'Game is full (12 players max).'
         raise ValueError(msg)
     color = assign_color(game)
-    player = add_player(game, name=body.name, color=color, role=body.role, secret_hash=secret_hash)
-    emit(PlayerJoinedEvent(game=game, player=player))
-    return player
+    return add_player(game, name=name, color=color, role=role, secret_hash=secret_hash)
 
 
 def remove_player(
@@ -89,10 +98,12 @@ def remove_player(
     *,
     caller_player_id: uuid.UUID,
     new_host_id: uuid.UUID | None = None,
-) -> None:
+) -> RemovalResult:
     """Remove a player from a lobby game.
 
-    All validation is here — routers catch and remap to HTTP codes.
+    Returns a RemovalResult describing what happened — the caller decides
+    which events to emit.
+
     Raises:
         PermissionError: caller is neither the player nor the host (→ 403).
         ValueError: game not in lobby, new_host_id missing/invalid (→ 422).
@@ -117,7 +128,11 @@ def remove_player(
             # Only player — dissolve game
             update_game_status(game, GameStatus.dissolved)
             delete_player(player)
-            return
+            return RemovalResult(
+                removed_player_id=removed_player_id,
+                game_dissolved=True,
+                new_host_id=None,
+            )
 
         # Others remain — must transfer host
         if new_host_id is None:
@@ -129,13 +144,19 @@ def remove_player(
             raise ValueError(msg)
         game.host_player_id = new_host.id
         delete_player(player)
-        emit(PlayerLeftEvent(game=game, player_id=removed_player_id))
-        emit(HostChangedEvent(game=game, new_host_player_id=new_host.id))
-        return
+        return RemovalResult(
+            removed_player_id=removed_player_id,
+            game_dissolved=False,
+            new_host_id=new_host.id,
+        )
 
     # Non-host removal (self-leave or host-kick)
     delete_player(player)
-    emit(PlayerLeftEvent(game=game, player_id=removed_player_id))
+    return RemovalResult(
+        removed_player_id=removed_player_id,
+        game_dissolved=False,
+        new_host_id=None,
+    )
 
 
 def _find_player_in_game(game: Game, player_id: uuid.UUID) -> Player | None:

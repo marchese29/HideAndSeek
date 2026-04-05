@@ -32,7 +32,7 @@ from hideandseek.broadcast.events import (
 )
 from hideandseek.redis_client import get_sync_redis
 from hideandseek.schemas.response import GameResponse, PlayerResponse
-from hideandseek_models.types import GameplayEventType, LobbyEventType, PlayerRole, PushEventType
+from hideandseek_models.types import GameplayEventType, LobbyEventType, PlayerRole
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -114,16 +114,8 @@ def emit(event: LobbyEvent) -> None:
 
         case GameStartedEvent(game=game):
             data = GameResponse.from_model(game).model_dump(mode='json')
-            # SSE is best-effort for game_started — push is the primary channel
+            # SSE is best-effort for game_started — push is handled by the router
             _publish_sse(_lobby_channel(game.id), LobbyEventType.game_started, data, required=False)
-            # Push via Celery
-            from hideandseek.tasks.push import send_push  # noqa: PLC0415
-
-            send_push.delay(  # type: ignore[attr-defined]
-                str(game.id),
-                PushEventType.game_started,
-                alert='Game on! The hiding phase has begun.',
-            )
 
 
 def _both_channels(game_id: uuid.UUID, event_type: str, data: dict) -> None:
