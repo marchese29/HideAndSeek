@@ -4,7 +4,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 from shapely.geometry import Point
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from hideandseek.db import get_session
@@ -962,3 +962,201 @@ def test_abandon_then_reask(client: TestClient, session: Session):
     # Should be able to ask a new question
     _ask_question(client, game.id, seeker.id)
     assert _get_latest_question(game.id).ask_count == 2
+
+
+# ── GET /games/{game_id}/questions/preview ���─────────────────────────────────
+
+
+def test_preview_radar(client: TestClient, session: Session):
+    """Radar preview returns a boundary geometry."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    # Use coords inside the game map boundary (0,0)→(1,1)
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={'question_type': 'radar', 'slot_index': 0, 'lat': 0.5, 'lng': 0.5},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['boundary'] is not None
+    assert data['boundary']['type'] in ('LineString', 'MultiLineString', 'Polygon')
+    assert data['feature_preview'] is None
+
+
+def test_preview_radar_custom_slot(client: TestClient, session: Session):
+    """Custom radar slot requires custom_distance."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    # Find the custom slot (last radar slot, distance=null)
+    inv = client.get(f'/games/{game.id}/inventory').json()
+    custom_idx = None
+    for slot in inv['radar_slots']:
+        if slot['distance'] is None:
+            custom_idx = slot['slot_index']
+    assert custom_idx is not None
+
+    # Without custom_distance → 422
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={'question_type': 'radar', 'slot_index': custom_idx, 'lat': 0.5, 'lng': 0.5},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 422
+
+    # With custom_distance → 200
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={
+            'question_type': 'radar',
+            'slot_index': custom_idx,
+            'lat': 0.5,
+            'lng': 0.5,
+            'custom_distance': 5000,
+        },
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 200
+
+
+def test_preview_thermometer(client: TestClient, session: Session):
+    """Thermometer preview returns a bisector line."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={
+            'question_type': 'thermometer',
+            'slot_index': 0,
+            'lat': 0.4,
+            'lng': 0.4,
+            'end_lat': 0.6,
+            'end_lng': 0.6,
+        },
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['boundary']['type'] in ('LineString', 'MultiLineString', 'Polygon')
+    assert data['feature_preview'] is None
+
+
+def test_preview_thermometer_missing_end(client: TestClient, session: Session):
+    """Thermometer preview without end coords returns 422."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={'question_type': 'thermometer', 'slot_index': 0, 'lat': 0.5, 'lng': 0.5},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 422
+
+
+def _setup_feature_preview_game(
+    client: TestClient, session: Session
+) -> tuple[Game, Player, Player]:
+    """Create a seeking game with features inside the default game map boundary.
+
+    Default game map is (0,0)→(1,1). Features at (0.2, 0.2) and (0.8, 0.8).
+    Seeker at (0.3, 0.3) — close to but not on top of feature A.
+    """
+    gm = create_game_map(session)
+    feat_a = create_map_feature(
+        session, name='Hospital A', stable_id='hosp_a', shape=Point(0.2, 0.2)
+    )
+    feat_b = create_map_feature(
+        session, name='Hospital B', stable_id='hosp_b', shape=Point(0.8, 0.8)
+    )
+    create_game_map_feature(session, gm.id, feat_a.id)
+    create_game_map_feature(session, gm.id, feat_b.id)
+
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.id, 0.3, 0.3)
+    _report_location(client, game.id, hider.id, 0.7, 0.7)
+    return game, hider, seeker
+
+
+def test_preview_matching(client: TestClient, session: Session):
+    """Matching preview returns boundary + feature_preview."""
+    game, hider, seeker = _setup_feature_preview_game(client, session)
+    slot_idx = _get_matching_slot_index(client, game, 'hospital')
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={
+            'question_type': 'matching',
+            'slot_index': slot_idx,
+            'lat': 0.3,
+            'lng': 0.3,
+        },
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['boundary'] is not None
+    assert data['feature_preview'] is not None
+    assert 'feature_id' in data['feature_preview']
+    assert 'name' in data['feature_preview']
+    assert 'distance' in data['feature_preview']
+
+
+def test_preview_measuring(client: TestClient, session: Session):
+    """Measuring preview returns boundary + feature_preview."""
+    game, hider, seeker = _setup_feature_preview_game(client, session)
+    slot_idx = _get_measuring_slot_index(client, game, 'hospital')
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={
+            'question_type': 'measuring',
+            'slot_index': slot_idx,
+            'lat': 0.3,
+            'lng': 0.3,
+        },
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['boundary'] is not None
+    assert data['feature_preview'] is not None
+
+
+def test_preview_either_role(client: TestClient, session: Session):
+    """Both hider and seeker can call the preview endpoint."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    params = {'question_type': 'radar', 'slot_index': 0, 'lat': 0.5, 'lng': 0.5}
+
+    resp_seeker = client.get(
+        f'/games/{game.id}/questions/preview', params=params, headers=_headers(seeker.id)
+    )
+    resp_hider = client.get(
+        f'/games/{game.id}/questions/preview', params=params, headers=_headers(hider.id)
+    )
+    assert resp_seeker.status_code == 200
+    assert resp_hider.status_code == 200
+
+
+def test_preview_invalid_slot(client: TestClient, session: Session):
+    """Invalid slot_index returns 422."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={'question_type': 'radar', 'slot_index': 999, 'lat': 0.5, 'lng': 0.5},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 422
+
+
+def test_preview_no_side_effects(client: TestClient, session: Session):
+    """Preview does not create questions or mutate inventory."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+
+    session_db = get_session()
+    count_stmt = select(func.count()).select_from(Question).where(Question.game_id == game.id)
+    q_count_before = session_db.scalar(count_stmt)
+
+    client.get(
+        f'/games/{game.id}/questions/preview',
+        params={'question_type': 'radar', 'slot_index': 0, 'lat': 0.5, 'lng': 0.5},
+        headers=_headers(seeker.id),
+    )
+
+    q_count_after = session_db.scalar(count_stmt)
+    assert q_count_before == q_count_after

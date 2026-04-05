@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from geojson_pydantic import Point as GeoJSONPoint
 from shapely.geometry import Point as ShapelyPoint
 
@@ -42,6 +42,7 @@ from hideandseek.logic.ask import (
     ask_thermometer,
     lock_in_thermometer,
 )
+from hideandseek.logic.preview import preview_question
 from hideandseek.models.game import Game, Player
 from hideandseek.models.types import (
     PushEventType,
@@ -51,6 +52,11 @@ from hideandseek.models.types import (
 from hideandseek.queries.location import create_location_update
 from hideandseek.queries.questions import has_unanswered_question
 from hideandseek.schemas.request import AskQuestionRequest
+from hideandseek.schemas.response import (
+    FeaturePreviewResponse,
+    PreviewQuestionResponse,
+    geom_or_none,
+)
 from hideandseek.tasks.game_timers import auto_answer_question
 from hideandseek.tasks.push import send_push
 from hideandseek.validators import (
@@ -231,6 +237,68 @@ def ask_measuring_question(
     )
 
     emit_gameplay(QuestionAskedEvent.from_question(question))
+
+
+# ── Preview ─────────────────────────────────────────────────────────────
+
+
+@router.get('/questions/preview')
+def preview_question_endpoint(
+    question_type: QuestionType = Query(description='Question type to preview.'),
+    slot_index: int = Query(description='0-based inventory slot index.'),
+    lat: float = Query(description='Seeker latitude.'),
+    lng: float = Query(description='Seeker longitude.'),
+    custom_distance: float | None = Query(
+        default=None, description='Required for custom slots (distance=null).'
+    ),
+    end_lat: float | None = Query(default=None, description='Thermometer end latitude.'),
+    end_lng: float | None = Query(default=None, description='Thermometer end longitude.'),
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> PreviewQuestionResponse:
+    """Preview the dividing boundary for a question configuration.
+
+    Read-only — does not create a question or consume inventory. Returns the
+    geometry that separates the two possible answer outcomes (e.g. the radar
+    circle, thermometer bisector, or Voronoi cell edge).
+    """
+    location = ShapelyPoint(lng, lat)
+
+    seeker_location_end: ShapelyPoint | None = None
+    if question_type == QuestionType.thermometer:
+        if end_lat is None or end_lng is None:
+            raise HTTPException(
+                status_code=422,
+                detail='end_lat and end_lng are required for thermometer preview.',
+            )
+        seeker_location_end = ShapelyPoint(end_lng, end_lat)
+
+    slot = validate_slot_request(slot_index, custom_distance, game, question_type)
+
+    try:
+        result = preview_question(
+            question_type=question_type,
+            game=game,
+            slot=slot,
+            location=location,
+            custom_distance=custom_distance,
+            seeker_location_end=seeker_location_end,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    boundary_geojson = geom_or_none(result.boundary)
+    assert boundary_geojson is not None
+
+    feature_preview = None
+    if result.feature_id is not None:
+        feature_preview = FeaturePreviewResponse(
+            feature_id=result.feature_id,
+            name=result.feature_name or '',
+            distance=result.feature_distance or 0.0,
+        )
+
+    return PreviewQuestionResponse(boundary=boundary_geojson, feature_preview=feature_preview)
 
 
 # ── Lock-in and answer ───────────────────────────────────────────────────

@@ -428,6 +428,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/questions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Question Endpoint
+         * @description Preview the dividing boundary for a question configuration.
+         *
+         *     Read-only — does not create a question or consume inventory. Returns the
+         *     geometry that separates the two possible answer outcomes (e.g. the radar
+         *     circle, thermometer bisector, or Voronoi cell edge).
+         */
+        get: operations["preview_question_endpoint_games__game_id__questions_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/questions/thermometer/{question_id}/lock-in": {
         parameters: {
             query?: never;
@@ -709,6 +733,27 @@ export interface components {
             hiding_zone: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
             /** Entries */
             entries: components["schemas"]["EndgameExclusionEntryResponse"][];
+        };
+        /**
+         * FeaturePreviewResponse
+         * @description Preview of the nearest/containing feature for a matching or measuring question.
+         */
+        FeaturePreviewResponse: {
+            /**
+             * Feature Id
+             * @description Stable identifier of the resolved feature.
+             */
+            feature_id: string;
+            /**
+             * Name
+             * @description Human-readable name of the feature.
+             */
+            name: string;
+            /**
+             * Distance
+             * @description Distance in convention units from the query location.
+             */
+            distance: number;
         };
         /**
          * GameResponse
@@ -1248,6 +1293,24 @@ export interface components {
             number,
             number
         ];
+        /**
+         * PreviewQuestionResponse
+         * @description Boundary geometry and optional feature info for a question preview.
+         */
+        PreviewQuestionResponse: {
+            /**
+             * Boundary
+             * @description GeoJSON dividing line/curve between the two possible answer outcomes.
+             */
+            boundary: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
+            /** @description Resolved feature info. Present for matching and measuring question types. */
+            feature_preview?: components["schemas"]["FeaturePreviewResponse"] | null;
+        };
+        /**
+         * QuestionType
+         * @enum {string}
+         */
+        QuestionType: "radar" | "thermometer" | "matching" | "measuring";
         /**
          * RemovePlayerRequest
          * @description Body for DELETE /games/{game_id}/players/{player_id}.
@@ -2127,6 +2190,55 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_question_endpoint_games__game_id__questions_preview_get: {
+        parameters: {
+            query: {
+                /** @description Question type to preview. */
+                question_type: components["schemas"]["QuestionType"];
+                /** @description 0-based inventory slot index. */
+                slot_index: number;
+                /** @description Seeker latitude. */
+                lat: number;
+                /** @description Seeker longitude. */
+                lng: number;
+                /** @description Required for custom slots (distance=null). */
+                custom_distance?: number | null;
+                /** @description Thermometer end latitude. */
+                end_lat?: number | null;
+                /** @description Thermometer end longitude. */
+                end_lng?: number | null;
+            };
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewQuestionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

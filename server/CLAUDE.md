@@ -198,6 +198,24 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
 # → answer: "closer" (hider nearer to end) or "farther" (hider nearer to start)
 ```
 
+### Question preview
+
+```bash
+# Preview the boundary for a radar question (either role)
+curl -s "localhost:8000/games/<game_id>/questions/preview?question_type=radar&slot_index=3&lat=47.6&lng=-122.3" \
+  -H "X-Player-Id: $PLAYER_ID" -H "X-Player-Secret: $SECRET"
+# → { "boundary": { "type": "LineString", ... }, "feature_preview": null }
+
+# Preview thermometer (requires end coords)
+curl -s "localhost:8000/games/<game_id>/questions/preview?question_type=thermometer&slot_index=0&lat=47.6&lng=-122.3&end_lat=47.7&end_lng=-122.2" \
+  -H "X-Player-Id: $PLAYER_ID" -H "X-Player-Secret: $SECRET"
+
+# Preview matching (returns feature_preview with resolved feature)
+curl -s "localhost:8000/games/<game_id>/questions/preview?question_type=matching&slot_index=0&lat=47.6&lng=-122.3" \
+  -H "X-Player-Id: $PLAYER_ID" -H "X-Player-Secret: $SECRET"
+# → { "boundary": { ... }, "feature_preview": { "feature_id": "...", "name": "...", "distance": 1234.5 } }
+```
+
 ### Checking results
 
 ```bash
@@ -249,6 +267,7 @@ src/hideandseek/
   logic/                                # Business logic (session-free)
     ask.py                              # Question creation (radar, thermometer, matching, measuring)
     answer.py                           # Answer computation, exclusion accumulation, veto, abandon
+    preview.py                          # Question preview boundary computation (read-only)
     resolution.py                       # Feature resolution strategy, answer computation helpers
     endgame.py                          # Hiding zone radius, endgame exclusions, candidate stations
     lobby.py                            # Game creation, join, color, removal + emit() calls
@@ -318,6 +337,7 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
   Routers bridge API↔Python (extract coords from geojson-pydantic, construct shapely). Response schemas bridge Python↔API (`mapping()` in `from_model()` methods). The column types bridge Python↔DB automatically. When mixing Geography and Geometry columns in a query (e.g., `ST_Contains` on a Geography column), cast to Geometry explicitly.
 - **Question lifecycle layers**: Questions follow a layered pattern: `validators.py` (pure HTTP validation — raises or returns) → `logic/` (business orchestration — inventory mutation, question creation, answer computation; no HTTP concerns, no session access) → `routers/questions.py` (thin HTTP glue — validate, call logic, schedule auto-answer, push, return response). `resolution.py` provides feature resolution strategy (containment vs nearest) used by `logic/`. Logic submodules: `logic/ask.py` (question creation + `lock_in_thermometer`), `logic/answer.py` (answer computation + `veto_immediate` + `schedule_veto` + `abandon_question`). Question status: `asked` → `in_progress` (thermometer only) → `answerable` → `answered`, `vetoed`, or `abandoned`. Veto is a hider action (`POST /questions/{qid}/veto`) that skips answer computation — no exclusion zone, no hider location snapshot. Vetoed questions don't block new questions. Scheduled veto (`?scheduled=true`) sets a flag instead of vetoing immediately — the auto-answer task checks `scheduled_veto` and vetoes at timer expiry. The hider can still answer normally before the timer to override. The `scheduled_veto` field is server-only (not in any response schema) so seekers never see it. Abandon is a seeker action (`POST /questions/{qid}/abandon`) — the seeker drops an unwanted question immediately. No answer, no exclusion zone, no hider location needed. Can abandon `answerable` or `in_progress` questions. The ask is consumed (ask_count stays incremented).
 - **Per-type ask endpoints**: Each question type has its own `POST` endpoint (`/questions/radar`, `/questions/thermometer`, `/questions/matching`, `/questions/measuring`). All use a unified `AskQuestionRequest` body (`slot_index`, `location`, optional `custom_distance`). The URL path determines `question_type`; `slot_index` identifies the inventory slot. Seeker `location` is recorded as a `LocationUpdate` and used directly as the seeker's position. Answer endpoints remain unified.
+- **Question preview** (`GET /questions/preview`): Read-only endpoint returning the dividing boundary line for a question configuration. Query params: `question_type`, `slot_index`, `lat`, `lng`, optional `custom_distance`, optional `end_lat`/`end_lng` (thermometer). Returns `PreviewQuestionResponse` with GeoJSON `boundary` (LineString/MultiLineString) + optional `feature_preview` (matching/measuring). Auth: either role (`get_player_in_game`). No side effects. Boundary functions live in `exclusion.py` (`boundary_radar`, `boundary_thermometer`, `boundary_matching`, `boundary_measuring`); business orchestration in `logic/preview.py` (`preview_question`). Key distinction: exclusion functions return filled polygons (zones), boundary functions return lines (dividers).
 - **Role-gated endpoint split**: Endpoints are split by role (see `design/game-state-split.md`). Principles: role = access control only (determines *whether* you can call an endpoint, never *what* you get back), fixed response shapes (no conditional field nulling), default-deny on shared endpoints. The split:
   - **Shared** (any player): `GET /games/{id}` (slim game state with inventory — slots grouped by type with ask counts, no `hider_station_id`).
   - **Seeker-only** (403 for hiders): `GET /games/{id}/endgame-exclusions`, `GET /games/{id}/candidate-stations`.

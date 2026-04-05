@@ -352,6 +352,18 @@ class FeaturePreviewResponse(BaseModel):
     distance: float = Field(description='Distance in convention units from the query location.')
 
 
+class PreviewQuestionResponse(BaseModel):
+    """Boundary geometry and optional feature info for a question preview."""
+
+    boundary: GeoJSONGeometry = Field(
+        description='GeoJSON dividing line/curve between the two possible answer outcomes.'
+    )
+    feature_preview: FeaturePreviewResponse | None = Field(
+        default=None,
+        description='Resolved feature info. Present for matching and measuring question types.',
+    )
+
+
 # ── Questions ─────────────────────────────────────────────────────────────────
 
 

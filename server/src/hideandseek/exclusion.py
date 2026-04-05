@@ -1,9 +1,14 @@
-"""Exclusion geometry — computes regions of the game map where the hider cannot be.
+"""Exclusion and boundary geometry for question zones.
 
-Each question type produces an exclusion zone (a geometry within the game map polygon).
-The client subtracts these zones from the visible map to narrow down the hider's location.
+**Exclusion functions** (``exclude_*``) compute filled polygons representing regions of
+the game map where the hider cannot be.  The client subtracts these zones from the
+visible map to narrow down the hider's location.
 
-All functions accept and return WGS84 (EPSG:4326) geometries. Metric operations
+**Boundary functions** (``boundary_*``) compute the *dividing line* between the two
+possible answer outcomes — the answer-agnostic geometry shown during question preview.
+They return a line/ring, not a filled zone.
+
+All functions accept and return WGS84 (EPSG:4326) geometries.  Metric operations
 (buffering, Voronoi) are performed in a local azimuthal equidistant projection centered
 on the geometry's centroid, then projected back to WGS84.
 """
@@ -13,6 +18,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from pyproj import Transformer
 from shapely import MultiPoint, Point, voronoi_polygons
@@ -80,22 +86,15 @@ def exclude_measuring(
         return game_map.intersection(combined)
 
 
-def exclude_matching(
+def _voronoi_seeker_cell(
     game_map: BaseGeometry,
     seeker_poi: BaseGeometry,
     other_pois: Sequence[BaseGeometry],
-    *,
-    same: bool,
-) -> BaseGeometry:
-    """Exclusion zone for a matching question using Voronoi partitioning.
+) -> tuple[BaseGeometry, BaseGeometry, _VoronoiProjection]:
+    """Shared Voronoi helper — returns (local_seeker_cell, local_map, projection).
 
-    Computes Voronoi cells for the seeker's POI and all other POIs of the same category.
-    Each cell contains the region of space closer to that POI than any other.
-
-    - SAME (same=True): the hider matched the seeker's POI. Exclude everything outside
-      the seeker's Voronoi cell (hider must be in the same cell).
-    - DIFFERENT (same=False): the hider matched a different POI. Exclude the seeker's
-      Voronoi cell (hider must be in a different cell).
+    Projects to a local AEQD plane, computes Voronoi cells, and identifies the cell
+    containing the seeker's POI centroid.
     """
     centroid = game_map.centroid
     proj = f'+proj=aeqd +lat_0={centroid.y} +lon_0={centroid.x} +datum=WGS84 +units=m'
@@ -118,8 +117,36 @@ def exclude_matching(
     if seeker_cell is None:
         raise RuntimeError("No Voronoi cell containing seeker's POI was found")
 
+    return seeker_cell, local_map, _VoronoiProjection(to_local, to_wgs)
+
+
+@dataclass
+class _VoronoiProjection:
+    to_local: Any  # Transformer.transform callable
+    to_wgs: Any
+
+
+def exclude_matching(
+    game_map: BaseGeometry,
+    seeker_poi: BaseGeometry,
+    other_pois: Sequence[BaseGeometry],
+    *,
+    same: bool,
+) -> BaseGeometry:
+    """Exclusion zone for a matching question using Voronoi partitioning.
+
+    Computes Voronoi cells for the seeker's POI and all other POIs of the same category.
+    Each cell contains the region of space closer to that POI than any other.
+
+    - SAME (same=True): the hider matched the seeker's POI. Exclude everything outside
+      the seeker's Voronoi cell (hider must be in the same cell).
+    - DIFFERENT (same=False): the hider matched a different POI. Exclude the seeker's
+      Voronoi cell (hider must be in a different cell).
+    """
+    seeker_cell, local_map, vp = _voronoi_seeker_cell(game_map, seeker_poi, other_pois)
+
     result = local_map.difference(seeker_cell) if same else local_map.intersection(seeker_cell)
-    return transform(to_wgs, result)
+    return transform(vp.to_wgs, result)
 
 
 def exclude_thermometer(
@@ -220,3 +247,57 @@ def compute_endgame_exclusions(
         )
 
     return EndgameExclusionResult(hiding_zone=hiding_zone, entries=entries)
+
+
+# ── Preview boundaries ───────────────────────────────────────────────────
+#
+# Answer-agnostic dividing lines — the geometry that separates the two
+# possible answer outcomes for a question configuration.
+
+
+def boundary_radar(game_map: BaseGeometry, location: Point, radius_m: float) -> BaseGeometry:
+    """Dividing circle for a radar question preview.
+
+    Returns the circle ring at the given radius, clipped to the game map boundary.
+    """
+    circle = _buffer(location, radius_m)
+    return game_map.intersection(circle.boundary)
+
+
+def boundary_thermometer(
+    game_map: BaseGeometry, seeker_start: Point, seeker_end: Point
+) -> BaseGeometry:
+    """Perpendicular bisector for a thermometer question preview.
+
+    The bisector divides the plane into the half closer to the start position
+    and the half closer to the end position.
+    """
+    return boundary_matching(game_map, seeker_end, [seeker_start])
+
+
+def boundary_matching(
+    game_map: BaseGeometry,
+    seeker_poi: BaseGeometry,
+    other_pois: Sequence[BaseGeometry],
+) -> BaseGeometry:
+    """Voronoi cell edge for a matching question preview.
+
+    Returns the boundary of the seeker's Voronoi cell, clipped to the game map.
+    """
+    seeker_cell, local_map, vp = _voronoi_seeker_cell(game_map, seeker_poi, other_pois)
+    clipped_cell = local_map.intersection(seeker_cell)
+    return transform(vp.to_wgs, clipped_cell.boundary)
+
+
+def boundary_measuring(
+    game_map: BaseGeometry,
+    distance_m: float,
+    pois: Sequence[BaseGeometry],
+) -> BaseGeometry:
+    """Buffer ring(s) for a measuring question preview.
+
+    Returns the boundary of the unioned buffer circles around each POI at the
+    seeker's measured distance, clipped to the game map.
+    """
+    combined = unary_union([_buffer(poi, distance_m) for poi in pois])
+    return game_map.intersection(combined.boundary)

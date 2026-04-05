@@ -5,6 +5,10 @@ from __future__ import annotations
 from shapely import Point, Polygon
 
 from hideandseek.exclusion import (
+    boundary_matching,
+    boundary_measuring,
+    boundary_radar,
+    boundary_thermometer,
     exclude_matching,
     exclude_measuring,
     exclude_radar,
@@ -115,3 +119,65 @@ def test_measuring_hider_farther():
     assert result.contains(Point(0, 0))
     # A far point should NOT be excluded
     assert not result.contains(Point(0.09, 0.09))
+
+
+# ── boundary_radar ──────────────────────────────────────────────────────────
+
+
+def test_boundary_radar_is_line():
+    """Radar boundary is a line (ring), not a filled polygon."""
+    result = boundary_radar(GAME_MAP, Point(0, 0), 1000)
+    assert not result.is_empty
+    # Boundary should be 1-dimensional (line), not 2-dimensional (polygon)
+    assert result.geom_type in ('LinearRing', 'LineString', 'MultiLineString')
+
+
+def test_boundary_radar_within_game_map():
+    """Radar boundary is clipped to the game map."""
+    result = boundary_radar(GAME_MAP, Point(0, 0), 1000)
+    assert GAME_MAP.contains(result) or GAME_MAP.covers(result)
+
+
+# ── boundary_thermometer ────────────────────────────────────────────────────
+
+
+def test_boundary_thermometer_is_line():
+    """Thermometer boundary (perpendicular bisector) is a line."""
+    start = Point(-0.02, 0)
+    end = Point(0.02, 0)
+    result = boundary_thermometer(GAME_MAP, start, end)
+    assert not result.is_empty
+    assert result.geom_type in ('LinearRing', 'LineString', 'MultiLineString')
+
+
+def test_boundary_thermometer_bisects():
+    """The bisector separates start-half from end-half."""
+    start = Point(-0.02, 0)
+    end = Point(0.02, 0)
+    result = boundary_thermometer(GAME_MAP, start, end)
+    # The midpoint of start and end should be very close to the boundary
+    midpoint = Point(0, 0)
+    assert result.distance(midpoint) < 1e-6
+
+
+# ── boundary_matching ───────────────────────────────────────────────────────
+
+
+def test_boundary_matching_is_line():
+    """Matching boundary (Voronoi cell edge) is a line."""
+    seeker_poi = Point(-0.03, 0)
+    other_pois = [Point(0.03, 0)]
+    result = boundary_matching(GAME_MAP, seeker_poi, other_pois)
+    assert not result.is_empty
+    assert result.geom_type in ('LinearRing', 'LineString', 'MultiLineString')
+
+
+# ── boundary_measuring ──────────────────────────────────────────────────────
+
+
+def test_boundary_measuring_is_line():
+    """Measuring boundary (buffer ring) is a line."""
+    pois = [Point(0, 0)]
+    result = boundary_measuring(GAME_MAP, 5000, pois)
+    assert not result.is_empty
+    assert result.geom_type in ('LinearRing', 'LineString', 'MultiLineString')

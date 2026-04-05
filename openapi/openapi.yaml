@@ -901,6 +901,111 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/preview:
+    get:
+      tags:
+      - questions
+      summary: Preview Question Endpoint
+      description: "Preview the dividing boundary for a question configuration.\n\n\
+        Read-only \u2014 does not create a question or consume inventory. Returns\
+        \ the\ngeometry that separates the two possible answer outcomes (e.g. the\
+        \ radar\ncircle, thermometer bisector, or Voronoi cell edge)."
+      operationId: preview_question_endpoint_games__game_id__questions_preview_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: question_type
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/QuestionType'
+          description: Question type to preview.
+        description: Question type to preview.
+      - name: slot_index
+        in: query
+        required: true
+        schema:
+          type: integer
+          description: 0-based inventory slot index.
+          title: Slot Index
+        description: 0-based inventory slot index.
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+          description: Seeker latitude.
+          title: Lat
+        description: Seeker latitude.
+      - name: lng
+        in: query
+        required: true
+        schema:
+          type: number
+          description: Seeker longitude.
+          title: Lng
+        description: Seeker longitude.
+      - name: custom_distance
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Required for custom slots (distance=null).
+          title: Custom Distance
+        description: Required for custom slots (distance=null).
+      - name: end_lat
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Thermometer end latitude.
+          title: End Lat
+        description: Thermometer end latitude.
+      - name: end_lng
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Thermometer end longitude.
+          title: End Lng
+        description: Thermometer end longitude.
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewQuestionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/questions/thermometer/{question_id}/lock-in:
     post:
       tags:
@@ -1412,6 +1517,28 @@ components:
       title: EndgameExclusionsResponse
       description: "Endgame exclusion view \u2014 hiding zone geometry and per-question\
         \ intersected exclusions."
+    FeaturePreviewResponse:
+      properties:
+        feature_id:
+          type: string
+          title: Feature Id
+          description: Stable identifier of the resolved feature.
+        name:
+          type: string
+          title: Name
+          description: Human-readable name of the feature.
+        distance:
+          type: number
+          title: Distance
+          description: Distance in convention units from the query location.
+      type: object
+      required:
+      - feature_id
+      - name
+      - distance
+      title: FeaturePreviewResponse
+      description: Preview of the nearest/containing feature for a matching or measuring
+        question.
     GameResponse:
       properties:
         id:
@@ -2211,6 +2338,49 @@ components:
       type: array
       maxItems: 3
       minItems: 3
+    PreviewQuestionResponse:
+      properties:
+        boundary:
+          oneOf:
+          - $ref: '#/components/schemas/Point'
+          - $ref: '#/components/schemas/MultiPoint'
+          - $ref: '#/components/schemas/LineString'
+          - $ref: '#/components/schemas/MultiLineString'
+          - $ref: '#/components/schemas/Polygon'
+          - $ref: '#/components/schemas/MultiPolygon'
+          - $ref: '#/components/schemas/GeometryCollection'
+          title: Boundary
+          description: GeoJSON dividing line/curve between the two possible answer
+            outcomes.
+          discriminator:
+            propertyName: type
+            mapping:
+              GeometryCollection: '#/components/schemas/GeometryCollection'
+              LineString: '#/components/schemas/LineString'
+              MultiLineString: '#/components/schemas/MultiLineString'
+              MultiPoint: '#/components/schemas/MultiPoint'
+              MultiPolygon: '#/components/schemas/MultiPolygon'
+              Point: '#/components/schemas/Point'
+              Polygon: '#/components/schemas/Polygon'
+        feature_preview:
+          anyOf:
+          - $ref: '#/components/schemas/FeaturePreviewResponse'
+          - type: 'null'
+          description: Resolved feature info. Present for matching and measuring question
+            types.
+      type: object
+      required:
+      - boundary
+      title: PreviewQuestionResponse
+      description: Boundary geometry and optional feature info for a question preview.
+    QuestionType:
+      type: string
+      enum:
+      - radar
+      - thermometer
+      - matching
+      - measuring
+      title: QuestionType
     RemovePlayerRequest:
       properties:
         new_host_id:

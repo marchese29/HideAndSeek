@@ -8,7 +8,7 @@ from datetime import datetime
 from geojson_pydantic import Point
 from pydantic import BaseModel, Field
 
-from hideandseek.models.types import FeatureCategory, PlayerColor, PlayerRole
+from hideandseek.models.types import PlayerColor, PlayerRole
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 
@@ -119,15 +119,3 @@ class RemovePlayerRequest(BaseModel):
             'Player ID to transfer host to. Required when the host leaves and other players remain.'
         ),
     )
-
-
-class PreviewQuestionRequest(BaseModel):
-    """Preview the nearest feature for a matching/measuring question without consuming inventory."""
-
-    question_type: str = Field(description='matching or measuring.')
-    category: FeatureCategory = Field(description='Feature category to preview.')
-    feature_class: int | None = Field(
-        default=None,
-        description='Feature class tier for classed categories.',
-    )
-    location: Point = Field(description='Current position as a GeoJSON Point.')
