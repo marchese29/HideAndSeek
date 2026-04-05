@@ -5,9 +5,26 @@ import EventSource, { type EventSourceEvent } from 'react-native-sse';
 import { API_BASE_URL } from '@/api/client';
 import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { HiderGameState, PlayerLocationDelta, SeekerGameState } from '@/types/gameplay';
+import type {
+  HiderGameState,
+  HiderQuestionAnsweredDelta,
+  PlayerLocationDelta,
+  QuestionAbandonedDelta,
+  QuestionAnswerableDelta,
+  QuestionAskedDelta,
+  QuestionVetoedDelta,
+  SeekerGameState,
+  SeekerQuestionAnsweredDelta,
+} from '@/types/gameplay';
 
-type GameplayEventType = 'game_state' | 'player_location';
+type GameplayEventType =
+  | 'game_state'
+  | 'player_location'
+  | 'question_asked'
+  | 'question_answerable'
+  | 'question_answered'
+  | 'question_vetoed'
+  | 'question_abandoned';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
@@ -77,6 +94,48 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           useGameplayStore
             .getState()
             .updatePlayerLocation(data.id, data.coordinates, data.timestamp);
+        }
+      });
+
+      es.addEventListener('question_asked', (event) => {
+        const data = parseData<QuestionAskedDelta>(event);
+        if (data) {
+          useGameplayStore.getState().setActiveQuestion(data);
+        }
+      });
+
+      es.addEventListener('question_answerable', (event) => {
+        const data = parseData<QuestionAnswerableDelta>(event);
+        if (data) {
+          useGameplayStore.getState().updateQuestionAnswerable(data);
+        }
+      });
+
+      es.addEventListener('question_answered', (event) => {
+        if (role === 'hider') {
+          const data = parseData<HiderQuestionAnsweredDelta>(event);
+          if (data) {
+            useGameplayStore.getState().applyQuestionAnswered(data);
+          }
+        } else {
+          const data = parseData<SeekerQuestionAnsweredDelta>(event);
+          if (data) {
+            useGameplayStore.getState().applyQuestionAnswered(data);
+          }
+        }
+      });
+
+      es.addEventListener('question_vetoed', (event) => {
+        const data = parseData<QuestionVetoedDelta>(event);
+        if (data) {
+          useGameplayStore.getState().clearActiveQuestion();
+        }
+      });
+
+      es.addEventListener('question_abandoned', (event) => {
+        const data = parseData<QuestionAbandonedDelta>(event);
+        if (data) {
+          useGameplayStore.getState().clearActiveQuestion();
         }
       });
     }

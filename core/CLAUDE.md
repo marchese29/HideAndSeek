@@ -41,7 +41,7 @@ src/hideandseek_core/
 
 ## Broadcast
 
-`broadcast/events.py` defines frozen dataclasses for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left). Each question event has a `from_question()` static constructor. Parameter dataclasses (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`) carry type-specific question parameters.
+`broadcast/events.py` defines frozen dataclasses for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left). Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter dataclasses (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`) carry type-specific question parameters.
 
 `broadcast/emit.py` provides:
 - `publish_sse(channel, event_type, data, *, required)` — low-level Redis publish (used by both core's `emit_gameplay` and server's lobby `emit`)

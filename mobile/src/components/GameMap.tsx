@@ -110,7 +110,7 @@ export function GameMap({ role, state }: GameMapProps) {
           isSelf={isSelf}
           isHider={isHider}
           isStale={isStale}
-          zIndex={index}
+          zIndex={1000 + index}
           stackCount={stackCount}
         />
       ))}

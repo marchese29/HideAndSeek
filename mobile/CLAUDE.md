@@ -35,6 +35,7 @@ src/
     schema.d.ts                # Auto-generated from OpenAPI — DO NOT EDIT
     client.ts                  # openapi-fetch wrapper + X-Player-Id + X-Player-Secret middleware
     queryClient.ts             # TanStack Query client instance
+    questions.ts               # Question action API calls (answer, veto, abandon, lock-in)
   store.ts                     # Zustand store (session + push token state)
   stores/
     gameplayStore.ts           # Zustand store for gameplay state (SSE-driven, not persisted)
@@ -43,6 +44,7 @@ src/
   constants/
     colors.ts                  # PlayerColor → hex mapping
   hooks/
+    useCountdownTimer.ts       # Countdown timer to an ISO deadline (question deadline display)
     useGameplayEvents.ts       # Gameplay SSE (role-aware endpoint, hydrates GameplayStore)
     useGameTimer.ts            # 1s-tick timer: countdown (hiding) / elapsed (seeking)
     useLocationTracking.ts     # Foreground GPS tracking + POST /location + optimistic self update
@@ -51,6 +53,7 @@ src/
   utils/
     geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary
     locationPermission.ts      # requestLocationPermission() — foreground permission helper
+    time.ts                    # parseUtc() — server timestamp parsing (shared by timer hooks)
   components/                  # Reusable UI components
     GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins)
     BoundaryOverlay.tsx        # Game boundary polygon (outline-only stroke)
@@ -59,9 +62,15 @@ src/
     PlayerPin.tsx              # Player map pin (animated — colored circle + initial + self ring + hider badge + stack count)
     LocationDeniedBanner.tsx   # Warning banner when location permission denied
     ConnectionDot.tsx          # SSE connection status dot (green/red) — used in lobby
+    question-banner/           # Question Banner (active question state for both roles)
+      index.ts                 # Barrel export
+      QuestionBanner.tsx       # Container — slide animation, role dispatch
+      SeekerBanner.tsx         # Seeker: preview/active/thermometer states + abandon/lock-in
+      HiderBanner.tsx          # Hider: pre-lock-in (gray) / answerable (urgency-colored) + answer/veto
+      BannerCountdown.tsx      # MM:SS countdown to question deadline
     utility-belt/              # Gameplay utility belt (Cycle A)
       index.ts                 # Barrel export
-      UtilityBelt.tsx          # Container — three-section layout (left/center/right)
+      UtilityBelt.tsx          # Container — banner + three-section main row
       StateAction.tsx          # Role/phase action button (icon + label)
       GameTimer.tsx            # Live timer with connection-colored background
       BeltActions.tsx          # Info + leave icon buttons
@@ -170,6 +179,10 @@ Both hooks:
 
 - **`game_state`**: Full snapshot on connect — `hydrate()` replaces entire `GameplayStore` state.
 - **`player_location`**: Real-time position delta — `updatePlayerLocation()` patches a single player's coordinates in the `hiders`/`seekers` arrays without replacing the full state. For seeker state, only `seekers` is patched (hiders are `RosterPlayer[]` with no coordinates).
+- **`question_asked`**: New question — `setActiveQuestion()` constructs the role-appropriate active question from the delta. `question_deadline` comes from the server (authoritative). Clears `previewQuestion`.
+- **`question_answerable`**: Thermometer lock-in — `updateQuestionAnswerable()` updates status and sets `question_deadline`.
+- **`question_answered`**: Terminal — `applyQuestionAnswered()` clears `active_question`, appends to `question_history`, updates `total_exclusion` (seeker). Payload differs by role (hider gets answer details, seeker gets exclusion geometry).
+- **`question_vetoed`** / **`question_abandoned`**: Terminal — `clearActiveQuestion()` sets `active_question = null`.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 
 ## Conventions

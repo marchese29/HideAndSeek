@@ -130,7 +130,11 @@ def ask_radar_question(
         question_status=QuestionStatus.answerable,
     )
 
-    emit_gameplay(QuestionAskedEvent.from_question(question))
+    emit_gameplay(
+        QuestionAskedEvent.from_question(
+            question, base_question_delay_min=game.base_question_delay_min
+        )
+    )
 
 
 @router.post('/questions/thermometer', status_code=204)
@@ -161,7 +165,11 @@ def ask_thermometer_question(
         question_status=QuestionStatus.in_progress,
     )
 
-    emit_gameplay(QuestionAskedEvent.from_question(question))
+    emit_gameplay(
+        QuestionAskedEvent.from_question(
+            question, base_question_delay_min=game.base_question_delay_min
+        )
+    )
 
 
 @router.post('/questions/matching', status_code=204)
@@ -197,7 +205,11 @@ def ask_matching_question(
         question_status=QuestionStatus.answerable,
     )
 
-    emit_gameplay(QuestionAskedEvent.from_question(question))
+    emit_gameplay(
+        QuestionAskedEvent.from_question(
+            question, base_question_delay_min=game.base_question_delay_min
+        )
+    )
 
 
 @router.post('/questions/measuring', status_code=204)
@@ -236,7 +248,11 @@ def ask_measuring_question(
         question_status=QuestionStatus.answerable,
     )
 
-    emit_gameplay(QuestionAskedEvent.from_question(question))
+    emit_gameplay(
+        QuestionAskedEvent.from_question(
+            question, base_question_delay_min=game.base_question_delay_min
+        )
+    )
 
 
 # ── Preview ─────────────────────────────────────────────────────────────
@@ -328,7 +344,11 @@ def lock_in_question(
         question_id=str(question.id),
     )
 
-    emit_gameplay(QuestionAnswerableEvent.from_question(question))
+    emit_gameplay(
+        QuestionAnswerableEvent.from_question(
+            question, base_question_delay_min=game.base_question_delay_min
+        )
+    )
 
 
 @router.post(

@@ -63,6 +63,104 @@ export interface PlayerLocationDelta {
   timestamp: string;
 }
 
+// ── Question Event Parameters ───────────────────────────────────────────────
+
+export interface RadarEventParams {
+  radius: number;
+}
+
+export interface ThermometerEventParams {
+  min_travel: number;
+}
+
+export interface FeatureEventParams {
+  category: string;
+  feature_class: number | null;
+  source: string;
+  seeker_feature_id: string;
+  seeker_feature_name: string;
+  seeker_distance: number;
+}
+
+export type QuestionEventParams = RadarEventParams | ThermometerEventParams | FeatureEventParams;
+
+// ── Question SSE Delta Events ───────────────────────────────────────────────
+
+/** Wire format of a question_asked SSE delta event. */
+export interface QuestionAskedDelta {
+  question_id: string;
+  question_type: string;
+  status: string;
+  asked_by: string;
+  slot_index: number;
+  parameters: QuestionEventParams;
+  seeker_location_start: GeoJSONPoint;
+  asked_at: string;
+  ask_count: number;
+  sequence: number;
+  question_deadline: string | null;
+}
+
+/** Wire format of a question_answerable SSE delta event (thermometer lock-in). */
+export interface QuestionAnswerableDelta {
+  question_id: string;
+  question_type: string;
+  status: string;
+  seeker_location_end: GeoJSONPoint;
+  question_deadline: string;
+}
+
+/** Wire format of a question_answered SSE delta event (hider channel). */
+export interface HiderQuestionAnsweredDelta {
+  question_id: string;
+  question_type: string;
+  status: string;
+  answer: string;
+  slot_index: number;
+  asked_by: string;
+  answered_at: string | null;
+  hider_location: GeoJSONPoint | null;
+  hider_feature_id: string | null;
+  hider_feature_name: string | null;
+  hider_distance: number | null;
+}
+
+/** Wire format of a question_answered SSE delta event (seeker channel). */
+export interface SeekerQuestionAnsweredDelta {
+  question_id: string;
+  question_type: string;
+  status: string;
+  answer: string;
+  slot_index: number;
+  asked_by: string;
+  exclusion: GeoJSONGeometry | null;
+  total_exclusion: GeoJSONGeometry | null;
+  answered_at: string | null;
+}
+
+/** Wire format of a question_vetoed SSE delta event. */
+export interface QuestionVetoedDelta {
+  question_id: string;
+  question_type: string;
+  slot_index: number;
+}
+
+/** Wire format of a question_abandoned SSE delta event. */
+export interface QuestionAbandonedDelta {
+  question_id: string;
+  question_type: string;
+  slot_index: number;
+}
+
+// ── Question Preview (populated by selection UI) ────────────────────────────
+
+/** Seeker preview state — set by question selection UI, read by banner. */
+export interface PreviewQuestion {
+  question_type: string;
+  slot_index: number;
+  parameters: QuestionEventParams;
+}
+
 // ── Stops ────────────────────────────────────────────────────────────────────
 
 export interface StopResponse {

@@ -50,11 +50,13 @@ export const BeltActions = memo(function BeltActions({ disabled }: BeltActionsPr
 
 const styles = StyleSheet.create({
   container: {
-    width: 90,
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingRight: 8,
     gap: 8,
+    backgroundColor: '#2C3E50',
+    padding: 8,
+    borderTopLeftRadius: 10,
+    borderBottomLeftRadius: 10,
   },
   button: {
     padding: 8,

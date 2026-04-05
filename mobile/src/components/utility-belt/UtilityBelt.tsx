@@ -17,7 +17,6 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
   const stationElectionStatus =
     role === 'hider' ? (state as HiderGameState).station_election_status : undefined;
   const disabled = !connected;
-
   return (
     <View style={styles.container}>
       {/* Left: State action + Timer */}
@@ -51,22 +50,23 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: '#2C3E50',
-    borderTopWidth: 1,
-    borderTopColor: '#1A252F',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    backgroundColor: '#C5D4DE',
   },
   left: {
-    width: 110,
+    width: 120,
     alignItems: 'stretch',
     justifyContent: 'center',
     gap: 4,
+    backgroundColor: '#2C3E50',
+    padding: 8,
+    borderTopRightRadius: 10,
+    borderBottomRightRadius: 10,
   },
   leftItem: {
     alignItems: 'stretch',
   },
   center: {
     flex: 1,
+    paddingVertical: 8,
   },
 });

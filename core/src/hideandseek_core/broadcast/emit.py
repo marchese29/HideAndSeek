@@ -141,6 +141,9 @@ def emit_gameplay(event: GameplayEvent) -> None:
                 'asked_at': event.asked_at.isoformat(),
                 'ask_count': event.ask_count,
                 'sequence': event.sequence,
+                'question_deadline': event.question_deadline.isoformat()
+                if event.question_deadline
+                else None,
             }
             _both_channels(game_id, GameplayEventType.question_asked, data)
 
@@ -150,6 +153,7 @@ def emit_gameplay(event: GameplayEvent) -> None:
                 'question_type': event.question_type,
                 'status': event.status,
                 'seeker_location_end': event.seeker_location_end.model_dump(mode='json'),
+                'question_deadline': event.question_deadline.isoformat(),
             }
             _both_channels(game_id, GameplayEventType.question_answerable, data)
 

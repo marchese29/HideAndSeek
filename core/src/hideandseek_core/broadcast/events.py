@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from geojson_pydantic import Point as GeoJSONPoint
@@ -102,9 +102,15 @@ class QuestionAskedEvent:
     asked_at: datetime
     ask_count: int
     sequence: int
+    question_deadline: datetime | None
 
     @staticmethod
-    def from_question(question: Question) -> QuestionAskedEvent:
+    def from_question(question: Question, *, base_question_delay_min: int) -> QuestionAskedEvent:
+        deadline = (
+            question.answerable_at + timedelta(minutes=base_question_delay_min)
+            if question.answerable_at
+            else None
+        )
         return QuestionAskedEvent(
             game_id=question.game_id,
             question_id=question.id,
@@ -117,6 +123,7 @@ class QuestionAskedEvent:
             asked_at=question.asked_at,
             ask_count=question.ask_count,
             sequence=question.sequence,
+            question_deadline=deadline,
         )
 
 
@@ -129,16 +136,21 @@ class QuestionAnswerableEvent:
     question_type: str
     status: str
     seeker_location_end: GeoJSONPoint
+    question_deadline: datetime
 
     @staticmethod
-    def from_question(question: Question) -> QuestionAnswerableEvent:
+    def from_question(
+        question: Question, *, base_question_delay_min: int
+    ) -> QuestionAnswerableEvent:
         assert question.seeker_location_end is not None
+        assert question.answerable_at is not None
         return QuestionAnswerableEvent(
             game_id=question.game_id,
             question_id=question.id,
             question_type=question.question_type,
             status=question.status,
             seeker_location_end=GeoJSONPoint(**mapping(question.seeker_location_end)),
+            question_deadline=question.answerable_at + timedelta(minutes=base_question_delay_min),
         )
 
 

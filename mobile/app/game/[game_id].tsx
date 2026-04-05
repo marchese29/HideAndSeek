@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
+import { QuestionBanner } from '@/components/question-banner';
 import { UtilityBelt } from '@/components/utility-belt';
 import { useGameplayEvents } from '@/hooks/useGameplayEvents';
 import { useLocationTracking } from '@/hooks/useLocationTracking';
@@ -36,7 +37,13 @@ export default function GameplayScreen() {
 
       {permissionDenied && <LocationDeniedBanner />}
 
-      {role && state && <UtilityBelt role={role} state={state} connected={connected} />}
+      {/* Banner + belt wrapper: banner overlays above the belt */}
+      {role && state && (
+        <View style={styles.beltWrapper}>
+          <QuestionBanner role={role} gameId={game_id} connected={connected} />
+          <UtilityBelt role={role} state={state} connected={connected} />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -44,12 +51,15 @@ export default function GameplayScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#2C3E50',
   },
   loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#ECF0F1',
+  },
+  beltWrapper: {
+    backgroundColor: '#C5D4DE',
   },
 });

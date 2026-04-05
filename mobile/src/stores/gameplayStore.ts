@@ -1,6 +1,20 @@
 import { create } from 'zustand';
 
-import type { GamePlayer, GeoJSONPoint, HiderGameState, SeekerGameState } from '@/types/gameplay';
+import type {
+  GamePlayer,
+  GeoJSONPoint,
+  HiderActiveQuestion,
+  HiderGameState,
+  HiderQuestionAnsweredDelta,
+  HiderQuestionHistoryEntry,
+  PreviewQuestion,
+  QuestionAnswerableDelta,
+  QuestionAskedDelta,
+  SeekerActiveQuestion,
+  SeekerGameState,
+  SeekerQuestionAnsweredDelta,
+  SeekerQuestionHistoryEntry,
+} from '@/types/gameplay';
 
 interface SelfLocation {
   coordinates: GeoJSONPoint;
@@ -17,13 +31,25 @@ interface GameplayActions {
   reset: () => void;
   updateSelfLocation: (coordinates: GeoJSONPoint, timestamp: string) => void;
   updatePlayerLocation: (playerId: string, coordinates: GeoJSONPoint, timestamp: string) => void;
+  setActiveQuestion: (delta: QuestionAskedDelta) => void;
+  updateQuestionAnswerable: (delta: QuestionAnswerableDelta) => void;
+  clearActiveQuestion: () => void;
+  applyQuestionAnswered: (delta: HiderQuestionAnsweredDelta | SeekerQuestionAnsweredDelta) => void;
+  setPreviewQuestion: (preview: PreviewQuestion | null) => void;
 }
 
-type GameplayStore = GameplayData & { selfLocation: SelfLocation | null } & GameplayActions;
+type GameplayStore = GameplayData & {
+  selfLocation: SelfLocation | null;
+  previewQuestion: PreviewQuestion | null;
+} & GameplayActions;
 
-const initialState: GameplayData & { selfLocation: SelfLocation | null } = {
+const initialState: GameplayData & {
+  selfLocation: SelfLocation | null;
+  previewQuestion: PreviewQuestion | null;
+} = {
   status: 'connecting',
   selfLocation: null,
+  previewQuestion: null,
 };
 
 /** Patch a single player's coordinates in a GamePlayer array. */
@@ -57,6 +83,53 @@ function findSelfTimestamp(
   return self?.timestamp ?? null;
 }
 
+/** Build a hider history entry from asked + answered delta data. */
+function buildHiderHistoryEntry(
+  asked: HiderActiveQuestion,
+  delta: HiderQuestionAnsweredDelta,
+): HiderQuestionHistoryEntry {
+  return {
+    question_id: delta.question_id,
+    sequence: 0, // Not available from deltas; corrected on next hydrate
+    question_type: delta.question_type,
+    status: delta.status,
+    ask_count: 0, // Not available from deltas; corrected on next hydrate
+    asked_by: delta.asked_by,
+    asked_at: '', // Not available from deltas; corrected on next hydrate
+    slot_index: delta.slot_index,
+    parameters: { type: 'radar', radius: 0 } as never, // Placeholder; corrected on next hydrate
+    seeker_location_start: { type: 'Point', coordinates: [0, 0] },
+    seeker_location_end: null,
+    answer: delta.answer,
+    answered_at: delta.answered_at,
+    hider_location: delta.hider_location,
+    hider_feature_id: delta.hider_feature_id,
+    hider_feature_name: delta.hider_feature_name,
+    hider_distance: delta.hider_distance,
+  };
+}
+
+/** Build a seeker history entry from asked + answered delta data. */
+function buildSeekerHistoryEntry(
+  asked: SeekerActiveQuestion,
+  delta: SeekerQuestionAnsweredDelta,
+): SeekerQuestionHistoryEntry {
+  return {
+    question_id: delta.question_id,
+    sequence: 0,
+    question_type: delta.question_type,
+    status: delta.status,
+    ask_count: 0,
+    asked_by: delta.asked_by,
+    asked_at: '',
+    slot_index: delta.slot_index,
+    answer: delta.answer,
+    exclusion: delta.exclusion,
+    total_exclusion: delta.total_exclusion,
+    answered_at: delta.answered_at,
+  };
+}
+
 export const useGameplayStore = create<GameplayStore>()((set) => ({
   ...initialState,
 
@@ -72,9 +145,21 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
       }
 
       if (role === 'hider') {
-        return { status: 'connected', role: 'hider', state: data as HiderGameState, selfLocation };
+        return {
+          status: 'connected',
+          role: 'hider',
+          state: data as HiderGameState,
+          selfLocation,
+          previewQuestion: null,
+        };
       }
-      return { status: 'connected', role: 'seeker', state: data as SeekerGameState, selfLocation };
+      return {
+        status: 'connected',
+        role: 'seeker',
+        state: data as SeekerGameState,
+        selfLocation,
+        previewQuestion: null,
+      };
     });
   },
 
@@ -102,5 +187,111 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
       if (seekers === state.seekers) return prev;
       return { ...prev, state: { ...state, seekers } };
     });
+  },
+
+  setActiveQuestion: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+
+      if (prev.role === 'hider') {
+        const activeQuestion: HiderActiveQuestion = {
+          question_id: delta.question_id,
+          question_type: delta.question_type,
+          status: delta.status,
+          asked_by: delta.asked_by,
+          slot_index: delta.slot_index,
+          question_deadline: delta.question_deadline,
+        };
+        return {
+          ...prev,
+          state: { ...prev.state, active_question: activeQuestion },
+          previewQuestion: null,
+        };
+      }
+
+      const activeQuestion: SeekerActiveQuestion = {
+        question_id: delta.question_id,
+        question_type: delta.question_type,
+        status: delta.status,
+        slot_index: delta.slot_index,
+        question_deadline: delta.question_deadline,
+      };
+      return {
+        ...prev,
+        state: { ...prev.state, active_question: activeQuestion },
+        previewQuestion: null,
+      };
+    });
+  },
+
+  updateQuestionAnswerable: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || !prev.state.active_question) return prev;
+
+      if (prev.role === 'hider') {
+        const activeQuestion: HiderActiveQuestion = {
+          ...prev.state.active_question,
+          status: delta.status,
+          question_deadline: delta.question_deadline,
+        };
+        return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+      }
+
+      const activeQuestion: SeekerActiveQuestion = {
+        ...prev.state.active_question,
+        status: delta.status,
+        question_deadline: delta.question_deadline,
+      };
+      return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+    });
+  },
+
+  clearActiveQuestion: () => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+      if (prev.role === 'hider') {
+        return { ...prev, state: { ...prev.state, active_question: null } };
+      }
+      return { ...prev, state: { ...prev.state, active_question: null } };
+    });
+  },
+
+  applyQuestionAnswered: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+
+      if (prev.role === 'hider') {
+        const state = prev.state;
+        const hiderDelta = delta as HiderQuestionAnsweredDelta;
+        const history = state.active_question
+          ? [...state.question_history, buildHiderHistoryEntry(state.active_question, hiderDelta)]
+          : state.question_history;
+        return {
+          ...prev,
+          state: { ...state, active_question: null, question_history: history },
+        };
+      }
+
+      const seekerDelta = delta as SeekerQuestionAnsweredDelta;
+      const history = prev.state.active_question
+        ? [
+            ...prev.state.question_history,
+            buildSeekerHistoryEntry(prev.state.active_question, seekerDelta),
+          ]
+        : prev.state.question_history;
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          active_question: null,
+          question_history: history,
+          total_exclusion: seekerDelta.total_exclusion ?? prev.state.total_exclusion,
+        },
+      };
+    });
+  },
+
+  setPreviewQuestion: (preview) => {
+    set({ previewQuestion: preview });
   },
 }));

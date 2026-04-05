@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { parseUtc } from '@/utils/time';
+
 /**
  * Formats milliseconds as HH:MM:SS. Always includes hours for consistent
  * display width (supports up to 99:59:59).
@@ -15,16 +17,6 @@ function formatTime(ms: number): string {
   const ss = String(seconds).padStart(2, '0');
 
   return `${hh}:${mm}:${ss}`;
-}
-
-/**
- * Parse a server timestamp as UTC. The server stores naive UTC datetimes
- * (timestamp without time zone) and Pydantic serializes them without a
- * trailing 'Z'. JavaScript's Date() treats such strings as local time,
- * so we append 'Z' when missing to force UTC interpretation.
- */
-function parseUtc(iso: string): number {
-  return new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime();
 }
 
 /**

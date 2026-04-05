@@ -452,6 +452,7 @@ class TestQuestionAskedEvent:
 
     def test_enriched_fields(self, session: Session) -> None:
         game, _hider, seeker, _ds = _create_active_game(session)
+        now = datetime.now(UTC)
         q = create_question(
             session,
             game.id,
@@ -459,15 +460,23 @@ class TestQuestionAskedEvent:
             asked_by=seeker.id,
             sequence=3,
             ask_count=2,
+            answerable_at=now,
         )
 
-        event = QuestionAskedEvent.from_question(q)
+        event = QuestionAskedEvent.from_question(
+            q, base_question_delay_min=game.base_question_delay_min
+        )
         assert event.sequence == 3
         assert event.ask_count == 2
         assert event.asked_at == q.asked_at
         assert event.seeker_location_start.type == 'Point'
         assert isinstance(event.parameters, RadarEventParams)
         assert event.parameters.radius == 1.0
+        assert event.question_deadline is not None
+        assert q.answerable_at is not None
+        assert event.question_deadline == q.answerable_at + timedelta(
+            minutes=game.base_question_delay_min
+        )
 
 
 class TestBuildEventParams:
