@@ -7,13 +7,13 @@ from shapely.geometry import Polygon
 from sqlalchemy import JSON, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeometry
-from hideandseek.models.types import DistanceConvention, MapSize
+from hideandseek_models.base import Base
+from hideandseek_models.geo_types import ShapelyGeometry
+from hideandseek_models.types import DistanceConvention, MapSize
 
 if TYPE_CHECKING:
-    from hideandseek.models.game import Game
-    from hideandseek.models.transit import TransitDataset
+    from hideandseek_models.game import Game
+    from hideandseek_models.transit import TransitDataset
 
 
 class GameMap(Base):

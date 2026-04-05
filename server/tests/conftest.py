@@ -19,16 +19,17 @@ from testcontainers.postgres import PostgresContainer
 import hideandseek.db as db_module
 from hideandseek.db import _session_var, session_dependency
 from hideandseek.main import app
-from hideandseek.models.base import Base
-from hideandseek.models.game import Game, Player
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.inventory import InventorySlot
-from hideandseek.models.location import LocationUpdate
-from hideandseek.models.map_feature import GameMapFeature, MapFeature
-from hideandseek.models.question import Question
-from hideandseek.models.question_params import RadarParams, ThermometerParams
-from hideandseek.models.transit import Stop, TransitDataset
-from hideandseek.models.types import (
+from hideandseek.queries.features import get_map_feature_categories
+from hideandseek_models.base import Base
+from hideandseek_models.game import Game, Player
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.inventory import InventorySlot
+from hideandseek_models.location import LocationUpdate
+from hideandseek_models.map_feature import GameMapFeature, MapFeature
+from hideandseek_models.question import Question
+from hideandseek_models.question_params import RadarParams, ThermometerParams
+from hideandseek_models.transit import Stop, TransitDataset
+from hideandseek_models.types import (
     MATCHING_CATEGORIES,
     MEASURING_CATEGORIES,
     FeatureCategory,
@@ -39,7 +40,6 @@ from hideandseek.models.types import (
     QuestionType,
     category_key,
 )
-from hideandseek.queries.features import get_map_feature_categories
 
 TEST_SECRET = 'test-secret-for-unit-tests'
 TEST_SECRET_HASH = hashlib.sha256(TEST_SECRET.encode()).hexdigest()

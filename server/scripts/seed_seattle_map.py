@@ -18,10 +18,10 @@ from sqlalchemy import select
 
 from hideandseek.conventions import get_default_inventory
 from hideandseek.db import create_db_and_tables, get_session, session_scope
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.map_feature import GameMapFeature, MapFeature
-from hideandseek.models.transit import TransitDataset
-from hideandseek.models.types import DistanceConvention, FeatureCategory, MapSize
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.map_feature import GameMapFeature, MapFeature
+from hideandseek_models.transit import TransitDataset
+from hideandseek_models.types import DistanceConvention, FeatureCategory, MapSize
 
 # ---------------------------------------------------------------------------
 # Polygon coordinates extracted from KML (lon, lat pairs)

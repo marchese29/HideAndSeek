@@ -7,17 +7,17 @@ from shapely.geometry import LineString, Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from hideandseek.models.game import Game, Player
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.transit import Route, RouteStop, Stop
-from hideandseek.models.types import (
+from hideandseek.queries.games import set_hider_station
+from hideandseek_models.game import Game, Player
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.transit import Route, RouteStop, Stop
+from hideandseek_models.types import (
     GameStatus,
     PlayerColor,
     PlayerRole,
     RouteType,
     StationElectionStatus,
 )
-from hideandseek.queries.games import set_hider_station
 from tests.conftest import TEST_SECRET, create_game, create_game_map, create_player
 
 

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from hideandseek.models.device_token import DeviceToken
-from hideandseek.models.game import Game, Player
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.inventory import InventorySlot
-from hideandseek.models.location import LocationUpdate
-from hideandseek.models.map_feature import GameMapFeature, MapFeature
-from hideandseek.models.question import Question
-from hideandseek.models.question_params import FeatureQuestionParams, RadarParams, ThermometerParams
-from hideandseek.models.transit import Route, RouteStop, Stop, TransitDataset
-from hideandseek.models.types import (
+from hideandseek_models.device_token import DeviceToken
+from hideandseek_models.game import Game, Player
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.inventory import InventorySlot
+from hideandseek_models.location import LocationUpdate
+from hideandseek_models.map_feature import GameMapFeature, MapFeature
+from hideandseek_models.question import Question
+from hideandseek_models.question_params import FeatureQuestionParams, RadarParams, ThermometerParams
+from hideandseek_models.transit import Route, RouteStop, Stop, TransitDataset
+from hideandseek_models.types import (
     MAX_PLAYERS,
     DistrictClass,
     FeatureCategory,

@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from hideandseek.models.base import Base
-from hideandseek.models.types import FeatureCategory
+from hideandseek_models.base import Base
+from hideandseek_models.types import FeatureCategory
 
 if TYPE_CHECKING:
-    from hideandseek.models.question import Question
+    from hideandseek_models.question import Question
 
 
 class RadarParams(Base):

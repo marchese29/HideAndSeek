@@ -9,13 +9,13 @@ from shapely.geometry.base import BaseGeometry
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeography, ShapelyGeometry
-from hideandseek.models.types import QuestionStatus, QuestionType
+from hideandseek_models.base import Base
+from hideandseek_models.geo_types import ShapelyGeography, ShapelyGeometry
+from hideandseek_models.types import QuestionStatus, QuestionType
 
 if TYPE_CHECKING:
-    from hideandseek.models.game import Game, Player
-    from hideandseek.models.question_params import (
+    from hideandseek_models.game import Game, Player
+    from hideandseek_models.question_params import (
         FeatureQuestionParams,
         RadarParams,
         ThermometerParams,

@@ -13,18 +13,18 @@ import uuid
 from fastapi import HTTPException
 from shapely.geometry import Point
 
-from hideandseek.models.game import Game, Player
-from hideandseek.models.inventory import InventorySlot
-from hideandseek.models.question import Question
-from hideandseek.models.transit import Stop
-from hideandseek.models.types import (
+from hideandseek.queries.location import get_latest_location_for_player
+from hideandseek.queries.questions import get_question, get_slot_by_index
+from hideandseek.queries.stops import get_stop_by_id
+from hideandseek_models.game import Game, Player
+from hideandseek_models.inventory import InventorySlot
+from hideandseek_models.question import Question
+from hideandseek_models.transit import Stop
+from hideandseek_models.types import (
     QuestionStatus,
     QuestionType,
     StationElectionStatus,
 )
-from hideandseek.queries.location import get_latest_location_for_player
-from hideandseek.queries.questions import get_question, get_slot_by_index
-from hideandseek.queries.stops import get_stop_by_id
 
 
 def validate_slot_request(

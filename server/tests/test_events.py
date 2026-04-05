@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from hideandseek.db import _session_var
-from hideandseek.models.types import GameStatus, PlayerColor, PlayerRole
+from hideandseek_models.types import GameStatus, PlayerColor, PlayerRole
 from tests.conftest import TEST_SECRET, create_game, create_player
 
 

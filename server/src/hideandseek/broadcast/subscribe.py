@@ -9,11 +9,11 @@ from collections.abc import AsyncGenerator
 import structlog
 
 from hideandseek.db import get_session, session_scope
-from hideandseek.models.game import Game, Player
-from hideandseek.models.types import GameplayEventType, LobbyEventType
 from hideandseek.queries.game_state import build_hider_game_state, build_seeker_game_state
 from hideandseek.redis_client import get_async_redis
 from hideandseek.schemas.response import GameResponse
+from hideandseek_models.game import Game, Player
+from hideandseek_models.types import GameplayEventType, LobbyEventType
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 

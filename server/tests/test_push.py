@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.orm import Session
 
-from hideandseek.models.device_token import DeviceToken
-from hideandseek.models.types import PlayerRole, PushEventType, TokenProvider
 from hideandseek.push import ApnsProvider, FcmProvider, PushService
 from hideandseek.queries.device_tokens import (
     delete_device_token,
     get_device_tokens_for_game,
     upsert_device_token,
 )
+from hideandseek_models.device_token import DeviceToken
+from hideandseek_models.types import PlayerRole, PushEventType, TokenProvider
 from tests.conftest import create_game, create_player
 
 # ── upsert_device_token ──────────────────────────────────────────────────────

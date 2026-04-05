@@ -9,13 +9,14 @@ import pytest
 from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
-from hideandseek.models.game import Game
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.location import LocationUpdate
-from hideandseek.models.question import Question
-from hideandseek.models.question_params import FeatureQuestionParams, RadarParams
-from hideandseek.models.transit import Stop
-from hideandseek.models.types import (
+from hideandseek.tasks.game_timers import auto_answer_question, transition_hiding_to_seeking
+from hideandseek_models.game import Game
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.location import LocationUpdate
+from hideandseek_models.question import Question
+from hideandseek_models.question_params import FeatureQuestionParams, RadarParams
+from hideandseek_models.transit import Stop
+from hideandseek_models.types import (
     FeatureCategory,
     GameStatus,
     PlayerRole,
@@ -23,7 +24,6 @@ from hideandseek.models.types import (
     QuestionType,
     StationElectionStatus,
 )
-from hideandseek.tasks.game_timers import auto_answer_question, transition_hiding_to_seeking
 from tests.conftest import (
     create_game,
     create_game_map,

@@ -22,7 +22,7 @@ from hideandseek.broadcast.events import (
     PlayerLocationEvent,
     PlayerUpdatedEvent,
 )
-from hideandseek.models.types import GameplayEventType, LobbyEventType, PlayerColor, PlayerRole
+from hideandseek_models.types import GameplayEventType, LobbyEventType, PlayerColor, PlayerRole
 from tests.conftest import create_game, create_player
 
 

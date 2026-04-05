@@ -8,8 +8,8 @@ import structlog
 from fastapi import Depends, Header, HTTPException, Path, Request
 
 from hideandseek.db import get_session
-from hideandseek.models.game import Game, Player
-from hideandseek.models.types import PlayerRole
+from hideandseek_models.game import Game, Player
+from hideandseek_models.types import PlayerRole
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 

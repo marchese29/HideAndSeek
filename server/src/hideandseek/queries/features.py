@@ -9,10 +9,10 @@ from shapely.geometry import Point
 from sqlalchemy import func, select
 
 from hideandseek.db import get_session
-from hideandseek.models.game import Game
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.map_feature import GameMapFeature, MapFeature
-from hideandseek.models.types import FeatureCategory
+from hideandseek_models.game import Game
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.map_feature import GameMapFeature, MapFeature
+from hideandseek_models.types import FeatureCategory
 
 
 def get_map_feature_categories(

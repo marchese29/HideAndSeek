@@ -23,8 +23,8 @@ from sqlalchemy import select
 
 from hideandseek.db import create_db_and_tables, get_session, session_scope
 from hideandseek.gtfs import parse_gtfs
-from hideandseek.models.transit import Route, RouteStop, Stop, TransitDataset
-from hideandseek.models.types import RouteType
+from hideandseek_models.transit import Route, RouteStop, Stop, TransitDataset
+from hideandseek_models.types import RouteType
 
 GTFS_URL = 'https://gtfs.sound.obaweb.org/prod/gtfs_puget_sound_consolidated.zip'
 

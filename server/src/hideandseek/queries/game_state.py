@@ -8,8 +8,6 @@ from geojson_pydantic import Point as GeoJSONPoint
 from geojson_pydantic import Polygon as GeoJSONPolygon
 from shapely.geometry import mapping
 
-from hideandseek.models.game import Game, Player
-from hideandseek.models.types import PlayerRole, QuestionStatus
 from hideandseek.queries.location import get_all_player_locations
 from hideandseek.queries.questions import (
     get_active_question,
@@ -35,6 +33,8 @@ from hideandseek.schemas.response import (
     geom_or_none,
     point_or_none,
 )
+from hideandseek_models.game import Game, Player
+from hideandseek_models.types import PlayerRole, QuestionStatus
 
 _TERMINAL_STATUSES = {QuestionStatus.answered, QuestionStatus.vetoed, QuestionStatus.abandoned}
 

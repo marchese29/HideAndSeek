@@ -13,7 +13,7 @@ from firebase_admin import credentials, initialize_app, messaging
 from firebase_admin.exceptions import FirebaseError
 
 from hideandseek.config import FcmConfig, PushConfig
-from hideandseek.models.types import PushEventType, TokenProvider
+from hideandseek_models.types import PushEventType, TokenProvider
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 

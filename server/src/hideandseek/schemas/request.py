@@ -8,7 +8,7 @@ from datetime import datetime
 from geojson_pydantic import Point
 from pydantic import BaseModel, Field
 
-from hideandseek.models.types import PlayerColor, PlayerRole
+from hideandseek_models.types import PlayerColor, PlayerRole
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 

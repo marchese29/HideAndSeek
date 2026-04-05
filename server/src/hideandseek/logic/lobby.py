@@ -5,12 +5,12 @@ from __future__ import annotations
 import uuid
 
 from hideandseek.broadcast import HostChangedEvent, PlayerJoinedEvent, PlayerLeftEvent, emit
-from hideandseek.models.game import Game, Player
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.types import MAX_PLAYERS, GameStatus, PlayerColor
 from hideandseek.queries.games import add_player, delete_player, update_game_status
 from hideandseek.queries.games import create_game as query_create_game
 from hideandseek.schemas.request import CreateGameRequest, JoinGameRequest
+from hideandseek_models.game import Game, Player
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.types import MAX_PLAYERS, GameStatus, PlayerColor
 
 
 def assign_color(game: Game) -> PlayerColor:

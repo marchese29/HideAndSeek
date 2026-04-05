@@ -19,10 +19,10 @@ from hideandseek.exclusion import (
     boundary_thermometer,
 )
 from hideandseek.logic.resolution import resolve_matching_feature, resolve_measuring_feature
-from hideandseek.models.game import Game
-from hideandseek.models.inventory import InventorySlot
-from hideandseek.models.types import DistanceConvention, QuestionType
 from hideandseek.queries.features import get_features_by_category
+from hideandseek_models.game import Game
+from hideandseek_models.inventory import InventorySlot
+from hideandseek_models.types import DistanceConvention, QuestionType
 
 
 @dataclass(frozen=True, slots=True)

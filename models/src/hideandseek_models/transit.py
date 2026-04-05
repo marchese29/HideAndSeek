@@ -7,9 +7,9 @@ from shapely.geometry import LineString, Point
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeography
-from hideandseek.models.types import RouteType
+from hideandseek_models.base import Base
+from hideandseek_models.geo_types import ShapelyGeography
+from hideandseek_models.types import RouteType
 
 
 class TransitDataset(Base):

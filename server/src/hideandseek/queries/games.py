@@ -13,10 +13,11 @@ from sqlalchemy import select
 
 from hideandseek.conventions import get_default_inventory
 from hideandseek.db import get_session
-from hideandseek.models.game import Game, Player
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.transit import Stop
-from hideandseek.models.types import (
+from hideandseek.queries.questions import create_inventory_slots
+from hideandseek_models.game import Game, Player
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.transit import Stop
+from hideandseek_models.types import (
     DistanceConvention,
     GameStatus,
     MapSize,
@@ -24,7 +25,6 @@ from hideandseek.models.types import (
     PlayerRole,
     StationElectionStatus,
 )
-from hideandseek.queries.questions import create_inventory_slots
 
 
 def generate_credentials() -> tuple[str, str]:

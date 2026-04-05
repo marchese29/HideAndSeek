@@ -8,12 +8,6 @@ from datetime import timedelta
 from shapely.geometry import MultiPoint, Point
 
 from hideandseek.logic.endgame import effective_hiding_zone_radius_m
-from hideandseek.models.game import Game
-from hideandseek.models.transit import Stop
-from hideandseek.models.types import (
-    PlayerRole,
-    StationElectionStatus,
-)
 from hideandseek.queries.location import get_latest_location_for_player
 from hideandseek.queries.stops import (
     all_hiders_within_radius,
@@ -21,6 +15,12 @@ from hideandseek.queries.stops import (
     get_stops_within_radius_of_all,
     get_stops_within_radius_of_any,
     validate_stop_playable,
+)
+from hideandseek_models.game import Game
+from hideandseek_models.transit import Stop
+from hideandseek_models.types import (
+    PlayerRole,
+    StationElectionStatus,
 )
 
 

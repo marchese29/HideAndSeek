@@ -12,10 +12,10 @@ from hideandseek.exclusion import (
     compute_endgame_exclusions,
     compute_hiding_zone,
 )
-from hideandseek.models.game import Game
-from hideandseek.models.transit import Stop
 from hideandseek.queries.questions import list_answered_questions_after_sequence
 from hideandseek.queries.stops import get_candidate_stations as query_candidate_stations
+from hideandseek_models.game import Game
+from hideandseek_models.transit import Stop
 
 
 def effective_hiding_zone_radius_m(game: Game) -> float:

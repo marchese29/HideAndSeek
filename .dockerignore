@@ -1,0 +1,15 @@
+# Only send what the Dockerfile needs
+*
+
+# Workspace root
+!pyproject.toml
+!uv.lock
+
+# Models package
+!models/pyproject.toml
+!models/src/
+
+# Server package
+!server/pyproject.toml
+!server/src/
+!server/scripts/

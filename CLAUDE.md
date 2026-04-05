@@ -4,8 +4,11 @@ Geographic "Hide and Seek" game — hiders use public transit to hide in a game 
 
 ## Monorepo Layout
 
+UV workspace with a root `pyproject.toml` and two Python packages (`models/`, `server/`). A single `uv.lock` at the root governs all dependencies.
+
+- `models/` — SQLAlchemy models package (`hideandseek-models`). See `models/CLAUDE.md`.
 - `mobile/` — Mobile app (React Native + Expo). See `mobile/CLAUDE.md`.
-- `server/` — Python FastAPI backend (UV). See `server/CLAUDE.md`.
+- `server/` — Python FastAPI backend (UV), depends on `hideandseek-models`. See `server/CLAUDE.md`.
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.
 - `design/` — AI-generated design artifacts. See `design/CLAUDE.md`.
 - `hooks/` — Git hooks (symlinked into `.git/hooks/`; see Setup below).
@@ -23,6 +26,7 @@ If you believe a commit genuinely does not require a CLAUDE.md update (e.g., a p
 
 CLAUDE.md files exist at:
 - `CLAUDE.md` (this file) — monorepo-wide conventions and workflow
+- `models/CLAUDE.md` — models package conventions
 - `mobile/CLAUDE.md` — mobile app build, architecture, conventions
 - `server/CLAUDE.md` — server commands, style, conventions
 - `openapi/CLAUDE.md` — how the spec is generated and used
@@ -32,10 +36,10 @@ CLAUDE.md files exist at:
 
 - Issue tracking: use `bd` (beads) CLI. Run `bd onboard` to get started.
 - Git hooks: `hooks/pre-commit` is the versioned pre-commit hook (server checks + OpenAPI regen + beads JSONL flush). It's symlinked into `.git/hooks/`. Beads installs its own shims for other hooks (`pre-push`, `post-merge`, `post-checkout`, `prepare-commit-msg`) directly in `.git/hooks/`. See Setup below.
-- The pre-commit hook runs server checks (lint, format, typecheck, test), regenerates `openapi/openapi.yaml` when `server/` files change, regenerates API types when `openapi/` changes, and runs mobile checks (lint + typecheck) when `mobile/` files change.
+- The pre-commit hook runs in dependency order: models checks → server checks → OpenAPI regen → API types regen → mobile checks. Models changes cascade to server checks and OpenAPI regen (server depends on models).
 - The OpenAPI regen step auto-stages the updated spec (`git add openapi/openapi.yaml`), so it's included in the commit automatically — no manual step needed.
 - Hook steps use `run_if_changed` with hash caching (`.git/hooks-cache/`) to skip work when staged content hasn't changed since the last successful run.
-- To add a new cached hook step: write a script in `hooks/`, then add a `run_if_changed` call in `hooks/pre-commit`.
+- To add a new cached hook step: write a script in `hooks/`, then add a `run_if_changed` call in `hooks/pre-commit`. Signature: `run_if_changed <cache_key> <skip_msg> <run_msg> <command> <path...>` — paths are listed after the command, supporting multiple trigger paths.
 - OpenAPI spec is the contract between server and mobile app — never edit it directly.
 
 ## Beads (Issue Tracking)
@@ -84,6 +88,9 @@ ln -sf ../../hooks/pre-commit .git/hooks/pre-commit  # target is relative to sym
 ## Quick Start
 
 ```bash
+# Models package (standalone lint + typecheck)
+cd models && uv run ruff check .     # Lint
+cd models && uv run pyright           # Type check
 
 # Server (Docker — preferred, runs PostGIS + Redis + Celery worker)
 docker compose up --build          # Start all 4 services (localhost:8000)

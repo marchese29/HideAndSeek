@@ -6,9 +6,9 @@ from shapely.geometry.base import BaseGeometry
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeography
-from hideandseek.models.types import FeatureCategory
+from hideandseek_models.base import Base
+from hideandseek_models.geo_types import ShapelyGeography
+from hideandseek_models.types import FeatureCategory
 
 
 class MapFeature(Base):

@@ -13,8 +13,12 @@ from hideandseek.broadcast.events import (
     ThermometerEventParams,
     build_event_params,
 )
-from hideandseek.models.question_params import FeatureQuestionParams
-from hideandseek.models.types import (
+from hideandseek.queries.game_state import (
+    build_hider_game_state,
+    build_seeker_game_state,
+)
+from hideandseek_models.question_params import FeatureQuestionParams
+from hideandseek_models.types import (
     FeatureCategory,
     GameStatus,
     PlayerColor,
@@ -22,10 +26,6 @@ from hideandseek.models.types import (
     QuestionStatus,
     QuestionType,
     StationElectionStatus,
-)
-from hideandseek.queries.game_state import (
-    build_hider_game_state,
-    build_seeker_game_state,
 )
 from tests.conftest import (
     create_game,

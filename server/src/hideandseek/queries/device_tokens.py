@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from hideandseek.db import get_session
-from hideandseek.models.device_token import DeviceToken
-from hideandseek.models.game import Player
-from hideandseek.models.types import PlayerRole, TokenProvider
+from hideandseek_models.device_token import DeviceToken
+from hideandseek_models.game import Player
+from hideandseek_models.types import PlayerRole, TokenProvider
 
 
 def upsert_device_token(

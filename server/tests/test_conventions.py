@@ -13,7 +13,7 @@ from hideandseek.conventions import (
     to_meters,
 )
 from hideandseek.logic.endgame import effective_hiding_zone_radius_m
-from hideandseek.models.types import DistanceConvention, MapSize
+from hideandseek_models.types import DistanceConvention, MapSize
 from tests.conftest import create_game, create_game_map
 
 # ── to_meters / from_meters ─────────────────────────────────────────────

@@ -7,12 +7,12 @@ from shapely import Point
 from hideandseek.conventions import from_meters
 from hideandseek.db import register
 from hideandseek.logic.resolution import resolve_matching_feature, resolve_measuring_feature
-from hideandseek.models.game import Game, Player
-from hideandseek.models.inventory import InventorySlot
-from hideandseek.models.question import Question
-from hideandseek.models.question_params import FeatureQuestionParams, RadarParams, ThermometerParams
-from hideandseek.models.types import QuestionStatus, QuestionType
 from hideandseek.queries.questions import get_question_count
+from hideandseek_models.game import Game, Player
+from hideandseek_models.inventory import InventorySlot
+from hideandseek_models.question import Question
+from hideandseek_models.question_params import FeatureQuestionParams, RadarParams, ThermometerParams
+from hideandseek_models.types import QuestionStatus, QuestionType
 
 
 def ask_radar(

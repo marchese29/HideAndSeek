@@ -12,10 +12,10 @@ from __future__ import annotations
 from shapely.geometry import Point
 
 from hideandseek.geo import distance_to_feature
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.map_feature import MapFeature
-from hideandseek.models.types import CONTAINMENT_CATEGORIES, FeatureCategory
 from hideandseek.queries.features import resolve_containing_feature, resolve_nearest_feature
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.map_feature import MapFeature
+from hideandseek_models.types import CONTAINMENT_CATEGORIES, FeatureCategory
 
 
 def resolve_matching_feature(

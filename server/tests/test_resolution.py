@@ -11,7 +11,7 @@ from hideandseek.logic.resolution import (
     resolve_matching_feature,
     resolve_measuring_feature,
 )
-from hideandseek.models.types import FeatureCategory, category_key
+from hideandseek_models.types import FeatureCategory, category_key
 from tests.conftest import (
     create_game_map,
     create_game_map_feature,

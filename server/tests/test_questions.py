@@ -8,9 +8,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from hideandseek.db import get_session
-from hideandseek.models.game import Game, Player
-from hideandseek.models.question import Question
-from hideandseek.models.types import (
+from hideandseek_models.game import Game, Player
+from hideandseek_models.question import Question
+from hideandseek_models.types import (
     DistanceConvention,
     GameStatus,
     PlayerRole,

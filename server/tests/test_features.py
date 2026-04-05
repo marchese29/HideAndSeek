@@ -6,12 +6,12 @@ from shapely.geometry import LineString, Point, Polygon
 from sqlalchemy.orm import Session
 
 from hideandseek.geo import distance_to_feature
-from hideandseek.models.types import FeatureCategory
 from hideandseek.queries.features import (
     get_map_feature_categories,
     resolve_containing_feature,
     resolve_nearest_feature,
 )
+from hideandseek_models.types import FeatureCategory
 from tests.conftest import (
     create_game_map,
     create_game_map_feature,

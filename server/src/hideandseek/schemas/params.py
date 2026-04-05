@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
-from hideandseek.models.types import QuestionType
+from hideandseek_models.types import QuestionType
 
 if TYPE_CHECKING:
-    from hideandseek.models.question import Question as QuestionModel
+    from hideandseek_models.question import Question as QuestionModel
 
 
 class RadarParamsResponse(BaseModel):

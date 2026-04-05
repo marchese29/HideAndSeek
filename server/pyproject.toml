@@ -22,7 +22,11 @@ dependencies = [
     "sqlalchemy>=2.0.46",
     "sse-starlette>=3.3.3",
     "firebase-admin>=7.3.0",
+    "hideandseek-models",
 ]
+
+[tool.uv.sources]
+hideandseek-models = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -53,7 +57,7 @@ suppress-none-returning = true
 
 [tool.ruff.lint.isort]
 force-single-line = false
-known-first-party = ["hideandseek"]
+known-first-party = ["hideandseek", "hideandseek_models"]
 
 [tool.pyright]
 pythonVersion = "3.12"

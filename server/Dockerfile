@@ -1,10 +1,22 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /app
+
+# Copy workspace root + member pyproject.toml files (for dependency resolution)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
-COPY src/ src/
-COPY scripts/ scripts/
+COPY models/pyproject.toml models/pyproject.toml
+COPY server/pyproject.toml server/pyproject.toml
+
+# Install third-party deps (cached layer — only changes when pyproject.toml or lockfile change)
+WORKDIR /app/server
+RUN uv sync --frozen --no-dev --no-install-project --no-install-workspace
+
+# Copy source for both packages
+COPY models/src/ /app/models/src/
+COPY server/src/ src/
+COPY server/scripts/ scripts/
+
+# Install workspace packages
 RUN uv sync --frozen --no-dev
 
 EXPOSE 8000

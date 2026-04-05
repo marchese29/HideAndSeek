@@ -11,12 +11,12 @@ from geojson_pydantic import Point as GeoJSONPoint
 from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
 from shapely.geometry import mapping
 
-from hideandseek.models.types import PlayerColor, PlayerRole, QuestionType
 from hideandseek.schemas.response import geom_or_none, point_or_none
+from hideandseek_models.types import PlayerColor, PlayerRole, QuestionType
 
 if TYPE_CHECKING:
-    from hideandseek.models.game import Game, Player
-    from hideandseek.models.question import Question
+    from hideandseek_models.game import Game, Player
+    from hideandseek_models.question import Question
 
 
 # ── Lobby events ─────────────────────────────────────────────────────────

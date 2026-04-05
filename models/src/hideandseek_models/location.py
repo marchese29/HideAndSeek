@@ -8,11 +8,11 @@ from shapely.geometry import Point
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from hideandseek.models.base import Base
-from hideandseek.models.geo_types import ShapelyGeography
+from hideandseek_models.base import Base
+from hideandseek_models.geo_types import ShapelyGeography
 
 if TYPE_CHECKING:
-    from hideandseek.models.game import Game, Player
+    from hideandseek_models.game import Game, Player
 
 
 class LocationUpdate(Base):

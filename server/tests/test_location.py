@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from hideandseek.models.types import GameStatus, PlayerRole
+from hideandseek_models.types import GameStatus, PlayerRole
 from tests.conftest import TEST_SECRET, create_game, create_player
 
 

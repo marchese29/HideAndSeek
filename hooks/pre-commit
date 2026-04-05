@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-commit hook: lint, test, and regenerate OpenAPI if server/ changed
+# Pre-commit hook: models → server → openapi → api-types → mobile
 #
 # Uses cached hashes of staged content so steps are skipped when
 # nothing has changed since the last successful run.
@@ -11,23 +11,34 @@ fi
 
 CACHE_DIR=".git/hooks-cache"
 
-# Run a command only if staged files under a path have changed since
-# the last successful run of that step.
+# Run a command only if staged files under one or more paths have changed
+# since the last successful run of that step.
 #
-# Usage: run_if_changed <cache_key> <path> <skip_msg> <run_msg> <command...>
+# Usage: run_if_changed <cache_key> <skip_msg> <run_msg> <command> <path...>
+#
+# Paths are listed AFTER the command. The grep pattern and git diff pathspec
+# are built from all trailing arguments.
 #
 # Returns the command's exit code, or 0 if skipped.
 run_if_changed() {
-    local cache_key="$1" path="$2" skip_msg="$3" run_msg="$4"
+    local cache_key="$1" skip_msg="$2" run_msg="$3" cmd="$4"
     shift 4
+    local paths=("$@")
 
-    if ! git diff --cached --name-only | grep -q "^${path}"; then
+    # Build grep pattern: "^path1/\|^path2/"
+    local grep_pattern=""
+    for p in "${paths[@]}"; do
+        [ -n "$grep_pattern" ] && grep_pattern+='\|'
+        grep_pattern+="^${p}"
+    done
+
+    if ! git diff --cached --name-only | grep -q "$grep_pattern"; then
         return 0
     fi
 
     local hash_file="$CACHE_DIR/$cache_key"
     local current_hash
-    current_hash=$(git diff --cached -- "$path" | shasum -a 256 | cut -d' ' -f1)
+    current_hash=$(git diff --cached -- "${paths[@]}" | shasum -a 256 | cut -d' ' -f1)
 
     if [ -f "$hash_file" ] && [ "$(cat "$hash_file")" = "$current_hash" ]; then
         echo "$skip_msg"
@@ -35,7 +46,7 @@ run_if_changed() {
     fi
 
     echo "$run_msg"
-    if "$@"; then
+    if "$cmd"; then
         mkdir -p "$CACHE_DIR"
         echo "$current_hash" > "$hash_file"
         return 0
@@ -44,26 +55,37 @@ run_if_changed() {
     fi
 }
 
-# --- Server checks ---
-run_if_changed "server-checks" "server/" \
+# --- Models checks ---
+run_if_changed "models-checks" \
+    "Models checks passed on this content — skipping." \
+    "Models code changed — running checks..." \
+    hooks/models-checks.sh \
+    "models/" || exit 1
+
+# --- Server checks (also triggered by models changes — server depends on models) ---
+run_if_changed "server-checks" \
     "Server checks passed on this content — skipping." \
     "Server code changed — running checks..." \
-    hooks/server-checks.sh || exit 1
+    hooks/server-checks.sh \
+    "server/" "models/" || exit 1
 
-# --- OpenAPI spec regen ---
-run_if_changed "openapi-regen" "server/" \
+# --- OpenAPI spec regen (also triggered by models changes) ---
+run_if_changed "openapi-regen" \
     "OpenAPI spec already up to date — skipping regen." \
     "Regenerating OpenAPI spec..." \
-    hooks/openapi-regen.sh || exit 1
+    hooks/openapi-regen.sh \
+    "server/" "models/" || exit 1
 
 # --- API types regen (OpenAPI → TypeScript) ---
-run_if_changed "api-types-regen" "openapi/" \
+run_if_changed "api-types-regen" \
     "API types already up to date — skipping." \
     "Regenerating API types from OpenAPI spec..." \
-    hooks/api-types-regen.sh || exit 1
+    hooks/api-types-regen.sh \
+    "openapi/" || exit 1
 
 # --- Mobile checks ---
-run_if_changed "mobile-checks" "mobile/" \
+run_if_changed "mobile-checks" \
     "Mobile checks passed on this content — skipping." \
     "Mobile code changed — running checks..." \
-    hooks/mobile-checks.sh || exit 1
+    hooks/mobile-checks.sh \
+    "mobile/" || exit 1

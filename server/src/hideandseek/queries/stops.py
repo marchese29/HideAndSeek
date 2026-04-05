@@ -13,9 +13,9 @@ from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
 
 from hideandseek.db import get_session
-from hideandseek.models.game import Game
-from hideandseek.models.transit import Stop
 from hideandseek.queries.questions import get_latest_total_exclusion
+from hideandseek_models.game import Game
+from hideandseek_models.transit import Stop
 
 
 def get_stop_by_id(stop_id: uuid.UUID) -> Stop | None:

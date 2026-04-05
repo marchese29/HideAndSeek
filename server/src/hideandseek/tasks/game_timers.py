@@ -27,14 +27,6 @@ from hideandseek.logic.station import (
     resolve_station_at_transition,
     resolve_station_fallback,
 )
-from hideandseek.models.types import (
-    GameStatus,
-    PlayerRole,
-    PushEventType,
-    QuestionStatus,
-    QuestionType,
-    StationElectionStatus,
-)
 from hideandseek.queries.games import (
     get_game_by_id,
     set_hider_station,
@@ -44,6 +36,14 @@ from hideandseek.queries.games import (
 from hideandseek.queries.location import get_latest_location_for_player
 from hideandseek.queries.questions import get_question
 from hideandseek.tasks.push import send_push
+from hideandseek_models.types import (
+    GameStatus,
+    PlayerRole,
+    PushEventType,
+    QuestionStatus,
+    QuestionType,
+    StationElectionStatus,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 

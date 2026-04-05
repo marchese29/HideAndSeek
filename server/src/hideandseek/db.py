@@ -49,7 +49,7 @@ def register[T](*objects: T) -> T:
 
 
 def create_db_and_tables(*, max_retries: int = 10) -> None:
-    import hideandseek.models  # noqa: F401, PLC0415 — registers all tables on metadata
+    import hideandseek_models  # noqa: F401, PLC0415 — registers all tables on metadata
 
     engine = get_engine()
     for attempt in range(max_retries):
@@ -64,7 +64,7 @@ def create_db_and_tables(*, max_retries: int = 10) -> None:
             logger.warning('db_connect_retry', attempt=attempt + 1, max_retries=max_retries)
             time.sleep(1)
 
-    from hideandseek.models.base import Base  # noqa: PLC0415
+    from hideandseek_models.base import Base  # noqa: PLC0415
 
     Base.metadata.create_all(engine)
 

@@ -26,7 +26,9 @@ services:
       retries: 5
 
   api:
-    build: ./server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     command: uv run uvicorn hideandseek.main:app --host 0.0.0.0 --reload
     ports:
       - "8000:8000"
@@ -35,7 +37,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       ENV: development
     volumes:
-      - ./server/src:/app/src
+      - ./server/src:/app/server/src
+      - ./models/src:/app/models/src
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,14 +52,17 @@ services:
       start_period: 10s
 
   worker:
-    build: ./server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     command: uv run celery -A hideandseek.celery_app worker --loglevel=info --beat
     environment:
       DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
       CELERY_BROKER_URL: redis://redis:6379/0
       ENV: development
     volumes:
-      - ./server/src:/app/src
+      - ./server/src:/app/server/src
+      - ./models/src:/app/models/src
     depends_on:
       postgres:
         condition: service_healthy

@@ -8,8 +8,8 @@ from datetime import UTC, datetime
 from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from hideandseek.models.base import Base
-from hideandseek.models.types import TokenProvider
+from hideandseek_models.base import Base
+from hideandseek_models.types import TokenProvider
 
 
 class DeviceToken(Base):

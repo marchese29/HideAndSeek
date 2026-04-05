@@ -25,7 +25,7 @@ from shapely import MultiPoint, Point, voronoi_polygons
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform, unary_union
 
-from hideandseek.models.question import Question
+from hideandseek_models.question import Question
 
 
 def _buffer(geom: BaseGeometry, radius_m: float) -> BaseGeometry:

@@ -7,8 +7,8 @@ import uuid
 from sqlalchemy import select
 
 from hideandseek.db import get_session
-from hideandseek.models.game_map import GameMap
-from hideandseek.models.transit import TransitDataset
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.transit import TransitDataset
 
 
 def list_maps(*, offset: int = 0, limit: int = 100) -> list[tuple[GameMap, str]]:

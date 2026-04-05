@@ -9,10 +9,10 @@ from hideandseek.broadcast.emit import emit_gameplay
 from hideandseek.broadcast.events import PlayerLocationEvent
 from hideandseek.db import session_dependency
 from hideandseek.dependencies import get_game, get_player_in_game
-from hideandseek.models.game import Game, Player
 from hideandseek.queries.location import create_location_update, get_location_history
 from hideandseek.schemas.request import LocationReportRequest
 from hideandseek.schemas.response import LocationHistoryEntry
+from hideandseek_models.game import Game, Player
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['location'], dependencies=[Depends(session_dependency)]

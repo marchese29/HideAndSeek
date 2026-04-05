@@ -11,9 +11,9 @@ import structlog
 from hideandseek.celery_app import app
 from hideandseek.config import load_fcm_config, load_push_config
 from hideandseek.db import session_scope
-from hideandseek.models.types import PlayerRole, PushEventType
 from hideandseek.push import PushService
 from hideandseek.queries.device_tokens import get_device_tokens_for_game
+from hideandseek_models.types import PlayerRole, PushEventType
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 

@@ -11,8 +11,8 @@ from shapely.geometry import Point
 from sqlalchemy import func, select
 
 from hideandseek.db import get_session
-from hideandseek.models.game import Game, Player
-from hideandseek.models.location import LocationUpdate
+from hideandseek_models.game import Game, Player
+from hideandseek_models.location import LocationUpdate
 
 
 def create_location_update(

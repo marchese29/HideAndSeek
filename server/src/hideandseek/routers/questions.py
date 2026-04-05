@@ -43,12 +43,6 @@ from hideandseek.logic.ask import (
     lock_in_thermometer,
 )
 from hideandseek.logic.preview import preview_question
-from hideandseek.models.game import Game, Player
-from hideandseek.models.types import (
-    PushEventType,
-    QuestionStatus,
-    QuestionType,
-)
 from hideandseek.queries.location import create_location_update
 from hideandseek.queries.questions import has_unanswered_question
 from hideandseek.schemas.request import AskQuestionRequest
@@ -64,6 +58,12 @@ from hideandseek.validators import (
     validate_answer_request,
     validate_lock_in_request,
     validate_slot_request,
+)
+from hideandseek_models.game import Game, Player
+from hideandseek_models.types import (
+    PushEventType,
+    QuestionStatus,
+    QuestionType,
 )
 
 router = APIRouter(

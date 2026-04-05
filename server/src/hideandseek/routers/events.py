@@ -13,8 +13,8 @@ from hideandseek.broadcast.subscribe import (
     seeker_state_stream,
 )
 from hideandseek.db import get_session, session_scope
-from hideandseek.models.game import Game, Player
-from hideandseek.models.types import PlayerRole
+from hideandseek_models.game import Game, Player
+from hideandseek_models.types import PlayerRole
 
 router = APIRouter(prefix='/games', tags=['games'])
 

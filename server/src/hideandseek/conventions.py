@@ -7,7 +7,7 @@ Conversion happens at the boundary in logic.py.
 
 from __future__ import annotations
 
-from hideandseek.models.types import DistanceConvention, MapSize
+from hideandseek_models.types import DistanceConvention, MapSize
 
 _MILES_PER_METER = 1609.344
 

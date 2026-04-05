@@ -10,13 +10,13 @@ import sqlalchemy as sa
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from hideandseek.models.base import Base
-from hideandseek.models.types import GameStatus, PlayerColor, PlayerRole, StationElectionStatus
+from hideandseek_models.base import Base
+from hideandseek_models.types import GameStatus, PlayerColor, PlayerRole, StationElectionStatus
 
 if TYPE_CHECKING:
-    from hideandseek.models.game_map import GameMap
-    from hideandseek.models.inventory import InventorySlot
-    from hideandseek.models.transit import Stop
+    from hideandseek_models.game_map import GameMap
+    from hideandseek_models.inventory import InventorySlot
+    from hideandseek_models.transit import Stop
 
 
 class Game(Base):

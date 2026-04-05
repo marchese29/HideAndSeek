@@ -29,8 +29,6 @@ from hideandseek.logic.lobby import create_game_with_host, validate_color_availa
 from hideandseek.logic.lobby import join_game as lobby_join_game
 from hideandseek.logic.lobby import remove_player as lobby_remove_player
 from hideandseek.logic.station import validate_station_election
-from hideandseek.models.game import Game, Player
-from hideandseek.models.types import GameStatus, PlayerRole, PushEventType, StationElectionStatus
 from hideandseek.queries.device_tokens import upsert_device_token
 from hideandseek.queries.effective_map import get_effective_map_data
 from hideandseek.queries.games import (
@@ -64,6 +62,8 @@ from hideandseek.schemas.response import (
 )
 from hideandseek.tasks.game_timers import transition_hiding_to_seeking
 from hideandseek.tasks.push import send_push
+from hideandseek_models.game import Game, Player
+from hideandseek_models.types import GameStatus, PlayerRole, PushEventType, StationElectionStatus
 
 router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(session_dependency)])
 

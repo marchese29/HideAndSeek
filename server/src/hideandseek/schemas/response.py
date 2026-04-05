@@ -16,7 +16,8 @@ from pydantic import BaseModel, Field, TypeAdapter
 from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
 
-from hideandseek.models.types import (
+from hideandseek.schemas.params import QuestionParamsResponse
+from hideandseek_models.types import (
     GameStatus,
     MapSize,
     PlayerColor,
@@ -25,21 +26,20 @@ from hideandseek.models.types import (
     QuestionType,
     StationElectionStatus,
 )
-from hideandseek.schemas.params import QuestionParamsResponse
 
 if TYPE_CHECKING:
     from shapely.geometry import LineString as LineStringType
     from shapely.geometry import MultiLineString as MultiLineStringType
 
     from hideandseek.exclusion import EndgameExclusionResult
-    from hideandseek.models.game import Game as GameModel
-    from hideandseek.models.game import Player as PlayerModel
-    from hideandseek.models.game_map import GameMap as GameMapModel
-    from hideandseek.models.inventory import InventorySlot as InventorySlotModel
-    from hideandseek.models.location import LocationUpdate as LocationUpdateModel
-    from hideandseek.models.transit import Route as RouteModel
-    from hideandseek.models.transit import Stop as StopModel
     from hideandseek.queries.effective_map import EffectiveMapData
+    from hideandseek_models.game import Game as GameModel
+    from hideandseek_models.game import Player as PlayerModel
+    from hideandseek_models.game_map import GameMap as GameMapModel
+    from hideandseek_models.inventory import InventorySlot as InventorySlotModel
+    from hideandseek_models.location import LocationUpdate as LocationUpdateModel
+    from hideandseek_models.transit import Route as RouteModel
+    from hideandseek_models.transit import Stop as StopModel
 
 
 # ── Maps ──────────────────────────────────────────────────────────────────────
