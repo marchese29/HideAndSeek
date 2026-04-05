@@ -16,8 +16,8 @@ from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
 
-from hideandseek.conventions import get_default_inventory
-from hideandseek.db import create_db_and_tables, get_session, session_scope
+from hideandseek_core.conventions import get_default_inventory
+from hideandseek_core.db import create_db_and_tables, get_session, session_scope
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.map_feature import GameMapFeature, MapFeature
 from hideandseek_models.transit import TransitDataset

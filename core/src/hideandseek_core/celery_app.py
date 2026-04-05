@@ -8,4 +8,4 @@ app = Celery(
     'hideandseek',
     include=['hideandseek.tasks.game_timers', 'hideandseek.tasks.push'],
 )
-app.config_from_object('hideandseek.celery_config')
+app.config_from_object('hideandseek_core.celery_config')

@@ -14,7 +14,7 @@ import os
 
 import structlog
 
-from hideandseek.redis_client import get_redis_url
+from hideandseek_core.redis_client import get_redis_url
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 

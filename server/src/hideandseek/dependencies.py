@@ -7,7 +7,7 @@ import uuid
 import structlog
 from fastapi import Depends, Header, HTTPException, Path, Request
 
-from hideandseek.db import get_session
+from hideandseek_core.db import get_session
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import PlayerRole
 

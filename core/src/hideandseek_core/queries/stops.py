@@ -12,8 +12,8 @@ from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
 
-from hideandseek.db import get_session
-from hideandseek.queries.questions import get_latest_total_exclusion
+from hideandseek_core.db import get_session
+from hideandseek_core.queries.questions import get_latest_total_exclusion
 from hideandseek_models.game import Game
 from hideandseek_models.transit import Stop
 

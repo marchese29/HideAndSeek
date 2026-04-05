@@ -23,10 +23,12 @@ dependencies = [
     "sse-starlette>=3.3.3",
     "firebase-admin>=7.3.0",
     "hideandseek-models",
+    "hideandseek-core",
 ]
 
 [tool.uv.sources]
 hideandseek-models = { workspace = true }
+hideandseek-core = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -57,7 +59,7 @@ suppress-none-returning = true
 
 [tool.ruff.lint.isort]
 force-single-line = false
-known-first-party = ["hideandseek", "hideandseek_models"]
+known-first-party = ["hideandseek", "hideandseek_models", "hideandseek_core"]
 
 [tool.pyright]
 pythonVersion = "3.12"

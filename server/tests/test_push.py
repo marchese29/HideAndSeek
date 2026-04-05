@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.orm import Session
 
-from hideandseek.push import ApnsProvider, FcmProvider, PushService
-from hideandseek.queries.device_tokens import (
+from hideandseek_core.push import ApnsProvider, FcmProvider, PushService
+from hideandseek_core.queries.device_tokens import (
     delete_device_token,
     get_device_tokens_for_game,
     upsert_device_token,
@@ -299,7 +299,7 @@ async def test_fcm_provider_builds_payload():
     """Verify FcmProvider builds correct firebase messaging.Message."""
     sent_messages = []
 
-    with patch('hideandseek.push.messaging') as mock_messaging:
+    with patch('hideandseek_core.push.messaging') as mock_messaging:
         mock_messaging.Message = lambda **kw: kw
         mock_messaging.Notification = lambda **kw: kw
         mock_messaging.AndroidConfig = lambda **kw: kw
@@ -307,7 +307,7 @@ async def test_fcm_provider_builds_payload():
         async def fake_to_thread(fn, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
             sent_messages.append(args[0])
 
-        with patch('hideandseek.push.asyncio.to_thread', side_effect=fake_to_thread):
+        with patch('hideandseek_core.push.asyncio.to_thread', side_effect=fake_to_thread):
             provider = FcmProvider.__new__(FcmProvider)
             provider._app = None  # type: ignore[assignment]
 
@@ -330,14 +330,14 @@ async def test_fcm_provider_silent_payload():
     """Verify FcmProvider omits notification for silent pushes."""
     sent_messages = []
 
-    with patch('hideandseek.push.messaging') as mock_messaging:
+    with patch('hideandseek_core.push.messaging') as mock_messaging:
         mock_messaging.Message = lambda **kw: kw
         mock_messaging.AndroidConfig = lambda **kw: kw
 
         async def fake_to_thread(fn, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
             sent_messages.append(args[0])
 
-        with patch('hideandseek.push.asyncio.to_thread', side_effect=fake_to_thread):
+        with patch('hideandseek_core.push.asyncio.to_thread', side_effect=fake_to_thread):
             provider = FcmProvider.__new__(FcmProvider)
             provider._app = None  # type: ignore[assignment]
 

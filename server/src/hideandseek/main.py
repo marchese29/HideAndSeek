@@ -5,10 +5,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from hideandseek.db import create_db_and_tables
 from hideandseek.logging import setup_logging
 from hideandseek.middleware import AccessLogMiddleware
 from hideandseek.routers import endgame, events, games, location, maps, questions
+from hideandseek_core.db import create_db_and_tables
 
 
 @asynccontextmanager

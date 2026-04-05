@@ -5,17 +5,17 @@ from datetime import UTC, datetime
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from hideandseek.conventions import from_meters, to_meters
-from hideandseek.exclusion import (
+from hideandseek_core.conventions import from_meters, to_meters
+from hideandseek_core.exclusion import (
     exclude_matching,
     exclude_measuring,
     exclude_radar,
     exclude_thermometer,
 )
-from hideandseek.geo import distance
-from hideandseek.logic.resolution import resolve_matching_feature, resolve_measuring_feature
-from hideandseek.queries.features import get_features_by_category
-from hideandseek.queries.questions import get_latest_total_exclusion
+from hideandseek_core.geo import distance
+from hideandseek_core.logic.resolution import resolve_matching_feature, resolve_measuring_feature
+from hideandseek_core.queries.features import get_features_by_category
+from hideandseek_core.queries.questions import get_latest_total_exclusion
 from hideandseek_models.game import Game
 from hideandseek_models.question import Question
 from hideandseek_models.types import QuestionStatus

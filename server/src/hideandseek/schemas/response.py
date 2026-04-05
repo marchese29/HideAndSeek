@@ -16,8 +16,8 @@ from pydantic import BaseModel, Field, TypeAdapter
 from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
 
-from hideandseek.geo_helpers import geom_or_none
 from hideandseek.schemas.params import QuestionParamsResponse
+from hideandseek_core.geo_helpers import geom_or_none
 from hideandseek_models.types import (
     GameStatus,
     MapSize,
@@ -32,8 +32,8 @@ if TYPE_CHECKING:
     from shapely.geometry import LineString as LineStringType
     from shapely.geometry import MultiLineString as MultiLineStringType
 
-    from hideandseek.exclusion import EndgameExclusionResult
-    from hideandseek.queries.effective_map import EffectiveMapData
+    from hideandseek_core.exclusion import EndgameExclusionResult
+    from hideandseek_core.queries.effective_map import EffectiveMapData
     from hideandseek_models.game import Game as GameModel
     from hideandseek_models.game import Player as PlayerModel
     from hideandseek_models.game_map import GameMap as GameMapModel

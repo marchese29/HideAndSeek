@@ -12,7 +12,7 @@ from hideandseek.broadcast.subscribe import (
     lobby_event_stream,
     seeker_state_stream,
 )
-from hideandseek.db import get_session, session_scope
+from hideandseek_core.db import get_session, session_scope
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import PlayerRole
 

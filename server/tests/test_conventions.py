@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
-from hideandseek.conventions import (
+from hideandseek_core.conventions import (
     format_distance_label,
     from_meters,
     get_default_hiding_zone_radius,
     get_default_inventory,
     to_meters,
 )
-from hideandseek.logic.endgame import effective_hiding_zone_radius_m
+from hideandseek_core.logic.endgame import effective_hiding_zone_radius_m
 from hideandseek_models.types import DistanceConvention, MapSize
 from tests.conftest import create_game, create_game_map
 

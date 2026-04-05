@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-commit hook: models → server → openapi → api-types → mobile
+# Pre-commit hook: models → core → server → openapi → api-types → mobile
 #
 # Uses cached hashes of staged content so steps are skipped when
 # nothing has changed since the last successful run.
@@ -62,19 +62,26 @@ run_if_changed "models-checks" \
     hooks/models-checks.sh \
     "models/" || exit 1
 
-# --- Server checks (also triggered by models changes — server depends on models) ---
+# --- Core checks (also triggered by models changes — core depends on models) ---
+run_if_changed "core-checks" \
+    "Core checks passed on this content — skipping." \
+    "Core code changed — running checks..." \
+    hooks/core-checks.sh \
+    "core/" "models/" || exit 1
+
+# --- Server checks (also triggered by models/core changes — server depends on both) ---
 run_if_changed "server-checks" \
     "Server checks passed on this content — skipping." \
     "Server code changed — running checks..." \
     hooks/server-checks.sh \
-    "server/" "models/" || exit 1
+    "server/" "models/" "core/" || exit 1
 
 # --- OpenAPI spec regen (also triggered by models changes) ---
 run_if_changed "openapi-regen" \
     "OpenAPI spec already up to date — skipping regen." \
     "Regenerating OpenAPI spec..." \
     hooks/openapi-regen.sh \
-    "server/" "models/" || exit 1
+    "server/" "models/" "core/" || exit 1
 
 # --- API types regen (OpenAPI → TypeScript) ---
 run_if_changed "api-types-regen" \

@@ -16,6 +16,6 @@ ulimit -n 10240 2>/dev/null || true
 trap 'kill 0' EXIT
 
 uv run uvicorn hideandseek.main:app --reload &
-uv run celery -A hideandseek.celery_app worker --loglevel=info --beat &
+uv run celery -A hideandseek_core.celery_app worker --loglevel=info --beat &
 
 wait

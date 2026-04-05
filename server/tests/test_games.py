@@ -7,7 +7,7 @@ from shapely.geometry import LineString, Point
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from hideandseek.queries.games import set_hider_station
+from hideandseek_core.queries.games import set_hider_station
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.transit import Route, RouteStop, Stop

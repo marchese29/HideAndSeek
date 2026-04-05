@@ -10,7 +10,7 @@ from datetime import datetime
 from shapely.geometry import Point
 from sqlalchemy import func, select
 
-from hideandseek.db import get_session
+from hideandseek_core.db import get_session
 from hideandseek_models.game import Game, Player
 from hideandseek_models.location import LocationUpdate
 

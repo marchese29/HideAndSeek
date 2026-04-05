@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from shapely.geometry import Point
 
-from hideandseek.geo import distance
+from hideandseek_core.geo import distance
 
 
 def test_distance_same_point():

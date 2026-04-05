@@ -7,9 +7,9 @@ from datetime import timedelta
 
 from shapely.geometry import MultiPoint, Point
 
-from hideandseek.logic.endgame import effective_hiding_zone_radius_m
-from hideandseek.queries.location import get_latest_location_for_player
-from hideandseek.queries.stops import (
+from hideandseek_core.logic.endgame import effective_hiding_zone_radius_m
+from hideandseek_core.queries.location import get_latest_location_for_player
+from hideandseek_core.queries.stops import (
     all_hiders_within_radius,
     get_closest_stop_to_any,
     get_stops_within_radius_of_all,

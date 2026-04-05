@@ -11,8 +11,8 @@ from shapely import wkb
 from shapely.geometry import LineString, MultiLineString
 from sqlalchemy import select
 
-from hideandseek.db import get_session
-from hideandseek.queries.stops import playable_conditions
+from hideandseek_core.db import get_session
+from hideandseek_core.queries.stops import playable_conditions
 from hideandseek_models.game import Game
 from hideandseek_models.transit import Route, RouteStop, Stop
 

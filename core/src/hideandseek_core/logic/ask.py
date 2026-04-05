@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 
 from shapely import Point
 
-from hideandseek.conventions import from_meters
-from hideandseek.db import register
-from hideandseek.logic.resolution import resolve_matching_feature, resolve_measuring_feature
-from hideandseek.queries.questions import get_question_count
+from hideandseek_core.conventions import from_meters
+from hideandseek_core.db import register
+from hideandseek_core.logic.resolution import resolve_matching_feature, resolve_measuring_feature
+from hideandseek_core.queries.questions import get_question_count
 from hideandseek_models.game import Game, Player
 from hideandseek_models.inventory import InventorySlot
 from hideandseek_models.question import Question

@@ -14,28 +14,28 @@ from hideandseek.broadcast.events import (
     SeekerQuestionAnsweredEvent,
     StationElectionEvent,
 )
-from hideandseek.celery_app import app
-from hideandseek.db import session_scope
-from hideandseek.logic.answer import (
+from hideandseek.tasks.push import send_push
+from hideandseek_core.celery_app import app
+from hideandseek_core.db import session_scope
+from hideandseek_core.logic.answer import (
     answer_matching,
     answer_measuring,
     answer_radar,
     answer_thermometer,
     veto_immediate,
 )
-from hideandseek.logic.station import (
+from hideandseek_core.logic.station import (
     resolve_station_at_transition,
     resolve_station_fallback,
 )
-from hideandseek.queries.games import (
+from hideandseek_core.queries.games import (
     get_game_by_id,
     set_hider_station,
     set_station_ambiguous,
     update_game_status,
 )
-from hideandseek.queries.location import get_latest_location_for_player
-from hideandseek.queries.questions import get_question
-from hideandseek.tasks.push import send_push
+from hideandseek_core.queries.location import get_latest_location_for_player
+from hideandseek_core.queries.questions import get_question
 from hideandseek_models.types import (
     GameStatus,
     PlayerRole,

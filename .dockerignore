@@ -9,6 +9,10 @@
 !models/pyproject.toml
 !models/src/
 
+# Core package
+!core/pyproject.toml
+!core/src/
+
 # Server package
 !server/pyproject.toml
 !server/src/

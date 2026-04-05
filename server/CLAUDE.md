@@ -252,30 +252,17 @@ docker logs hideandseek-worker-1 2>&1 | grep -iE 'transition|auto_answer|revoke|
 
 ```
 src/hideandseek/
-  main.py, db.py, dependencies.py       # App entrypoint, DB engine + session, FastAPI deps
+  main.py, dependencies.py              # App entrypoint, FastAPI deps (auth, game lookup)
   logging.py, middleware.py              # structlog config, ASGI access log middleware
   validators.py                          # Request validation (raises HTTPException)
-  geo.py, conventions.py, exclusion.py   # Distance math, metric/imperial, exclusion zones
-  gtfs.py                                # Reusable GTFS feed parser (pure data, no DB deps)
-  config.py, push.py, utils.py          # Push config (APNs + FCM), push providers, shared utils
-  celery_app.py, celery_config.py       # Celery instance + broker config
-  redis_client.py                       # Redis client factory (sync + async), URL resolution
+  gtfs.py, utils.py                      # GTFS parser, shared utils
   broadcast/                            # Unified event broadcast (SSE + push routing)
     events.py                           # Typed lobby + gameplay event dataclasses
-    emit.py                             # Publish logic: pattern-match on event → SSE + push
+    emit.py                             # Publish logic: pattern-match on event → SSE channels
     subscribe.py                        # SSE streaming: Redis subscribe + initial game_state
-  logic/                                # Business logic (session-free)
-    ask.py                              # Question creation (radar, thermometer, matching, measuring)
-    answer.py                           # Answer computation, exclusion accumulation, veto, abandon
-    preview.py                          # Question preview boundary computation (read-only)
-    resolution.py                       # Feature resolution strategy, answer computation helpers
-    endgame.py                          # Hiding zone radius, endgame exclusions, candidate stations
-    lobby.py                            # Game creation, join, color, removal + emit() calls
-    station.py                          # Station election, transition, fallback, hider centroid
   schemas/                              # Pydantic request/response/params schemas + common utils
-  queries/                              # DB query functions by domain (games, maps, questions,
-                                        #   location, features, stops, routes, effective_map,
-                                        #   device_tokens, game_state)
+  queries/
+    game_state.py                       # Builds Pydantic game state responses for SSE snapshots
   routers/                              # API routes (games, maps, location, questions, endgame, events)
   tasks/                                # Celery tasks (game_timers, push)
 tests/                                  # pytest (one file per router + features, geo, resolution,
@@ -285,14 +272,13 @@ scripts/import_seattle_gtfs.py          # Seattle GTFS transit data import
 scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + districts)
 ```
 
+Business logic, queries, DB infra, geo math, push, redis, and celery live in the `hideandseek-core` package (`core/`). See `core/CLAUDE.md`.
+
 **Key callouts** (things that aren't obvious from file names):
-- `logic/` is the **conversion boundary** — `to_meters()` before geo math, `from_meters()` after. Session-free: uses `db.register()` to persist new objects, mutates already-tracked ORM objects directly (autoflush handles persistence). Submodules: `ask.py` (question creation), `answer.py` (answer computation + exclusion), `endgame.py` (hiding zone + endgame exclusions), `lobby.py` (game creation + join + color assignment + player removal), `station.py` (election + transition + fallback + centroid).
-- `db.register(*objects)` — adds objects to session, flushes, returns last object. Enables `question = register(Question(...))` in logic code without importing `get_session`.
-- `exclusion.py` is called from `logic/answer.py` and `logic/endgame.py`, not from routers.
-- `logic/resolution.py` owns feature resolution strategy (containment vs nearest) and answer computation helpers. Category classification constants (`MATCHING_CATEGORIES`, `MEASURING_CATEGORIES`, `CONTAINMENT_CATEGORIES`, `CLASSED_CATEGORIES`, `category_key`) live in `hideandseek_models.types` alongside `FeatureCategory` — both `logic/` and `queries/` can import them without layer violations.
-- Models live in the top-level `models/` package (`hideandseek_models`). Import via `from hideandseek_models import ...` or `from hideandseek_models.game import Game`. The server depends on this package via UV workspace.
-- `celery_app.py` uses an explicit `include` list for task modules (not autodiscover — new task modules must be added manually).
-- `queries/stops.py` has spatial query functions (`get_candidate_stations`, `get_nearest_playable_stop`) using PostGIS.
+- `queries/game_state.py` stays in server because it builds Pydantic response objects (`HiderGameStateResponse`, `SeekerGameStateResponse`) — presentation-layer concern. All other query/logic modules live in core.
+- `broadcast/` stays in server — event emission, SSE channels, and push routing are presentation concerns. Core returns results; routers/tasks decide what events to emit.
+- `lobby.py` (in core) returns a `RemovalResult` dataclass instead of emitting events directly. The router in `games.py` interprets the result and emits the appropriate `PlayerLeftEvent`/`HostChangedEvent`.
+- Models live in the top-level `models/` package (`hideandseek_models`). Core lives in `core/` (`hideandseek_core`). Import from submodules directly (e.g., `from hideandseek_core.logic.ask import ask_radar`).
 
 ## Architecture Patterns
 
@@ -301,7 +287,8 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
 - **Transactional boundaries**: `session_dependency()` is an async generator that commits once after the handler succeeds and sets a `ContextVar` so `db.get_session()` works everywhere. Must be async so the ContextVar is set in the event-loop context (sync handler threads copy that context). If the handler raises, commit is never called and `Session.__exit__` rolls back. All writes in a request succeed or fail together.
 - **ContextVar session access**: A `ContextVar[Session]` (`_session_var`) is set by `session_dependency()` (for requests) or `session_scope()` (for background tasks). All query and logic functions call `db.get_session()` as their first line to get the active session. No decorators, no session parameters — functions just call `session = get_session()`.
 - **Router-level session dependency**: Each router uses `dependencies=[Depends(session_dependency)]` to ensure the ContextVar is always set for every route. Handlers never declare `session` in their signatures.
-- **Query layer**: `queries/` package (one module per domain) handles all DB reads and writes. Routers never call `session.add/commit/refresh` directly. Query functions return SQLAlchemy model objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek.queries.games import create_game`), not from the package root. Query functions accept ORM objects (not raw UUIDs) — e.g., `create_game(game_map=game_map, ...)`, `get_latest_location_for_player(player, game)`. Raw IDs are only used at system boundaries (dependency injection from URL params, Celery task signatures, logging/push serialization). Write functions call `session.flush()` after mutations to make changes visible to subsequent queries in the same request.
+- **Three-package architecture**: `hideandseek-models` (ORM) ← `hideandseek-core` (business logic, queries, DB, geo, push, redis, celery) ← `hideandseek` (server: routers, schemas, broadcast, tasks). Core is side-effect-free beyond DB mutations — no events, no HTTP. Routers/tasks call core functions and decide what events to emit.
+- **Query layer**: `hideandseek_core.queries` package (one module per domain) handles all DB reads and writes. Exception: `hideandseek.queries.game_state` stays in server (builds Pydantic response objects). Routers never call `session.add/commit/refresh` directly. Query functions return SQLAlchemy model objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek_core.queries.games import create_game`), not from the package root. Query functions accept ORM objects (not raw UUIDs) — e.g., `create_game(game_map=game_map, ...)`, `get_latest_location_for_player(player, game)`. Raw IDs are only used at system boundaries (dependency injection from URL params, Celery task signatures, logging/push serialization). Write functions call `session.flush()` after mutations to make changes visible to subsequent queries in the same request.
 - **Background jobs (Celery + Redis)**: All push delivery and game timers go through Celery tasks. Broker resolution: (1) `CELERY_BROKER_URL` env var if set, (2) auto-detect Redis on `localhost:6379`, (3) eager mode (tasks run synchronously in-process). Set `CELERY_BROKER_URL=''` to force eager mode when Redis is running. Routers call `.delay()` or `.apply_async()` instead of `BackgroundTasks`. Worker tasks use `session_scope()` to get a DB session with ContextVar — all query functions using `db.get_session()` work naturally inside the `with session_scope():` block.
 - **Task ID convention**: Deterministic IDs (`hiding_timer:{game_id}`, `answer_deadline:{question_id}`) so the API can revoke tasks without storing IDs in the DB.
 - **Push notifications**: `PushService` orchestrates delivery across APNs (`ApnsProvider` wrapping `aioapns`) and FCM (`FcmProvider` wrapping `firebase-admin`). Each provider constructs its own wire format from a shared data dict. No-ops silently when env vars are missing (dev/test). All push delivery goes through the `send_push` Celery task (with retry). The task extracts `(token, provider)` pairs from `DeviceToken` and dispatches by provider. Event types are defined by `PushEventType` enum. `TokenProvider` enum (`apns`/`fcm`) on `DeviceToken` determines routing. See `design/push-notifications.md` for payload specs.
@@ -311,7 +298,7 @@ scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + dis
   - **SSE endpoint** (`GET /games/{id}/lobby/events`): separate router (`routers/events.py`), no `session_dependency` (SSE outlives the request). Auth via `X-Player-Id` + `X-Player-Secret` headers, validated in a short-lived `session_scope()`. Returns `EventSourceResponse` from `sse-starlette`. Initial `game_state` event sent on connect, then real-time events via Redis subscription. Reconnecting clients get fresh state (no gap recovery needed).
   - **Redis client** (`redis_client.py`): `get_redis_url()` resolves URL (env var → auto-detect → None). `get_sync_redis()` for publish, `get_async_redis()` for subscribe. Returns None when unavailable.
   - **`LobbyEventType` enum** (`hideandseek_models.types`): `game_state`, `player_joined`, `player_updated`, `player_left`, `host_changed`, `game_started`.
-  - **Emit call sites**: `logic/lobby.py` (join → `PlayerJoinedEvent`, remove → `PlayerLeftEvent` + `HostChangedEvent`), `routers/games.py` (patch → `PlayerUpdatedEvent` if lobby, start → `GameStartedEvent`, elect station → `StationElectionEvent`), `routers/location.py` (location report → `PlayerLocationEvent`), `routers/questions.py` (ask/lock-in/answer/veto/abandon → corresponding gameplay events), `tasks/game_timers.py` (phase transition → `PhaseChangedEvent` + `StationElectionEvent`, auto-answer → `HiderQuestionAnsweredEvent` + `SeekerQuestionAnsweredEvent` or `QuestionVetoedEvent`). `create_game_with_host()` does NOT emit (no SSE subscribers yet).
+  - **Emit call sites**: `routers/games.py` (join → `PlayerJoinedEvent`, remove ��� `PlayerLeftEvent`/`HostChangedEvent` via `RemovalResult`, patch → `PlayerUpdatedEvent` if lobby, start → `GameStartedEvent` + push, elect station → `StationElectionEvent`), `routers/location.py` (location report → `PlayerLocationEvent`), `routers/questions.py` (ask/lock-in/answer/veto/abandon → corresponding gameplay events), `tasks/game_timers.py` (phase transition → `PhaseChangedEvent` + `StationElectionEvent`, auto-answer → `HiderQuestionAnsweredEvent` + `SeekerQuestionAnsweredEvent` or `QuestionVetoedEvent`). `create_game_with_host()` does NOT emit (no SSE subscribers yet).
   - **Gameplay SSE endpoints** (`GET /games/{id}/hider-state`, `GET /games/{id}/seeker-state`): role-specific SSE streams in `routers/events.py`. Auth inline in `session_scope()` — same pattern as lobby. Phase guard: 409 if game not `is_active`. Role guard: 403 if wrong role. Two Redis channels: `game:{id}:hider-events`, `game:{id}:seeker-events`. Initial `game_state` event delivers full snapshot (`HiderGameStateResponse` or `SeekerGameStateResponse`), then forwards Redis messages. Stream generators: `hider_state_stream` / `seeker_state_stream` in `broadcast/subscribe.py`. Snapshot assembly: `queries/game_state.py` has `build_hider_game_state(game, player)` and `build_seeker_game_state(game, player)`. Both snapshots include `routes: list[RouteResponse]` (route shapes + ordered playable stop IDs) for map rendering alongside `stops`.
   - **`GameplayEventType` enum** (`hideandseek_models.types`): `game_state` (initial snapshot), `player_location`, `question_asked`, `question_answerable`, `question_answered`, `question_vetoed`, `question_abandoned`, `phase_changed`, `station_election`, `player_left`.
   - **`emit_gameplay(event)`** (`broadcast/emit.py`): separate from `emit()` — routes gameplay events to role-specific channels. All gameplay events are `required=True` (SSE is primary, no push fallback). Helper `_both_channels()` publishes identical data to hider + seeker channels. Channel routing: most events → both channels; `StationElectionEvent` → hider only; `HiderQuestionAnsweredEvent` → hider only; `SeekerQuestionAnsweredEvent` → seeker only; `PlayerLocationEvent` hider loc → hider only, seeker loc → both.

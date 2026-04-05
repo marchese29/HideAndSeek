@@ -8,10 +8,10 @@ from collections.abc import AsyncGenerator
 
 import structlog
 
-from hideandseek.db import get_session, session_scope
 from hideandseek.queries.game_state import build_hider_game_state, build_seeker_game_state
-from hideandseek.redis_client import get_async_redis
 from hideandseek.schemas.response import GameResponse
+from hideandseek_core.db import get_session, session_scope
+from hideandseek_core.redis_client import get_async_redis
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import GameplayEventType, LobbyEventType
 

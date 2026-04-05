@@ -9,8 +9,8 @@ from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from hideandseek.db import get_session
-from hideandseek.queries.features import get_map_feature_categories
+from hideandseek_core.db import get_session
+from hideandseek_core.queries.features import get_map_feature_categories
 from hideandseek_models.game import Game
 from hideandseek_models.inventory import InventorySlot
 from hideandseek_models.question import Question

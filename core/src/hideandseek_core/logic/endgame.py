@@ -6,14 +6,14 @@ from collections.abc import Sequence
 
 from shapely.geometry.base import BaseGeometry
 
-from hideandseek.conventions import get_default_hiding_zone_radius, to_meters
-from hideandseek.exclusion import (
+from hideandseek_core.conventions import get_default_hiding_zone_radius, to_meters
+from hideandseek_core.exclusion import (
     EndgameExclusionResult,
     compute_endgame_exclusions,
     compute_hiding_zone,
 )
-from hideandseek.queries.questions import list_answered_questions_after_sequence
-from hideandseek.queries.stops import get_candidate_stations as query_candidate_stations
+from hideandseek_core.queries.questions import list_answered_questions_after_sequence
+from hideandseek_core.queries.stops import get_candidate_stations as query_candidate_stations
 from hideandseek_models.game import Game
 from hideandseek_models.transit import Stop
 

@@ -30,8 +30,8 @@ from hideandseek.broadcast.events import (
     StationElectionEvent,
     ThermometerEventParams,
 )
-from hideandseek.redis_client import get_sync_redis
 from hideandseek.schemas.response import GameResponse, PlayerResponse
+from hideandseek_core.redis_client import get_sync_redis
 from hideandseek_models.types import GameplayEventType, LobbyEventType, PlayerRole
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)

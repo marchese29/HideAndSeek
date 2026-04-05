@@ -8,7 +8,7 @@ from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 from sqlalchemy import func, select
 
-from hideandseek.db import get_session
+from hideandseek_core.db import get_session
 from hideandseek_models.game import Game
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.map_feature import GameMapFeature, MapFeature

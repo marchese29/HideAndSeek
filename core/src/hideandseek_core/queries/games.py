@@ -11,9 +11,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from hideandseek.conventions import get_default_inventory
-from hideandseek.db import get_session
-from hideandseek.queries.questions import create_inventory_slots
+from hideandseek_core.conventions import get_default_inventory
+from hideandseek_core.db import get_session
+from hideandseek_core.queries.questions import create_inventory_slots
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.transit import Stop

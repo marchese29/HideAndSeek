@@ -6,11 +6,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from hideandseek.db import session_dependency
 from hideandseek.dependencies import get_game, get_seeker_in_game
-from hideandseek.logic.endgame import get_endgame_exclusions
 from hideandseek.schemas.response import EndgameExclusionsResponse
 from hideandseek.validators import validate_endgame_station
+from hideandseek_core.db import session_dependency
+from hideandseek_core.logic.endgame import get_endgame_exclusions
 from hideandseek_models.game import Game, Player
 
 router = APIRouter(

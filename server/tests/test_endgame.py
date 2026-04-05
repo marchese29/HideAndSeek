@@ -10,8 +10,8 @@ from shapely import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy.orm import Session
 
-from hideandseek.exclusion import _buffer, compute_endgame_exclusions, exclude_radar
-from hideandseek.queries.stops import get_nearest_playable_stop
+from hideandseek_core.exclusion import _buffer, compute_endgame_exclusions, exclude_radar
+from hideandseek_core.queries.stops import get_nearest_playable_stop
 from hideandseek_models.question import Question
 from hideandseek_models.transit import Stop
 from hideandseek_models.types import GameStatus, PlayerRole, QuestionStatus, QuestionType

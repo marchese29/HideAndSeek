@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from hideandseek.queries.games import add_player, delete_player, update_game_status
-from hideandseek.queries.games import create_game as query_create_game
+from hideandseek_core.queries.games import add_player, delete_player, update_game_status
+from hideandseek_core.queries.games import create_game as query_create_game
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.types import MAX_PLAYERS, GameStatus, PlayerColor, PlayerRole

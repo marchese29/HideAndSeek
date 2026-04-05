@@ -7,7 +7,7 @@ from shapely.geometry import Point
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from hideandseek.db import get_session
+from hideandseek_core.db import get_session
 from hideandseek_models.game import Game, Player
 from hideandseek_models.question import Question
 from hideandseek_models.types import (

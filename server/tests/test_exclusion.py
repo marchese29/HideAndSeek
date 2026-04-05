@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from shapely import Point, Polygon
 
-from hideandseek.exclusion import (
+from hideandseek_core.exclusion import (
     boundary_matching,
     boundary_measuring,
     boundary_radar,

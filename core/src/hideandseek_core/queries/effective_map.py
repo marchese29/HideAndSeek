@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
-from hideandseek.db import get_session
+from hideandseek_core.db import get_session
 from hideandseek_models.game import Game
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.transit import Route, RouteStop, Stop

@@ -21,8 +21,8 @@ from math import asin, cos, radians, sin, sqrt
 from shapely.geometry import LineString, Point
 from sqlalchemy import select
 
-from hideandseek.db import create_db_and_tables, get_session, session_scope
 from hideandseek.gtfs import parse_gtfs
+from hideandseek_core.db import create_db_and_tables, get_session, session_scope
 from hideandseek_models.transit import Route, RouteStop, Stop, TransitDataset
 from hideandseek_models.types import RouteType
 

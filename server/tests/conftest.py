@@ -16,10 +16,10 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 
-import hideandseek.db as db_module
-from hideandseek.db import _session_var, session_dependency
+import hideandseek_core.db as db_module
 from hideandseek.main import app
-from hideandseek.queries.features import get_map_feature_categories
+from hideandseek_core.db import _session_var, session_dependency
+from hideandseek_core.queries.features import get_map_feature_categories
 from hideandseek_models.base import Base
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap

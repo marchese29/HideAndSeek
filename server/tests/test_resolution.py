@@ -5,7 +5,7 @@ from __future__ import annotations
 from shapely.geometry import Point, Polygon
 from sqlalchemy.orm import Session
 
-from hideandseek.logic.resolution import (
+from hideandseek_core.logic.resolution import (
     compute_matching_answer,
     compute_measuring_answer,
     resolve_matching_feature,

@@ -10,6 +10,7 @@ resolution-markers = [
 [manifest]
 members = [
     "hideandseek",
+    "hideandseek-core",
     "hideandseek-models",
     "hideandseek-workspace",
 ]
@@ -709,6 +710,7 @@ dependencies = [
     { name = "firebase-admin" },
     { name = "geoalchemy2" },
     { name = "geojson-pydantic" },
+    { name = "hideandseek-core" },
     { name = "hideandseek-models" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyproj" },
@@ -739,6 +741,7 @@ requires-dist = [
     { name = "firebase-admin", specifier = ">=7.3.0" },
     { name = "geoalchemy2", specifier = ">=0.18.1" },
     { name = "geojson-pydantic", specifier = ">=2.1.0" },
+    { name = "hideandseek-core", editable = "core" },
     { name = "hideandseek-models", editable = "models" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.2" },
     { name = "pyproj", specifier = ">=3.7.2" },
@@ -759,6 +762,55 @@ dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.11.0" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.14.1" },
+]
+
+[[package]]
+name = "hideandseek-core"
+version = "0.1.0"
+source = { editable = "core" }
+dependencies = [
+    { name = "aioapns" },
+    { name = "celery" },
+    { name = "firebase-admin" },
+    { name = "geoalchemy2" },
+    { name = "geojson-pydantic" },
+    { name = "hideandseek-models" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
+    { name = "pyproj" },
+    { name = "redis" },
+    { name = "shapely" },
+    { name = "sqlalchemy" },
+    { name = "structlog" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pyright" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aioapns", specifier = ">=4.0" },
+    { name = "celery", specifier = ">=5.6.2" },
+    { name = "firebase-admin", specifier = ">=7.3.0" },
+    { name = "geoalchemy2", specifier = ">=0.18.1" },
+    { name = "geojson-pydantic", specifier = ">=2.1.0" },
+    { name = "hideandseek-models", editable = "models" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.2" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pyproj", specifier = ">=3.7.2" },
+    { name = "redis", specifier = ">=7.2.0" },
+    { name = "shapely", specifier = ">=2.1.2" },
+    { name = "sqlalchemy", specifier = ">=2.0.46" },
+    { name = "structlog", specifier = ">=25.5.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pyright", specifier = ">=1.1.0" },
+    { name = "ruff", specifier = ">=0.11.0" },
 ]
 
 [[package]]
