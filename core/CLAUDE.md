@@ -1,6 +1,6 @@
 # Core — Shared Business Logic
 
-Shared business logic for the HideAndSeek game. Sits between `hideandseek-models` (ORM) and `hideandseek` (server/presentation). Contains no HTTP code, no event emission, no response schemas.
+Shared business logic for the HideAndSeek game. Sits between `hideandseek-models` (ORM) and `hideandseek` (server/presentation). Contains no HTTP code and no response schemas. Owns gameplay event production and Redis publishing; lobby presentation (Pydantic schemas, SSE subscriptions) stays in server.
 
 ## Commands
 
@@ -26,16 +26,29 @@ src/hideandseek_core/
   geo_helpers.py       # Shapely-to-GeoJSON conversion helpers
   conventions.py       # Metric/imperial conversion, default inventory
   exclusion.py         # Exclusion zone geometry, boundary computation
+  broadcast/           # Gameplay event production + Redis publishing
+    events.py          # Typed gameplay event dataclasses (frozen, slots)
+    emit.py            # publish_sse(), channel helpers, emit_gameplay()
   queries/             # DB query functions by domain
   logic/               # Business logic (session-free, side-effect-free beyond DB)
 ```
 
 ## Architecture Rules
 
-- **No events, no HTTP**: Core never imports from `hideandseek.broadcast`, `hideandseek.schemas`, `hideandseek.routers`, or `hideandseek.tasks`. It returns results; the caller decides what events to emit.
+- **Gameplay events live here, lobby events live in server**: Core defines gameplay event dataclasses and publishes them to Redis SSE channels via `emit_gameplay()`. Server defines lobby event dataclasses and publishes them via its own `emit()`, which imports `publish_sse` from core. SSE subscription streams and Pydantic game-state snapshots stay in server.
+- **No HTTP**: Core never imports from `hideandseek.schemas`, `hideandseek.routers`, or `hideandseek.tasks`. It does not use Pydantic response schemas.
 - **Dependency direction**: `hideandseek-models` ← `hideandseek-core` ← `hideandseek` (server). Core never imports from server.
 - **Logic layer is the conversion boundary**: `to_meters()` before geo math, `from_meters()` after. Logic functions use `db.register()` for new objects and mutate tracked ORM objects directly.
 - **ContextVar session access**: Query functions call `db.get_session()` — no session parameters, no decorators.
+
+## Broadcast
+
+`broadcast/events.py` defines frozen dataclasses for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left). Each question event has a `from_question()` static constructor. Parameter dataclasses (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`) carry type-specific question parameters.
+
+`broadcast/emit.py` provides:
+- `publish_sse(channel, event_type, data, *, required)` — low-level Redis publish (used by both core's `emit_gameplay` and server's lobby `emit`)
+- `lobby_channel(game_id)`, `hider_channel(game_id)`, `seeker_channel(game_id)` — channel name helpers (used by server's subscribe module)
+- `emit_gameplay(event)` — pattern-matches on gameplay event type, serializes to dicts, publishes to the appropriate Redis channels
 
 ## Conventions
 

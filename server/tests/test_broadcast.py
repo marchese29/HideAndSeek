@@ -13,15 +13,16 @@ import fakeredis
 import pytest
 from sqlalchemy.orm import Session
 
-from hideandseek.broadcast.emit import _lobby_channel, emit, emit_gameplay
+from hideandseek.broadcast.emit import emit
 from hideandseek.broadcast.events import (
     GameStartedEvent,
     HostChangedEvent,
     PlayerJoinedEvent,
     PlayerLeftEvent,
-    PlayerLocationEvent,
     PlayerUpdatedEvent,
 )
+from hideandseek_core.broadcast.emit import emit_gameplay, lobby_channel
+from hideandseek_core.broadcast.events import PlayerLocationEvent
 from hideandseek_models.types import GameplayEventType, LobbyEventType, PlayerColor, PlayerRole
 from tests.conftest import create_game, create_player
 
@@ -34,13 +35,13 @@ def fake_sync_redis() -> fakeredis.FakeRedis:
 
 @pytest.fixture
 def _patch_sync_redis(fake_sync_redis: fakeredis.FakeRedis) -> Generator[None, None, None]:
-    with patch('hideandseek.broadcast.emit.get_sync_redis', return_value=fake_sync_redis):
+    with patch('hideandseek_core.broadcast.emit.get_sync_redis', return_value=fake_sync_redis):
         yield
 
 
 @pytest.fixture
 def _patch_no_redis() -> Generator[None, None, None]:
-    with patch('hideandseek.broadcast.emit.get_sync_redis', return_value=None):
+    with patch('hideandseek_core.broadcast.emit.get_sync_redis', return_value=None):
         yield
 
 
@@ -54,7 +55,7 @@ class TestEmitPlayerJoined:
 
         # Subscribe before emit
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(_lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id))
 
         emit(PlayerJoinedEvent(game=game, player=player))
 
@@ -90,7 +91,7 @@ class TestEmitPlayerUpdated:
         player = create_player(session, game.id, name='Bob')
 
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(_lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id))
 
         emit(PlayerUpdatedEvent(game=game, player=player))
 
@@ -117,7 +118,7 @@ class TestEmitPlayerLeft:
         player_id = uuid.uuid4()
 
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(_lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id))
 
         emit(PlayerLeftEvent(game=game, player_id=player_id))
 
@@ -144,7 +145,7 @@ class TestEmitHostChanged:
         new_host_id = uuid.uuid4()
 
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(_lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id))
 
         emit(HostChangedEvent(game=game, new_host_player_id=new_host_id))
 
@@ -170,7 +171,7 @@ class TestEmitGameStarted:
         game = create_game(session)
 
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(_lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id))
 
         emit(GameStartedEvent(game=game))
 

@@ -7,7 +7,7 @@ Geographic "Hide and Seek" game — hiders use public transit to hide in a game 
 UV workspace with a root `pyproject.toml` and three Python packages (`models/`, `core/`, `server/`). A single `uv.lock` at the root governs all dependencies.
 
 - `models/` — SQLAlchemy models package (`hideandseek-models`). See `models/CLAUDE.md`.
-- `core/` — Shared business logic package (`hideandseek-core`): queries, logic, DB infra, geo math, push, redis, celery. No HTTP, no events. See `core/CLAUDE.md`.
+- `core/` — Shared business logic package (`hideandseek-core`): queries, logic, DB infra, geo math, push, redis, celery, gameplay broadcast (events + Redis publish). No HTTP. See `core/CLAUDE.md`.
 - `mobile/` — Mobile app (React Native + Expo). See `mobile/CLAUDE.md`.
 - `server/` — Python FastAPI backend (UV), depends on `hideandseek-models` and `hideandseek-core`. See `server/CLAUDE.md`.
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.

@@ -25,7 +25,7 @@ def _point(lng: float = -0.141, lat: float = 51.515) -> dict:
 def _patch_redis_for_emit() -> Generator[None, None, None]:
     server = fakeredis.FakeServer()
     fake = fakeredis.FakeRedis(server=server)
-    with patch('hideandseek.broadcast.emit.get_sync_redis', return_value=fake):
+    with patch('hideandseek_core.broadcast.emit.get_sync_redis', return_value=fake):
         yield
 
 

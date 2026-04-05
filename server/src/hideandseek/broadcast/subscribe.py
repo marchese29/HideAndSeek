@@ -10,24 +10,13 @@ import structlog
 
 from hideandseek.queries.game_state import build_hider_game_state, build_seeker_game_state
 from hideandseek.schemas.response import GameResponse
+from hideandseek_core.broadcast.emit import hider_channel, lobby_channel, seeker_channel
 from hideandseek_core.db import get_session, session_scope
 from hideandseek_core.redis_client import get_async_redis
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import GameplayEventType, LobbyEventType
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
-
-
-def _lobby_channel(game_id: uuid.UUID) -> str:
-    return f'game:{game_id}:lobby:events'
-
-
-def _hider_channel(game_id: uuid.UUID) -> str:
-    return f'game:{game_id}:hider-events'
-
-
-def _seeker_channel(game_id: uuid.UUID) -> str:
-    return f'game:{game_id}:seeker-events'
 
 
 async def lobby_event_stream(game_id: uuid.UUID) -> AsyncGenerator[dict, None]:
@@ -44,7 +33,7 @@ async def lobby_event_stream(game_id: uuid.UUID) -> AsyncGenerator[dict, None]:
         raise RuntimeError(msg)
 
     pubsub = redis.pubsub()
-    channel = _lobby_channel(game_id)
+    channel = lobby_channel(game_id)
     await pubsub.subscribe(channel)
     logger.info('sse_subscribed', game_id=str(game_id), channel=channel)
 
@@ -96,7 +85,7 @@ async def hider_state_stream(
         raise RuntimeError(msg)
 
     pubsub = redis.pubsub()
-    channel = _hider_channel(game_id)
+    channel = hider_channel(game_id)
     await pubsub.subscribe(channel)
     logger.info('sse_subscribed', game_id=str(game_id), channel=channel)
 
@@ -146,7 +135,7 @@ async def seeker_state_stream(
         raise RuntimeError(msg)
 
     pubsub = redis.pubsub()
-    channel = _seeker_channel(game_id)
+    channel = seeker_channel(game_id)
     await pubsub.subscribe(channel)
     logger.info('sse_subscribed', game_id=str(game_id), channel=channel)
 
