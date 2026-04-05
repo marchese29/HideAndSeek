@@ -6,7 +6,6 @@ import uuid
 
 import structlog
 
-from hideandseek.tasks.push import send_push
 from hideandseek_core.broadcast.emit import emit_gameplay
 from hideandseek_core.broadcast.events import (
     HiderQuestionAnsweredEvent,
@@ -15,7 +14,6 @@ from hideandseek_core.broadcast.events import (
     SeekerQuestionAnsweredEvent,
     StationElectionEvent,
 )
-from hideandseek_core.celery_app import app
 from hideandseek_core.db import session_scope
 from hideandseek_core.logic.answer import (
     answer_matching,
@@ -44,6 +42,8 @@ from hideandseek_models.types import (
     QuestionType,
     StationElectionStatus,
 )
+from hideandseek_worker.celery_app import app
+from hideandseek_worker.tasks.push import send_push
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 

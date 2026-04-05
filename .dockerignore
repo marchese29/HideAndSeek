@@ -13,6 +13,10 @@
 !core/pyproject.toml
 !core/src/
 
+# Worker package
+!worker/pyproject.toml
+!worker/src/
+
 # Server package
 !server/pyproject.toml
 !server/src/

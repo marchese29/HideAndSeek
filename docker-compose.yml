@@ -38,6 +38,7 @@ services:
       ENV: development
     volumes:
       - ./server/src:/app/server/src
+      - ./worker/src:/app/worker/src
       - ./models/src:/app/models/src
       - ./core/src:/app/core/src
     depends_on:
@@ -56,13 +57,14 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
-    command: uv run celery -A hideandseek_core.celery_app worker --loglevel=info --beat
+    command: uv run celery -A hideandseek_worker.celery_app worker --loglevel=info --beat
     environment:
       DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
       CELERY_BROKER_URL: redis://redis:6379/0
       ENV: development
     volumes:
       - ./server/src:/app/server/src
+      - ./worker/src:/app/worker/src
       - ./models/src:/app/models/src
       - ./core/src:/app/core/src
     depends_on:

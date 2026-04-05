@@ -8,12 +8,12 @@ from typing import Any
 
 import structlog
 
-from hideandseek_core.celery_app import app
 from hideandseek_core.config import load_fcm_config, load_push_config
 from hideandseek_core.db import session_scope
 from hideandseek_core.push import PushService
 from hideandseek_core.queries.device_tokens import get_device_tokens_for_game
 from hideandseek_models.types import PlayerRole, PushEventType
+from hideandseek_worker.celery_app import app
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 

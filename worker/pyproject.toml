@@ -1,28 +1,20 @@
 [project]
-name = "hideandseek-core"
+name = "hideandseek-worker"
 version = "0.1.0"
-description = "Shared business logic for HideAndSeek"
+description = "Celery worker for HideAndSeek (game timers + push delivery)"
 authors = [
     { name = "Dan Marchese", email = "dan@marchese.me" }
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "hideandseek-models",
-    "sqlalchemy>=2.0.46",
-    "geoalchemy2>=0.18.1",
-    "shapely>=2.1.2",
-    "pyproj>=3.7.2",
-    "geojson-pydantic>=2.1.0",
-    "pydantic>=2.0",
-    "psycopg[binary]>=3.3.2",
+    "hideandseek-core",
+    "celery>=5.6.2",
     "redis>=7.2.0",
     "structlog>=25.5.0",
-    "aioapns>=4.0",
-    "firebase-admin>=7.3.0",
 ]
 
 [tool.uv.sources]
-hideandseek-models = { workspace = true }
+hideandseek-core = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -46,7 +38,7 @@ suppress-none-returning = true
 
 [tool.ruff.lint.isort]
 force-single-line = false
-known-first-party = ["hideandseek_core", "hideandseek_models"]
+known-first-party = ["hideandseek_worker", "hideandseek_core", "hideandseek_models"]
 
 [tool.pyright]
 pythonVersion = "3.12"

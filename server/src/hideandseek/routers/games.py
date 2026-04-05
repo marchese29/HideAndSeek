@@ -41,11 +41,8 @@ from hideandseek.schemas.response import (
     SessionResponse,
     StopResponse,
 )
-from hideandseek.tasks.game_timers import transition_hiding_to_seeking
-from hideandseek.tasks.push import send_push
 from hideandseek_core.broadcast.emit import emit_gameplay
 from hideandseek_core.broadcast.events import StationElectionEvent
-from hideandseek_core.celery_app import app as celery_app
 from hideandseek_core.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
 from hideandseek_core.db import session_dependency
 from hideandseek_core.logic.endgame import (
@@ -72,6 +69,9 @@ from hideandseek_core.queries.questions import get_inventory_slots
 from hideandseek_core.queries.stops import get_stops_near_point, validate_stop_playable
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import GameStatus, PlayerRole, PushEventType, StationElectionStatus
+from hideandseek_worker.celery_app import app as celery_app
+from hideandseek_worker.tasks.game_timers import transition_hiding_to_seeking
+from hideandseek_worker.tasks.push import send_push
 
 router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(session_dependency)])
 

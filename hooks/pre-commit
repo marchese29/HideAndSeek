@@ -69,12 +69,19 @@ run_if_changed "core-checks" \
     hooks/core-checks.sh \
     "core/" "models/" || exit 1
 
-# --- Server checks (also triggered by models/core changes — server depends on both) ---
+# --- Worker checks (also triggered by models/core changes — worker depends on both) ---
+run_if_changed "worker-checks" \
+    "Worker checks passed on this content — skipping." \
+    "Worker code changed — running checks..." \
+    hooks/worker-checks.sh \
+    "worker/" "core/" "models/" || exit 1
+
+# --- Server checks (also triggered by models/core/worker changes — server depends on all three) ---
 run_if_changed "server-checks" \
     "Server checks passed on this content — skipping." \
     "Server code changed — running checks..." \
     hooks/server-checks.sh \
-    "server/" "models/" "core/" || exit 1
+    "server/" "models/" "core/" "worker/" || exit 1
 
 # --- OpenAPI spec regen (also triggered by models changes) ---
 run_if_changed "openapi-regen" \

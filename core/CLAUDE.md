@@ -1,6 +1,6 @@
 # Core — Shared Business Logic
 
-Shared business logic for the HideAndSeek game. Sits between `hideandseek-models` (ORM) and `hideandseek` (server/presentation). Contains no HTTP code and no response schemas. Owns gameplay event production and Redis publishing; lobby presentation (Pydantic schemas, SSE subscriptions) stays in server.
+Shared business logic for the HideAndSeek game. Sits between `hideandseek-models` (ORM) and both `hideandseek-worker` (Celery tasks) and `hideandseek` (server/presentation). Contains no HTTP code, no response schemas, and no Celery tasks. Owns gameplay event production and Redis publishing; lobby presentation (Pydantic schemas, SSE subscriptions) stays in server.
 
 ## Commands
 
@@ -19,8 +19,6 @@ src/hideandseek_core/
   db.py                # Engine factory, session ContextVar, register(), session_scope()
   config.py            # Push config (APNs + FCM), env-var loading
   push.py              # PushService, ApnsProvider, FcmProvider
-  celery_app.py        # Celery application instance
-  celery_config.py     # Celery broker/result backend config
   redis_client.py      # Redis client factory (sync + async)
   geo.py               # Pure geodesic distance functions (pyproj)
   geo_helpers.py       # Shapely-to-GeoJSON conversion helpers
@@ -36,8 +34,8 @@ src/hideandseek_core/
 ## Architecture Rules
 
 - **Gameplay events live here, lobby events live in server**: Core defines gameplay event dataclasses and publishes them to Redis SSE channels via `emit_gameplay()`. Server defines lobby event dataclasses and publishes them via its own `emit()`, which imports `publish_sse` from core. SSE subscription streams and Pydantic game-state snapshots stay in server.
-- **No HTTP**: Core never imports from `hideandseek.schemas`, `hideandseek.routers`, or `hideandseek.tasks`. It does not use Pydantic response schemas.
-- **Dependency direction**: `hideandseek-models` ← `hideandseek-core` ← `hideandseek` (server). Core never imports from server.
+- **No HTTP, no Celery**: Core never imports from `hideandseek.schemas`, `hideandseek.routers`, `hideandseek_worker`, or Celery. It does not use Pydantic response schemas.
+- **Dependency direction**: `hideandseek-models` ← `hideandseek-core` ← `hideandseek-worker` / `hideandseek` (server). Core never imports from worker or server.
 - **Logic layer is the conversion boundary**: `to_meters()` before geo math, `from_meters()` after. Logic functions use `db.register()` for new objects and mutate tracked ORM objects directly.
 - **ContextVar session access**: Query functions call `db.get_session()` — no session parameters, no decorators.
 

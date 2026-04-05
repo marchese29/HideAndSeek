@@ -19,8 +19,6 @@ from hideandseek.schemas.response import (
     FeaturePreviewResponse,
     PreviewQuestionResponse,
 )
-from hideandseek.tasks.game_timers import auto_answer_question
-from hideandseek.tasks.push import send_push
 from hideandseek.validators import (
     validate_abandon_request,
     validate_answer_request,
@@ -36,7 +34,6 @@ from hideandseek_core.broadcast.events import (
     QuestionVetoedEvent,
     SeekerQuestionAnsweredEvent,
 )
-from hideandseek_core.celery_app import app as celery_app
 from hideandseek_core.conventions import format_distance_label
 from hideandseek_core.db import session_dependency
 from hideandseek_core.geo_helpers import geom_or_none
@@ -65,6 +62,9 @@ from hideandseek_models.types import (
     QuestionStatus,
     QuestionType,
 )
+from hideandseek_worker.celery_app import app as celery_app
+from hideandseek_worker.tasks.game_timers import auto_answer_question
+from hideandseek_worker.tasks.push import send_push
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['questions'], dependencies=[Depends(session_dependency)]

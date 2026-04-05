@@ -4,12 +4,13 @@ Geographic "Hide and Seek" game — hiders use public transit to hide in a game 
 
 ## Monorepo Layout
 
-UV workspace with a root `pyproject.toml` and three Python packages (`models/`, `core/`, `server/`). A single `uv.lock` at the root governs all dependencies.
+UV workspace with a root `pyproject.toml` and four Python packages (`models/`, `core/`, `worker/`, `server/`). A single `uv.lock` at the root governs all dependencies.
 
 - `models/` — SQLAlchemy models package (`hideandseek-models`). See `models/CLAUDE.md`.
-- `core/` — Shared business logic package (`hideandseek-core`): queries, logic, DB infra, geo math, push, redis, celery, gameplay broadcast (events + Redis publish). No HTTP. See `core/CLAUDE.md`.
+- `core/` — Shared business logic package (`hideandseek-core`): queries, logic, DB infra, geo math, push, redis, gameplay broadcast (events + Redis publish). No HTTP. See `core/CLAUDE.md`.
+- `worker/` — Celery worker package (`hideandseek-worker`): game timers + push delivery. Depends on `hideandseek-core`. See `worker/CLAUDE.md`.
 - `mobile/` — Mobile app (React Native + Expo). See `mobile/CLAUDE.md`.
-- `server/` — Python FastAPI backend (UV), depends on `hideandseek-models` and `hideandseek-core`. See `server/CLAUDE.md`.
+- `server/` — Python FastAPI backend (UV), depends on `hideandseek-models`, `hideandseek-core`, and `hideandseek-worker`. See `server/CLAUDE.md`.
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.
 - `design/` — AI-generated design artifacts. See `design/CLAUDE.md`.
 - `hooks/` — Git hooks (symlinked into `.git/hooks/`; see Setup below).
@@ -29,6 +30,7 @@ CLAUDE.md files exist at:
 - `CLAUDE.md` (this file) — monorepo-wide conventions and workflow
 - `models/CLAUDE.md` — models package conventions
 - `core/CLAUDE.md` — core business logic package conventions
+- `worker/CLAUDE.md` — worker (Celery) package conventions
 - `mobile/CLAUDE.md` — mobile app build, architecture, conventions
 - `server/CLAUDE.md` — server commands, style, conventions
 - `openapi/CLAUDE.md` — how the spec is generated and used
@@ -38,7 +40,7 @@ CLAUDE.md files exist at:
 
 - Issue tracking: use `bd` (beads) CLI. Run `bd onboard` to get started.
 - Git hooks: `hooks/pre-commit` is the versioned pre-commit hook (server checks + OpenAPI regen + beads JSONL flush). It's symlinked into `.git/hooks/`. Beads installs its own shims for other hooks (`pre-push`, `post-merge`, `post-checkout`, `prepare-commit-msg`) directly in `.git/hooks/`. See Setup below.
-- The pre-commit hook runs in dependency order: models checks → core checks → server checks → OpenAPI regen → API types regen → mobile checks. Models changes cascade to core, server, and OpenAPI regen. Core changes cascade to server and OpenAPI regen.
+- The pre-commit hook runs in dependency order: models checks → core checks → worker checks → server checks → OpenAPI regen → API types regen → mobile checks. Models changes cascade to core, worker, server, and OpenAPI regen. Core changes cascade to worker, server, and OpenAPI regen. Worker changes cascade to server.
 - The OpenAPI regen step auto-stages the updated spec (`git add openapi/openapi.yaml`), so it's included in the commit automatically — no manual step needed.
 - Hook steps use `run_if_changed` with hash caching (`.git/hooks-cache/`) to skip work when staged content hasn't changed since the last successful run.
 - To add a new cached hook step: write a script in `hooks/`, then add a `run_if_changed` call in `hooks/pre-commit`. Signature: `run_if_changed <cache_key> <skip_msg> <run_msg> <command> <path...>` — paths are listed after the command, supporting multiple trigger paths.
@@ -97,6 +99,10 @@ cd models && uv run pyright           # Type check
 # Core package (standalone lint + typecheck — no tests, exercised by server suite)
 cd core && uv run ruff check .       # Lint
 cd core && uv run pyright             # Type check
+
+# Worker package (standalone lint + typecheck — no tests, exercised by server suite)
+cd worker && uv run ruff check .     # Lint
+cd worker && uv run pyright           # Type check
 
 # Server (Docker — preferred, runs PostGIS + Redis + Celery worker)
 docker compose up --build          # Start all 4 services (localhost:8000)
