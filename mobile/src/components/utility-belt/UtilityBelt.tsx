@@ -1,10 +1,14 @@
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useQuestionSelection } from '@/hooks/useQuestionSelection';
 import type { HiderGameState, SeekerGameState } from '@/types/gameplay';
 
 import { BeltActions } from './BeltActions';
+import { CustomDistanceInput } from './CustomDistanceInput';
 import { GameTimer } from './GameTimer';
+import { ParamPicker } from './ParamPicker';
+import { QuestionTypeBar } from './QuestionTypeBar';
 import { StateAction } from './StateAction';
 
 interface UtilityBeltProps {
@@ -17,6 +21,23 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
   const stationElectionStatus =
     role === 'hider' ? (state as HiderGameState).station_election_status : undefined;
   const disabled = !connected;
+
+  const isSeekerSeeking = role === 'seeker' && state.phase === 'seeking';
+  const seekerState = isSeekerSeeking ? (state as SeekerGameState) : null;
+
+  const hasActiveQuestion =
+    seekerState?.active_question !== null && seekerState?.active_question !== undefined;
+
+  const selection = useQuestionSelection(
+    seekerState?.inventory ?? EMPTY_INVENTORY,
+    hasActiveQuestion,
+  );
+
+  const selectedType =
+    selection.state.step === 'param' || selection.state.step === 'custom'
+      ? selection.state.questionType
+      : null;
+
   return (
     <View style={styles.container}>
       {/* Left: State action + Timer */}
@@ -26,7 +47,10 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
             role={role}
             phase={state.phase}
             stationElectionStatus={stationElectionStatus}
+            hasActiveQuestion={isSeekerSeeking && hasActiveQuestion}
             disabled={disabled}
+            onPress={isSeekerSeeking ? selection.toggle : undefined}
+            active={isSeekerSeeking && selection.isOpen}
           />
         </View>
         <GameTimer
@@ -38,14 +62,46 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
         />
       </View>
 
-      {/* Center: Toolbelt placeholder */}
-      <View style={styles.center} />
+      {/* Center: Question selection (seeker seeking) or empty placeholder */}
+      <View style={styles.center}>
+        {isSeekerSeeking && selection.state.step === 'type' && (
+          <QuestionTypeBar
+            onSelectType={selection.selectType}
+            selectedType={selectedType}
+            disabled={disabled}
+          />
+        )}
+        {isSeekerSeeking && selection.state.step === 'param' && (
+          <ParamPicker
+            slots={selection.slotsForType}
+            convention={seekerState!.distance_convention}
+            questionType={selection.state.questionType}
+            selectedSlotIndex={selection.selectedSlotIndex}
+            onSelectSlot={selection.selectSlot}
+            onCustomPress={selection.openCustom}
+            disabled={disabled}
+          />
+        )}
+        {isSeekerSeeking && selection.state.step === 'custom' && (
+          <CustomDistanceInput
+            onSubmit={selection.submitCustom}
+            onCancel={() =>
+              selection.selectType(
+                selection.state.step === 'custom' ? selection.state.questionType : '',
+              )
+            }
+            convention={seekerState!.distance_convention}
+          />
+        )}
+      </View>
 
       {/* Right: Info + Leave */}
       <BeltActions disabled={disabled} />
     </View>
   );
 });
+
+const EMPTY_INVENTORY: never[] = [];
 
 const styles = StyleSheet.create({
   container: {
@@ -67,6 +123,7 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    paddingVertical: 4,
   },
 });

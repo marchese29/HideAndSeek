@@ -2,6 +2,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { authHeader } from '@/api/auth';
+import { api } from '@/api/client';
 import { abandonQuestion, lockInThermometer } from '@/api/questions';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
@@ -30,6 +32,13 @@ const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.gl
 function questionTypeIcon(questionType: string): keyof typeof MaterialCommunityIcons.glyphMap {
   return QUESTION_TYPE_ICONS[questionType] ?? 'help-circle-outline';
 }
+
+const ASK_PATHS = {
+  radar: '/games/{game_id}/questions/radar',
+  thermometer: '/games/{game_id}/questions/thermometer',
+  matching: '/games/{game_id}/questions/matching',
+  measuring: '/games/{game_id}/questions/measuring',
+} as const;
 
 function formatQuestionLabel(
   questionType: string,
@@ -102,8 +111,56 @@ export const SeekerBanner = memo(function SeekerBanner({
     ]);
   }, [activeQuestion, gameId]);
 
-  // Preview state (pre-ask) — triggered by question selection UI (dhe)
+  const onAsk = useCallback(() => {
+    if (!previewQuestion) return;
+    Alert.alert('Ask Question', 'Ask this question?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Ask',
+        onPress: () => {
+          const location = useGameplayStore.getState().selfLocation?.coordinates;
+          if (!location) {
+            Alert.alert('Location Unavailable', 'Cannot determine your position. Try again.');
+            return;
+          }
+          const path = ASK_PATHS[previewQuestion.question_type as keyof typeof ASK_PATHS];
+          if (!path) return;
+          setActionInProgress(true);
+          void api
+            .POST(path, {
+              params: { path: { game_id: gameId }, header: authHeader() },
+              body: {
+                slot_index: previewQuestion.slot_index,
+                location,
+                custom_distance: previewQuestion.custom_distance ?? null,
+              },
+            })
+            .then(({ error }) => {
+              if (error) {
+                Alert.alert('Error', 'Failed to ask question.');
+              }
+              // On success: SSE question_asked event auto-clears previewQuestion
+            })
+            .finally(() => setActionInProgress(false));
+        },
+      },
+    ]);
+  }, [previewQuestion, gameId]);
+
+  const previewSlot = useMemo(() => {
+    if (!previewQuestion) return undefined;
+    return inventory.find(
+      (slot) =>
+        slot.question_type === previewQuestion.question_type &&
+        slot.slot_index === previewQuestion.slot_index,
+    );
+  }, [previewQuestion, inventory]);
+
+  // Preview state (pre-ask) — triggered by question selection UI
   if (previewQuestion && !activeQuestion) {
+    const previewLabel = previewQuestion.custom_distance
+      ? `${previewQuestion.custom_distance} ${convention === 'metric' ? 'km' : 'mi'}`
+      : formatQuestionLabel(previewQuestion.question_type, previewSlot, convention);
     return (
       <View style={styles.container}>
         <MaterialCommunityIcons
@@ -112,7 +169,7 @@ export const SeekerBanner = memo(function SeekerBanner({
           color="#fff"
         />
         <Text style={styles.label} numberOfLines={1}>
-          {previewQuestion.question_type}
+          {previewLabel}
         </Text>
         <Pressable
           style={({ pressed }) => [
@@ -122,9 +179,7 @@ export const SeekerBanner = memo(function SeekerBanner({
             pressed && !isDisabled && styles.primaryPressed,
           ]}
           disabled={isDisabled}
-          onPress={() => {
-            /* Wired by dhe */
-          }}
+          onPress={onAsk}
         >
           <Text style={styles.buttonText}>Ask</Text>
         </Pressable>

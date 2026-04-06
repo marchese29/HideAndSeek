@@ -159,6 +159,7 @@ export interface PreviewQuestion {
   question_type: string;
   slot_index: number;
   parameters: QuestionEventParams;
+  custom_distance?: number;
 }
 
 // ── Stops ────────────────────────────────────────────────────────────────────

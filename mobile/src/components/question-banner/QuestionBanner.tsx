@@ -28,6 +28,34 @@ export const QuestionBanner = memo(function QuestionBanner({
 
   const visible = activeQuestion !== null || previewQuestion !== null;
 
+  // Build live banner content
+  let liveContent: React.ReactNode = null;
+  if (role === 'hider' && activeQuestion) {
+    liveContent = (
+      <HiderBanner
+        activeQuestion={activeQuestion as HiderActiveQuestion}
+        disabled={!connected}
+        gameId={gameId}
+        seekers={seekers}
+      />
+    );
+  } else if (role === 'seeker') {
+    liveContent = (
+      <SeekerBanner
+        activeQuestion={activeQuestion}
+        previewQuestion={previewQuestion}
+        disabled={!connected}
+        gameId={gameId}
+      />
+    );
+  }
+
+  // Snapshot the last visible content so it stays frozen during slide-out.
+  const lastContentRef = useRef<React.ReactNode>(null);
+  if (visible && liveContent !== null) {
+    lastContentRef.current = liveContent;
+  }
+
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [shouldRender, setShouldRender] = useState(visible);
 
@@ -45,34 +73,15 @@ export const QuestionBanner = memo(function QuestionBanner({
         duration: 200,
         useNativeDriver: true,
       }).start(({ finished }) => {
-        if (finished) setShouldRender(false);
+        if (finished) {
+          setShouldRender(false);
+          lastContentRef.current = null;
+        }
       });
     }
   }, [visible, slideAnim]);
 
   if (!shouldRender) return null;
-
-  // Render role-specific banner content
-  let bannerContent = null;
-  if (role === 'hider' && activeQuestion) {
-    bannerContent = (
-      <HiderBanner
-        activeQuestion={activeQuestion as HiderActiveQuestion}
-        disabled={!connected}
-        gameId={gameId}
-        seekers={seekers}
-      />
-    );
-  } else if (role === 'seeker') {
-    bannerContent = (
-      <SeekerBanner
-        activeQuestion={activeQuestion}
-        previewQuestion={previewQuestion}
-        disabled={!connected}
-        gameId={gameId}
-      />
-    );
-  }
 
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
@@ -81,7 +90,7 @@ export const QuestionBanner = memo(function QuestionBanner({
 
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ translateY }], opacity: slideAnim }]}>
-      {bannerContent}
+      {visible ? liveContent : lastContentRef.current}
     </Animated.View>
   );
 });

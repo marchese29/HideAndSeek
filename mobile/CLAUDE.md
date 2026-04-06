@@ -35,7 +35,7 @@ src/
     schema.d.ts                # Auto-generated from OpenAPI — DO NOT EDIT
     client.ts                  # openapi-fetch wrapper + X-Player-Id + X-Player-Secret middleware
     queryClient.ts             # TanStack Query client instance
-    questions.ts               # Question action API calls (answer, veto, abandon, lock-in)
+    questions.ts               # Question API calls (answer, veto, abandon, lock-in). Ask uses api.POST directly.
   store.ts                     # Zustand store (session + push token state)
   stores/
     gameplayStore.ts           # Zustand store for gameplay state (SSE-driven, not persisted)
@@ -49,6 +49,7 @@ src/
     useGameTimer.ts            # 1s-tick timer: countdown (hiding) / elapsed (seeking)
     useLocationTracking.ts     # Foreground GPS tracking + POST /location + optimistic self update
     useLobbyEvents.ts          # Lobby SSE subscription with auto-reconnect + connection status
+    useQuestionSelection.ts    # Question selection state machine (belt takeover flow)
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
   utils/
     geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary
@@ -65,15 +66,18 @@ src/
     question-banner/           # Question Banner (active question state for both roles)
       index.ts                 # Barrel export
       QuestionBanner.tsx       # Container — slide animation, role dispatch
-      SeekerBanner.tsx         # Seeker: preview/active/thermometer states + abandon/lock-in
+      SeekerBanner.tsx         # Seeker: preview/ask/active/thermometer states + abandon/lock-in
       HiderBanner.tsx          # Hider: pre-lock-in (gray) / answerable (urgency-colored) + answer/veto
       BannerCountdown.tsx      # MM:SS countdown to question deadline
-    utility-belt/              # Gameplay utility belt (Cycle A)
+    utility-belt/              # Gameplay utility belt + question selection
       index.ts                 # Barrel export
-      UtilityBelt.tsx          # Container — banner + three-section main row
-      StateAction.tsx          # Role/phase action button (icon + label)
+      UtilityBelt.tsx          # Container — three-section row, wires question selection hook
+      StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker)
       GameTimer.tsx            # Live timer with connection-colored background
       BeltActions.tsx          # Info + leave icon buttons
+      QuestionTypeBar.tsx      # 4 question type buttons (radar/thermo/match/measure)
+      ParamPicker.tsx          # Horizontal scrollable inventory slot picker
+      CustomDistanceInput.tsx  # Inline numeric input for custom distance slots
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types
 assets/                        # Images, fonts

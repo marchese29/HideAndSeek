@@ -6,7 +6,10 @@ interface StateActionProps {
   role: 'hider' | 'seeker';
   phase: string;
   stationElectionStatus?: string;
+  hasActiveQuestion?: boolean;
   disabled: boolean;
+  onPress?: () => void;
+  active?: boolean;
 }
 
 interface ActionConfig {
@@ -19,6 +22,7 @@ function resolveAction(
   role: 'hider' | 'seeker',
   phase: string,
   stationElectionStatus?: string,
+  hasActiveQuestion?: boolean,
 ): ActionConfig {
   if (phase === 'hiding') {
     if (role === 'seeker') {
@@ -32,8 +36,11 @@ function resolveAction(
   }
 
   if (phase === 'seeking') {
+    if (role === 'seeker' && hasActiveQuestion) {
+      return { icon: 'timer-sand', label: 'Waiting', pressable: false };
+    }
     if (role === 'seeker') {
-      return { icon: 'chat-question-outline', label: 'Ask', pressable: true };
+      return { icon: 'chat-question-outline', label: 'Questions', pressable: true };
     }
     return { icon: 'toolbox-outline', label: 'Toolbox', pressable: true };
   }
@@ -47,10 +54,18 @@ export const StateAction = memo(function StateAction({
   phase,
   stationElectionStatus,
   disabled,
+  hasActiveQuestion,
+  onPress: onPressProp,
+  active,
 }: StateActionProps) {
-  const { icon, label, pressable } = resolveAction(role, phase, stationElectionStatus);
+  const { icon, label, pressable } = resolveAction(
+    role,
+    phase,
+    stationElectionStatus,
+    hasActiveQuestion,
+  );
 
-  const onPress = useCallback(() => {
+  const defaultOnPress = useCallback(() => {
     Alert.alert(label, 'Coming soon');
   }, [label]);
 
@@ -61,10 +76,11 @@ export const StateAction = memo(function StateAction({
       style={({ pressed }) => [
         styles.container,
         pressable ? styles.actionable : styles.informational,
+        active && styles.active,
         isDisabled && styles.disabled,
         pressed && !isDisabled && styles.pressed,
       ]}
-      onPress={onPress}
+      onPress={onPressProp ?? defaultOnPress}
       disabled={isDisabled}
     >
       <MaterialCommunityIcons name={icon} size={20} color="#fff" />
@@ -89,6 +105,10 @@ const styles = StyleSheet.create({
   informational: {
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  active: {
+    backgroundColor: 'rgba(52, 152, 219, 0.3)',
+    borderColor: 'rgba(52, 152, 219, 0.5)',
   },
   pressed: {
     backgroundColor: 'rgba(255, 255, 255, 0.22)',
