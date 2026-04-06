@@ -7,6 +7,7 @@ import type {
   HiderGameState,
   HiderQuestionAnsweredDelta,
   HiderQuestionHistoryEntry,
+  PhaseChangedDelta,
   PreviewQuestion,
   QuestionAnswerableDelta,
   QuestionAskedDelta,
@@ -35,6 +36,7 @@ interface GameplayActions {
   updateQuestionAnswerable: (delta: QuestionAnswerableDelta) => void;
   clearActiveQuestion: () => void;
   applyQuestionAnswered: (delta: HiderQuestionAnsweredDelta | SeekerQuestionAnsweredDelta) => void;
+  applyPhaseChanged: (delta: PhaseChangedDelta) => void;
   setPreviewQuestion: (preview: PreviewQuestion | null) => void;
 }
 
@@ -286,6 +288,32 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           active_question: null,
           question_history: history,
           total_exclusion: seekerDelta.total_exclusion ?? prev.state.total_exclusion,
+        },
+      };
+    });
+  },
+
+  applyPhaseChanged: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+      if (prev.role === 'hider') {
+        return {
+          ...prev,
+          state: {
+            ...prev.state,
+            phase: delta.phase,
+            seeking_started_at: delta.seeking_started_at,
+            station_election_status: delta.station_election_status,
+            hider_station_id: delta.hider_station_id,
+          },
+        };
+      }
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          phase: delta.phase,
+          seeking_started_at: delta.seeking_started_at,
         },
       };
     });

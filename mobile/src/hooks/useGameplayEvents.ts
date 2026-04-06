@@ -8,6 +8,7 @@ import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
   HiderGameState,
   HiderQuestionAnsweredDelta,
+  PhaseChangedDelta,
   PlayerLocationDelta,
   QuestionAbandonedDelta,
   QuestionAnswerableDelta,
@@ -19,6 +20,7 @@ import type {
 
 type GameplayEventType =
   | 'game_state'
+  | 'phase_changed'
   | 'player_location'
   | 'question_asked'
   | 'question_answerable'
@@ -85,6 +87,13 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         const data = parseData<HiderGameState | SeekerGameState>(event);
         if (data) {
           useGameplayStore.getState().hydrate(role!, data);
+        }
+      });
+
+      es.addEventListener('phase_changed', (event) => {
+        const data = parseData<PhaseChangedDelta>(event);
+        if (data) {
+          useGameplayStore.getState().applyPhaseChanged(data);
         }
       });
 

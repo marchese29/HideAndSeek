@@ -270,6 +270,15 @@ export interface SeekerQuestionHistoryEntry {
   answered_at: string | null;
 }
 
+// ── Phase Transition ────────────────────────────────────────────────────────
+
+export interface PhaseChangedDelta {
+  phase: string;
+  seeking_started_at: string;
+  station_election_status: string;
+  hider_station_id: string | null;
+}
+
 // ── Inventory ────────────────────────────────────────────────────────────────
 
 export interface InventorySlotResponse {
