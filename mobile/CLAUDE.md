@@ -58,6 +58,7 @@ src/
   components/                  # Reusable UI components
     GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins)
     BoundaryOverlay.tsx        # Game boundary polygon (outline-only stroke)
+    ExclusionOverlay.tsx       # Exclusion zone polygon overlay (translucent red, seeker seeking phase only, zIndex 2000)
     StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
     TransitRoute.tsx           # Transit route polyline + white stop dots
     PlayerPin.tsx              # Player map pin (animated — colored circle + initial + self ring + hider badge + stack count)
@@ -168,7 +169,8 @@ Both hooks:
 - **Stops**: Rendered as white dots along route polylines (not standalone markers). Stop data is still delivered as a flat `stops` array; `routes` carry `stop_ids` referencing into that array.
 - **Player pins**: `Marker.Animated` with `AnimatedRegion` — colored circle with first initial. Pins glide smoothly (500ms timing animation) when coordinates update. Self pin has white ring. Hider pins are semi-transparent (0.4 opacity) with italic initial — signals their location is approximate/private. Stale locations (>60s) turn gray instead of using the player's color.
 - **Stack detection**: Co-located players are detected by rounding coordinates to 4 decimal places (~11m). The topmost pin shows a "+N" count badge.
-- **Rendering order**: Players sorted by self-last (highest `zIndex`), then alphabetical. Self pin always renders on top.
+- **Exclusion zones**: `ExclusionOverlay` renders `total_exclusion` (GeoJSON Polygon or MultiPolygon) as translucent red fill (`rgba(231, 76, 60, 0.25)`) with `zIndex={2000}`. Rendered on top of all other overlays (boundary, routes, pins) — seeker seeking phase only. Handles MultiPolygon (multiple `<Polygon>` elements) and polygon holes. Reactively updates via `question_answered` SSE → store → prop change.
+- **Rendering order**: Players sorted by self-last (highest `zIndex`), then alphabetical. Self pin always renders on top. Exclusion overlay at `zIndex={2000}` renders above everything.
 - **`tracksViewChanges`**: Normally `false` for performance. `Marker.Animated` doesn't reliably re-snapshot on its own, so `PlayerPin` briefly pulses `tracksViewChanges={true}` for 200ms when staleness transitions — just enough for the native map to capture the new color. This preserves position animations (key-based recreation would destroy the `AnimatedRegion`).
 - **Zustand selectors**: Use individual primitive/reference selectors (e.g., `s.status`, `s.role`, `s.state`) — never return new object literals from selectors (causes infinite re-render loops with Zustand's `===` equality check).
 

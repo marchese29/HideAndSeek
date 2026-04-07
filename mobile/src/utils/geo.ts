@@ -3,6 +3,7 @@ import type { Region } from 'react-native-maps';
 import type {
   GeoJSONLineString,
   GeoJSONMultiLineString,
+  GeoJSONMultiPolygon,
   GeoJSONPoint,
   GeoJSONPolygon,
 } from '@/types/gameplay';
@@ -33,6 +34,25 @@ export function polygonToCoords(polygon: GeoJSONPolygon): LatLng[] {
   return polygon.coordinates[0].map((pair) => ({
     latitude: pair[1],
     longitude: pair[0],
+  }));
+}
+
+/** Extract inner rings (holes) from a GeoJSON Polygon as arrays of LatLng. */
+export function polygonToHoles(polygon: GeoJSONPolygon): LatLng[][] {
+  return polygon.coordinates
+    .slice(1)
+    .map((ring) => ring.map((pair) => ({ latitude: pair[1], longitude: pair[0] })));
+}
+
+/** Convert a GeoJSON MultiPolygon to per-polygon parts with outer ring + holes. */
+export function multiPolygonToParts(
+  multi: GeoJSONMultiPolygon,
+): { coordinates: LatLng[]; holes: LatLng[][] }[] {
+  return multi.coordinates.map((polyCoords) => ({
+    coordinates: polyCoords[0].map((pair) => ({ latitude: pair[1], longitude: pair[0] })),
+    holes: polyCoords
+      .slice(1)
+      .map((ring) => ring.map((pair) => ({ latitude: pair[1], longitude: pair[0] }))),
   }));
 }
 

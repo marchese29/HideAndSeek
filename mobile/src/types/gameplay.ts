@@ -28,6 +28,11 @@ export interface GeoJSONMultiLineString {
   coordinates: [number, number][][];
 }
 
+export interface GeoJSONMultiPolygon {
+  type: 'MultiPolygon';
+  coordinates: number[][][][];
+}
+
 /** Flexible GeoJSON geometry for exclusion zones (Polygon, MultiPolygon, etc.) */
 export type GeoJSONGeometry = Record<string, unknown>;
 

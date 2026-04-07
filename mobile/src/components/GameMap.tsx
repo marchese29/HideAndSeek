@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import MapView from 'react-native-maps';
 
 import { BoundaryOverlay } from '@/components/BoundaryOverlay';
+import { ExclusionOverlay } from '@/components/ExclusionOverlay';
 import { PlayerPin } from '@/components/PlayerPin';
 import { TransitRoute } from '@/components/TransitRoute';
 import { useGameplayStore } from '@/stores/gameplayStore';
@@ -114,6 +115,9 @@ export function GameMap({ role, state }: GameMapProps) {
           stackCount={stackCount}
         />
       ))}
+      {role === 'seeker' && state.phase === 'seeking' && (
+        <ExclusionOverlay exclusion={(state as SeekerGameState).total_exclusion} />
+      )}
     </MapView>
   );
 }
