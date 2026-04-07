@@ -4,7 +4,9 @@ import MapView from 'react-native-maps';
 import { BoundaryOverlay } from '@/components/BoundaryOverlay';
 import { ExclusionOverlay } from '@/components/ExclusionOverlay';
 import { PlayerPin } from '@/components/PlayerPin';
+import { PreviewBoundaryOverlay } from '@/components/PreviewBoundaryOverlay';
 import { TransitRoute } from '@/components/TransitRoute';
+import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GamePlayer, HiderGameState, SeekerGameState } from '@/types/gameplay';
 import { regionFromBoundary } from '@/utils/geo';
@@ -33,6 +35,7 @@ interface PlayerEntry {
 export function GameMap({ role, state }: GameMapProps) {
   const initialRegion = useMemo(() => regionFromBoundary(state.boundary), [state.boundary]);
   const selfLocation = useGameplayStore((s) => s.selfLocation);
+  const { boundary: previewBoundary, questionType: previewQuestionType } = usePreviewBoundary();
 
   // Periodic tick forces the players memo to recompute staleness
   const [staleTick, setStaleTick] = useState(0);
@@ -117,6 +120,9 @@ export function GameMap({ role, state }: GameMapProps) {
       ))}
       {role === 'seeker' && state.phase === 'seeking' && (
         <ExclusionOverlay exclusion={(state as SeekerGameState).total_exclusion} />
+      )}
+      {role === 'seeker' && (
+        <PreviewBoundaryOverlay boundary={previewBoundary} questionType={previewQuestionType} />
       )}
     </MapView>
   );
