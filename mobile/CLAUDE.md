@@ -52,7 +52,7 @@ src/
     useQuestionSelection.ts    # Question selection state machine (belt takeover flow)
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
   utils/
-    geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary
+    geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary + haversine distance + convention conversion
     locationPermission.ts      # requestLocationPermission() — foreground permission helper
     time.ts                    # parseUtc() — server timestamp parsing (shared by timer hooks)
   components/                  # Reusable UI components
@@ -67,7 +67,7 @@ src/
     question-banner/           # Question Banner (active question state for both roles)
       index.ts                 # Barrel export
       QuestionBanner.tsx       # Container — slide animation, role dispatch
-      SeekerBanner.tsx         # Seeker: preview/ask/active/thermometer states + abandon/lock-in
+      SeekerBanner.tsx         # Seeker: preview/ask/active/thermometer states + abandon/lock-in (min_travel validation)
       HiderBanner.tsx          # Hider: pre-lock-in (gray) / answerable (urgency-colored) + answer/veto
       BannerCountdown.tsx      # MM:SS countdown to question deadline
     utility-belt/              # Gameplay utility belt + question selection
@@ -162,7 +162,7 @@ Both hooks:
 ## Map Rendering
 
 - **Map provider**: Platform default (Apple Maps on iOS, Google Maps on Android) — no `provider` prop on `<MapView>`.
-- **GeoJSON conversion**: All server geometries are GeoJSON (`[lon, lat]`). `src/utils/geo.ts` provides `toLatLng()`, `lineStringToCoords()`, and `polygonToCoords()` to convert to `react-native-maps` `{ latitude, longitude }` format.
+- **GeoJSON conversion**: All server geometries are GeoJSON (`[lon, lat]`). `src/utils/geo.ts` provides `toLatLng()`, `lineStringToCoords()`, and `polygonToCoords()` to convert to `react-native-maps` `{ latitude, longitude }` format. Also provides `haversineMeters()` for distance between GeoJSON Points and `metersToConvention()` for meters→km/mi conversion.
 - **Initial region**: Computed from boundary polygon via `regionFromBoundary()` with 10% padding. Uses `initialRegion` (not `region`) so users can pan/zoom freely.
 - **Boundary**: Outline-only `<Polygon>` stroke, no fill.
 - **Transit routes**: Colored `<Polyline>` per route (using the route's hex color from the server) with white dot `<Marker>`s at each stop along the route. Rendered by `TransitRoute` component. Stops on multiple routes get overlapping dots (no deduplication needed).
@@ -186,7 +186,7 @@ Both hooks:
 - **`game_state`**: Full snapshot on connect — `hydrate()` replaces entire `GameplayStore` state.
 - **`player_location`**: Real-time position delta — `updatePlayerLocation()` patches a single player's coordinates in the `hiders`/`seekers` arrays without replacing the full state. For seeker state, only `seekers` is patched (hiders are `RosterPlayer[]` with no coordinates).
 - **`phase_changed`**: Hiding-to-seeking transition — `applyPhaseChanged()` patches `phase`, `seeking_started_at`, and (hider only) `station_election_status` + `hider_station_id`.
-- **`question_asked`**: New question — `setActiveQuestion()` constructs the role-appropriate active question from the delta. `question_deadline` comes from the server (authoritative). Clears `previewQuestion`.
+- **`question_asked`**: New question — `setActiveQuestion()` constructs the role-appropriate active question from the delta. `question_deadline` comes from the server (authoritative). Clears `previewQuestion`. Seeker store also persists `parameters` and `seeker_location_start` for thermometer lock-in distance validation (absent after SSE reconnection — gracefully falls back to enabled).
 - **`question_answerable`**: Thermometer lock-in — `updateQuestionAnswerable()` updates status and sets `question_deadline`.
 - **`question_answered`**: Terminal — `applyQuestionAnswered()` clears `active_question`, appends to `question_history`, updates `total_exclusion` (seeker). Payload differs by role (hider gets answer details, seeker gets exclusion geometry).
 - **`question_vetoed`** / **`question_abandoned`**: Terminal — `clearActiveQuestion()` sets `active_question = null`.

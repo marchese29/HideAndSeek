@@ -56,6 +56,26 @@ export function multiPolygonToParts(
   }));
 }
 
+/** Haversine distance between two GeoJSON Points, in meters. */
+export function haversineMeters(a: GeoJSONPoint, b: GeoJSONPoint): number {
+  const R = 6_371_000;
+  const [lonA, latA] = a.coordinates;
+  const [lonB, latB] = b.coordinates;
+  const dLat = ((latB - latA) * Math.PI) / 180;
+  const dLon = ((lonB - lonA) * Math.PI) / 180;
+  const sinHalfLat = Math.sin(dLat / 2);
+  const sinHalfLon = Math.sin(dLon / 2);
+  const h =
+    sinHalfLat * sinHalfLat +
+    Math.cos((latA * Math.PI) / 180) * Math.cos((latB * Math.PI) / 180) * sinHalfLon * sinHalfLon;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Convert meters to convention units (km or mi). */
+export function metersToConvention(meters: number, convention: string): number {
+  return convention === 'metric' ? meters / 1000 : meters / 1609.344;
+}
+
 /** Compute an initialRegion that fits the boundary with 10% padding. */
 export function regionFromBoundary(polygon: GeoJSONPolygon): Region {
   const ring = polygon.coordinates[0];

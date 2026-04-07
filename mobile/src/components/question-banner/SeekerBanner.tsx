@@ -11,7 +11,9 @@ import type {
   InventorySlotResponse,
   PreviewQuestion,
   SeekerActiveQuestion,
+  ThermometerEventParams,
 } from '@/types/gameplay';
+import { haversineMeters, metersToConvention } from '@/utils/geo';
 
 import { BannerCountdown } from './BannerCountdown';
 
@@ -68,6 +70,7 @@ export const SeekerBanner = memo(function SeekerBanner({
   const convention = useGameplayStore((s) =>
     s.status === 'connected' ? s.state.distance_convention : 'imperial',
   );
+  const selfLocation = useGameplayStore((s) => s.selfLocation);
 
   const activeSlot = useMemo(() => {
     if (!activeQuestion) return undefined;
@@ -156,6 +159,28 @@ export const SeekerBanner = memo(function SeekerBanner({
     );
   }, [previewQuestion, inventory]);
 
+  const lockInEnabled = useMemo(() => {
+    if (!activeQuestion || activeQuestion.question_type !== 'thermometer') return false;
+    const seekerQ = activeQuestion as SeekerActiveQuestion;
+    // After SSE reconnection, these fields are absent — allow lock-in (server validates on POST).
+    if (!seekerQ.seeker_location_start || !seekerQ.parameters) return true;
+    if (!selfLocation) return false;
+    const params = seekerQ.parameters as ThermometerEventParams;
+    const distMeters = haversineMeters(seekerQ.seeker_location_start, selfLocation.coordinates);
+    return metersToConvention(distMeters, convention) >= params.min_travel;
+  }, [activeQuestion, selfLocation, convention]);
+
+  const travelRemaining = useMemo(() => {
+    if (!activeQuestion || activeQuestion.question_type !== 'thermometer') return null;
+    const seekerQ = activeQuestion as SeekerActiveQuestion;
+    if (!seekerQ.seeker_location_start || !seekerQ.parameters || !selfLocation) return null;
+    const params = seekerQ.parameters as ThermometerEventParams;
+    const distMeters = haversineMeters(seekerQ.seeker_location_start, selfLocation.coordinates);
+    const remaining = Math.max(0, params.min_travel - metersToConvention(distMeters, convention));
+    const unit = convention === 'metric' ? 'km' : 'mi';
+    return `travel ${remaining.toFixed(1)} ${unit} more`;
+  }, [activeQuestion, selfLocation, convention]);
+
   // Preview state (pre-ask) — triggered by question selection UI
   if (previewQuestion && !activeQuestion) {
     const previewLabel = previewQuestion.custom_distance
@@ -192,10 +217,6 @@ export const SeekerBanner = memo(function SeekerBanner({
   const isThermometerInProgress =
     activeQuestion.question_type === 'thermometer' && activeQuestion.status === 'in_progress';
 
-  // TODO: Lock-in requires min_travel distance — not yet computed client-side (wired by dhe).
-  // Temporarily enabled for testing; server validates on POST.
-  const lockInEnabled = true;
-
   // Thermometer in-progress: seeker needs to travel then lock in
   if (isThermometerInProgress) {
     return (
@@ -203,7 +224,11 @@ export const SeekerBanner = memo(function SeekerBanner({
         <MaterialCommunityIcons name="thermometer" size={20} color="#fff" />
         <Text style={styles.label} numberOfLines={1}>
           {formatQuestionLabel('thermometer', activeSlot, convention)}
-          {lockInEnabled ? ' — ready to lock in' : ' — travel to lock in'}
+          {lockInEnabled
+            ? ' — ready to lock in'
+            : travelRemaining
+              ? ` — ${travelRemaining}`
+              : ' — travel to lock in'}
         </Text>
         <Pressable
           style={({ pressed }) => [

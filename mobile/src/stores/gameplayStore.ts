@@ -217,6 +217,8 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         status: delta.status,
         slot_index: delta.slot_index,
         question_deadline: delta.question_deadline,
+        parameters: delta.parameters,
+        seeker_location_start: delta.seeker_location_start,
       };
       // Update ask_count on the matching inventory slot
       const inventory = prev.state.inventory.map((slot) =>

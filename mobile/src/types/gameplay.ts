@@ -237,6 +237,10 @@ export interface SeekerActiveQuestion {
   status: string;
   slot_index: number;
   question_deadline: string | null;
+  /** Present from question_asked delta for thermometer questions. Absent after SSE reconnection. */
+  parameters?: QuestionEventParams;
+  /** Present from question_asked delta for thermometer questions. Absent after SSE reconnection. */
+  seeker_location_start?: GeoJSONPoint;
 }
 
 // ── Question History ─────────────────────────────────────────────────────────
