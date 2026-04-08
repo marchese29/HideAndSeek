@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from hideandseek_core.queries.games import add_player, delete_player, update_game_status
 from hideandseek_core.queries.games import create_game as query_create_game
+from hideandseek_core.queries.location import delete_player_locations
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.types import MAX_PLAYERS, GameStatus, PlayerColor, PlayerRole
@@ -19,6 +20,7 @@ class RemovalResult:
     removed_player_id: uuid.UUID
     game_dissolved: bool
     new_host_id: uuid.UUID | None  # set when host was transferred
+    dissolution_reason: str | None = None  # e.g. "no_hiders_remaining"
 
 
 def assign_color(game: Game) -> PlayerColor:
@@ -99,17 +101,17 @@ def remove_player(
     caller_player_id: uuid.UUID,
     new_host_id: uuid.UUID | None = None,
 ) -> RemovalResult:
-    """Remove a player from a lobby game.
+    """Remove a player from a game (lobby or active play).
 
     Returns a RemovalResult describing what happened — the caller decides
     which events to emit.
 
     Raises:
         PermissionError: caller is neither the player nor the host (→ 403).
-        ValueError: game not in lobby, new_host_id missing/invalid (→ 422).
+        ValueError: game finished/dissolved, new_host_id missing/invalid (→ 422).
     """
-    if not game.status.is_lobby:
-        msg = 'Players can only be removed during lobby.'
+    if not (game.status.is_lobby or game.status.is_active):
+        msg = 'Players can only leave during lobby or active play.'
         raise ValueError(msg)
 
     is_self = player.id == caller_player_id
@@ -122,19 +124,38 @@ def remove_player(
     target_is_host = player.id == game.host_player_id
     removed_player_id = player.id
 
-    if target_is_host:
-        # Host is leaving
-        if len(game.players) == 1:
-            # Only player — dissolve game
+    # Clean up location history for active games
+    if game.status.is_active:
+        delete_player_locations(player, game)
+
+    # Sole player — dissolve regardless of phase
+    if len(game.players) == 1:
+        update_game_status(game, GameStatus.dissolved)
+        delete_player(player)
+        return RemovalResult(
+            removed_player_id=removed_player_id,
+            game_dissolved=True,
+            new_host_id=None,
+            dissolution_reason='last_player',
+        )
+
+    # Team-empty check — last hider or last seeker leaving dissolves the game
+    if game.status.is_active and player.role is not None:
+        same_role_remaining = [
+            p for p in game.players if p.role == player.role and p.id != player.id
+        ]
+        if not same_role_remaining:
             update_game_status(game, GameStatus.dissolved)
             delete_player(player)
             return RemovalResult(
                 removed_player_id=removed_player_id,
                 game_dissolved=True,
                 new_host_id=None,
+                dissolution_reason=f'no_{player.role}s_remaining',
             )
 
-        # Others remain — must transfer host
+    # Host leaving with others remaining — must transfer host
+    if target_is_host:
         if new_host_id is None:
             msg = 'new_host_id is required when the host leaves and other players remain.'
             raise ValueError(msg)

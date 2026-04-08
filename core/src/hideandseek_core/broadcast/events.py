@@ -298,6 +298,22 @@ class GamePlayerLeftEvent:
     player_id: uuid.UUID
 
 
+@dataclass(frozen=True, slots=True)
+class GameHostChangedEvent:
+    """Host transferred during active gameplay — both channels."""
+
+    game_id: uuid.UUID
+    new_host_player_id: uuid.UUID
+
+
+@dataclass(frozen=True, slots=True)
+class GameDissolvedEvent:
+    """Game dissolved during active gameplay — both channels."""
+
+    game_id: uuid.UUID
+    reason: str
+
+
 GameplayEvent = (
     PlayerLocationEvent
     | QuestionAskedEvent
@@ -309,4 +325,6 @@ GameplayEvent = (
     | PhaseChangedEvent
     | StationElectionEvent
     | GamePlayerLeftEvent
+    | GameHostChangedEvent
+    | GameDissolvedEvent
 )

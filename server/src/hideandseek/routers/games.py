@@ -42,7 +42,12 @@ from hideandseek.schemas.response import (
     StopResponse,
 )
 from hideandseek_core.broadcast.emit import emit_gameplay
-from hideandseek_core.broadcast.events import StationElectionEvent
+from hideandseek_core.broadcast.events import (
+    GameDissolvedEvent,
+    GameHostChangedEvent,
+    GamePlayerLeftEvent,
+    StationElectionEvent,
+)
 from hideandseek_core.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
 from hideandseek_core.db import session_dependency
 from hideandseek_core.logic.endgame import (
@@ -227,10 +232,12 @@ def remove_player(
     game: Game = Depends(get_game),
     auth_player_id: uuid.UUID = Depends(get_authenticated_player_id),
 ) -> None:
-    """Remove a player from the lobby. Self-leave or host-kick."""
+    """Remove a player from the game. Works in lobby and active play."""
     player = get_player(player_id)
     if not player or player.game_id != game.id:
         raise HTTPException(status_code=404, detail='Player not found in this game.')
+
+    was_active = game.status.is_active
 
     try:
         result = lobby_remove_player(
@@ -244,7 +251,26 @@ def remove_player(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    if not result.game_dissolved:
+    if result.game_dissolved:
+        if was_active:
+            # Revoke pending timers — game is over
+            if not celery_app.conf.task_always_eager:
+                celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
+            emit_gameplay(
+                GameDissolvedEvent(
+                    game_id=game.id,
+                    reason=result.dissolution_reason or 'unknown',
+                )
+            )
+        return
+
+    if was_active:
+        emit_gameplay(GamePlayerLeftEvent(game_id=game.id, player_id=result.removed_player_id))
+        if result.new_host_id is not None:
+            emit_gameplay(
+                GameHostChangedEvent(game_id=game.id, new_host_player_id=result.new_host_id)
+            )
+    else:
         emit(PlayerLeftEvent(game=game, player_id=result.removed_player_id))
         if result.new_host_id is not None:
             emit(HostChangedEvent(game=game, new_host_player_id=result.new_host_id))

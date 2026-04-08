@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from hideandseek_core.queries.games import set_hider_station
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap
+from hideandseek_models.location import LocationUpdate
 from hideandseek_models.transit import Route, RouteStop, Stop
 from hideandseek_models.types import (
     GameStatus,
@@ -18,7 +19,13 @@ from hideandseek_models.types import (
     RouteType,
     StationElectionStatus,
 )
-from tests.conftest import TEST_SECRET, create_game, create_game_map, create_player
+from tests.conftest import (
+    TEST_SECRET,
+    create_game,
+    create_game_map,
+    create_location_update,
+    create_player,
+)
 
 
 def _headers(player_id: uuid.UUID) -> dict[str, str]:
@@ -677,16 +684,16 @@ def test_remove_player_not_in_game_404(client: TestClient, session: Session):
     assert resp.status_code == 404
 
 
-def test_remove_player_not_in_lobby_422(client: TestClient, session: Session):
-    """Game in hiding → 422."""
-    game = create_game(session, status=GameStatus.hiding)
+def test_remove_player_finished_game_422(client: TestClient, session: Session):
+    """Game already finished → 422."""
+    game = create_game(session, status=GameStatus.finished)
     player = create_player(session, game.id)
     resp = client.delete(
         f'/games/{game.id}/players/{player.id}',
         headers=_headers(player.id),
     )
     assert resp.status_code == 422
-    assert 'lobby' in resp.json()['detail']
+    assert 'lobby or active' in resp.json()['detail']
 
 
 def test_remove_host_only_player_dissolves(client: TestClient, session: Session):
@@ -766,3 +773,113 @@ def test_remove_player_frees_color(client: TestClient, session: Session):
     assert join_resp.status_code == 201
     new_color = join_resp.json()['game']['players'][-1]['color']
     assert new_color == 'blue'
+
+
+# ── DELETE /players (mid-game) ───────────────────────────────────────────────
+
+
+def test_remove_player_active_game_succeeds(client: TestClient, session: Session):
+    """Non-host seeker leaves during seeking → 204."""
+    game = create_game(session, status=GameStatus.seeking)
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    seeker2 = create_player(session, game.id, name='Seeker2', role=PlayerRole.seeker)
+    session.flush()
+
+    resp = client.delete(
+        f'/games/{game.id}/players/{seeker.id}',
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 204
+    session.expire(game)
+    assert game.status == GameStatus.seeking
+    remaining_ids = {p.id for p in game.players}
+    assert seeker.id not in remaining_ids
+    assert seeker2.id in remaining_ids
+
+
+def test_remove_player_active_last_hider_dissolves(client: TestClient, session: Session):
+    """Last hider leaves during seeking → game dissolved."""
+    game = create_game(session, status=GameStatus.seeking)
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    session.flush()
+
+    resp = client.request(
+        'DELETE',
+        f'/games/{game.id}/players/{host.id}',
+        json={'new_host_id': str(seeker.id)},
+        headers=_headers(host.id),
+    )
+    assert resp.status_code == 204
+    session.expire(game)
+    assert game.status == GameStatus.dissolved
+
+
+def test_remove_player_active_last_seeker_dissolves(client: TestClient, session: Session):
+    """Last seeker leaves during seeking → game dissolved."""
+    game = create_game(session, status=GameStatus.seeking)
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    session.flush()
+
+    resp = client.delete(
+        f'/games/{game.id}/players/{seeker.id}',
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 204
+    session.expire(game)
+    assert game.status == GameStatus.dissolved
+
+
+def test_remove_player_active_host_transfers(client: TestClient, session: Session):
+    """Host leaves during active play with new_host_id → 204, host transferred."""
+    game = create_game(session, status=GameStatus.seeking)
+    host = _get_host(session, game)
+    host.role = PlayerRole.seeker
+    seeker2 = create_player(session, game.id, name='Seeker2', role=PlayerRole.seeker)
+    create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    session.flush()
+
+    resp = client.request(
+        'DELETE',
+        f'/games/{game.id}/players/{host.id}',
+        json={'new_host_id': str(seeker2.id)},
+        headers=_headers(host.id),
+    )
+    assert resp.status_code == 204
+    session.expire(game)
+    assert game.status == GameStatus.seeking
+    assert game.host_player_id == seeker2.id
+
+
+def test_remove_player_active_deletes_location_history(client: TestClient, session: Session):
+    """Player leaving mid-game has their location history deleted."""
+    game = create_game(session, status=GameStatus.seeking)
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    seeker2 = create_player(session, game.id, name='Seeker2', role=PlayerRole.seeker)
+    session.flush()
+
+    # Create location history for the leaving player
+    create_location_update(session, seeker.id, game.id, coordinates=Point(0.5, 0.5))
+    create_location_update(session, seeker.id, game.id, coordinates=Point(0.6, 0.6))
+    # And one for another player (should NOT be deleted)
+    create_location_update(session, seeker2.id, game.id, coordinates=Point(0.7, 0.7))
+
+    resp = client.delete(
+        f'/games/{game.id}/players/{seeker.id}',
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 204
+
+    # Leaving player's locations should be gone
+    remaining = session.scalars(
+        select(LocationUpdate).where(LocationUpdate.game_id == game.id)
+    ).all()
+    assert len(remaining) == 1
+    assert remaining[0].player_id == seeker2.id

@@ -9,6 +9,8 @@ import structlog
 
 from hideandseek_core.broadcast.events import (
     FeatureEventParams,
+    GameDissolvedEvent,
+    GameHostChangedEvent,
     GamePlayerLeftEvent,
     GameplayEvent,
     HiderQuestionAnsweredEvent,
@@ -241,3 +243,11 @@ def emit_gameplay(event: GameplayEvent) -> None:
         case GamePlayerLeftEvent(game_id=game_id):
             data = {'player_id': str(event.player_id)}
             _both_channels(game_id, GameplayEventType.player_left, data)
+
+        case GameHostChangedEvent(game_id=game_id):
+            data = {'new_host_player_id': str(event.new_host_player_id)}
+            _both_channels(game_id, GameplayEventType.host_changed, data)
+
+        case GameDissolvedEvent(game_id=game_id):
+            data = {'reason': event.reason}
+            _both_channels(game_id, GameplayEventType.game_dissolved, data)

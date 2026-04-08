@@ -156,7 +156,7 @@ export interface paths {
         post?: never;
         /**
          * Remove Player
-         * @description Remove a player from the lobby. Self-leave or host-kick.
+         * @description Remove a player from the game. Works in lobby and active play.
          */
         delete: operations["remove_player_games__game_id__players__player_id__delete"];
         options?: never;

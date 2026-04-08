@@ -8,11 +8,23 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from shapely.geometry import Point
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from hideandseek_core.db import get_session
 from hideandseek_models.game import Game, Player
 from hideandseek_models.location import LocationUpdate
+
+
+def delete_player_locations(player: Player, game: Game) -> None:
+    """Delete all location updates for a player in a game."""
+    session = get_session()
+    session.execute(
+        delete(LocationUpdate).where(
+            LocationUpdate.player_id == player.id,
+            LocationUpdate.game_id == game.id,
+        )
+    )
+    session.flush()
 
 
 def create_location_update(

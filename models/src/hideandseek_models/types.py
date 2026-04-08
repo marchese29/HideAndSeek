@@ -216,6 +216,8 @@ class GameplayEventType(StrEnum):
     phase_changed = 'phase_changed'
     station_election = 'station_election'
     player_left = 'player_left'
+    host_changed = 'host_changed'
+    game_dissolved = 'game_dissolved'
 
 
 class TokenProvider(StrEnum):
