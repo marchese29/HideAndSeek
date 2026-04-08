@@ -1,14 +1,18 @@
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import EventSource, { type EventSourceEvent } from 'react-native-sse';
 
 import { API_BASE_URL } from '@/api/client';
 import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
+  GameDissolvedDelta,
   HiderGameState,
   HiderQuestionAnsweredDelta,
+  HostChangedDelta,
   PhaseChangedDelta,
+  PlayerLeftDelta,
   PlayerLocationDelta,
   QuestionAbandonedDelta,
   QuestionAnswerableDelta,
@@ -26,7 +30,10 @@ type GameplayEventType =
   | 'question_answerable'
   | 'question_answered'
   | 'question_vetoed'
-  | 'question_abandoned';
+  | 'question_abandoned'
+  | 'player_left'
+  | 'host_changed'
+  | 'game_dissolved';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
@@ -145,6 +152,39 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         const data = parseData<QuestionAbandonedDelta>(event);
         if (data) {
           useGameplayStore.getState().clearActiveQuestion();
+        }
+      });
+
+      es.addEventListener('player_left', (event) => {
+        const data = parseData<PlayerLeftDelta>(event);
+        if (!data) return;
+        if (data.player_id === playerId) {
+          // Kicked by host
+          Alert.alert('Removed', 'You were removed from the game.');
+          useAppStore.getState().clearSession();
+          closedRef.current = true;
+          es.close();
+          router.replace('/');
+        } else {
+          useGameplayStore.getState().removePlayer(data.player_id);
+        }
+      });
+
+      es.addEventListener('host_changed', (event) => {
+        const data = parseData<HostChangedDelta>(event);
+        if (data) {
+          useGameplayStore.getState().setHostPlayerId(data.new_host_player_id);
+        }
+      });
+
+      es.addEventListener('game_dissolved', (event) => {
+        const data = parseData<GameDissolvedDelta>(event);
+        if (data) {
+          Alert.alert('Game Over', 'The game has ended.');
+          useAppStore.getState().clearSession();
+          closedRef.current = true;
+          es.close();
+          router.replace('/');
         }
       });
     }

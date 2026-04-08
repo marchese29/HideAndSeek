@@ -606,6 +606,7 @@ class HiderGameStateResponse(BaseModel):
     stops: list[StopResponse] = Field(description='All playable stops.')
     routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
     self_player_id: uuid.UUID = Field(description="Caller's player ID.")
+    host_player_id: uuid.UUID = Field(description="Player ID of the game's host.")
     hiders: list[GamePlayer] = Field(description='All hiders with last known positions.')
     seekers: list[GamePlayer] = Field(description='All seekers with last known positions.')
     station_election_status: StationElectionStatus
@@ -633,6 +634,7 @@ class SeekerGameStateResponse(BaseModel):
     stops: list[StopResponse] = Field(description='All playable stops.')
     routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
     self_player_id: uuid.UUID = Field(description="Caller's player ID.")
+    host_player_id: uuid.UUID = Field(description="Player ID of the game's host.")
     hiders: list[RosterPlayer] = Field(description='Hiders — identity only, no location.')
     seekers: list[GamePlayer] = Field(description='All seekers with last known positions.')
     active_question: SeekerActiveQuestion | None = Field(

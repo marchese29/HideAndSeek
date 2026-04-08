@@ -315,6 +315,7 @@ export interface HiderGameState {
   stops: StopResponse[];
   routes: RouteResponse[];
   self_player_id: string;
+  host_player_id: string;
   hiders: GamePlayer[];
   seekers: GamePlayer[];
   station_election_status: string;
@@ -336,10 +337,25 @@ export interface SeekerGameState {
   stops: StopResponse[];
   routes: RouteResponse[];
   self_player_id: string;
+  host_player_id: string;
   hiders: RosterPlayer[];
   seekers: GamePlayer[];
   active_question: SeekerActiveQuestion | null;
   question_history: SeekerQuestionHistoryEntry[];
   total_exclusion: GeoJSONGeometry | null;
   inventory: InventorySlotResponse[];
+}
+
+// ── Player / Game Lifecycle Deltas ──────────────────────────────────────────
+
+export interface PlayerLeftDelta {
+  player_id: string;
+}
+
+export interface HostChangedDelta {
+  new_host_player_id: string;
+}
+
+export interface GameDissolvedDelta {
+  reason: string;
 }

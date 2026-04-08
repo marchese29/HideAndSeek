@@ -124,6 +124,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
             RouteResponse.from_gameplay_route(r.route, r.clipped_shape, r.stop_ids) for r in routes
         ],
         self_player_id=player.id,
+        host_player_id=game.host_player_id,
         hiders=hiders,
         seekers=seekers,
         station_election_status=game.station_election_status,
@@ -228,6 +229,7 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
             RouteResponse.from_gameplay_route(r.route, r.clipped_shape, r.stop_ids) for r in routes
         ],
         self_player_id=player.id,
+        host_player_id=game.host_player_id,
         hiders=hiders,
         seekers=seekers,
         active_question=seeker_active,

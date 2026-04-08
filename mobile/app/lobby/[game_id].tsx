@@ -70,7 +70,12 @@ export default function LobbyScreen() {
         { text: 'Cancel', style: 'cancel' },
         ...otherPlayers.map((p) => ({
           text: p.name,
-          onPress: () => void doLeave(p.id),
+          onPress: () => {
+            Alert.alert('Leave Game', 'Are you sure you want to leave?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Leave', style: 'destructive', onPress: () => void doLeave(p.id) },
+            ]);
+          },
         })),
       ]);
     } else {

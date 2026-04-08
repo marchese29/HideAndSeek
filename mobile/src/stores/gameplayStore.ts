@@ -38,6 +38,8 @@ interface GameplayActions {
   applyQuestionAnswered: (delta: HiderQuestionAnsweredDelta | SeekerQuestionAnsweredDelta) => void;
   applyPhaseChanged: (delta: PhaseChangedDelta) => void;
   setPreviewQuestion: (preview: PreviewQuestion | null) => void;
+  removePlayer: (playerId: string) => void;
+  setHostPlayerId: (hostPlayerId: string) => void;
 }
 
 type GameplayStore = GameplayData & {
@@ -53,6 +55,12 @@ const initialState: GameplayData & {
   selfLocation: null,
   previewQuestion: null,
 };
+
+/** Remove a player from an array by ID. Returns the same reference if not found. */
+function withoutPlayer<T extends { id: string }>(players: T[], playerId: string): T[] {
+  const filtered = players.filter((p) => p.id !== playerId);
+  return filtered.length === players.length ? players : filtered;
+}
 
 /** Patch a single player's coordinates in a GamePlayer array. */
 function patchPlayer(
@@ -329,5 +337,36 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
 
   setPreviewQuestion: (preview) => {
     set({ previewQuestion: preview });
+  },
+
+  removePlayer: (playerId) => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+
+      if (prev.role === 'hider') {
+        const state = prev.state;
+        const hiders = withoutPlayer(state.hiders, playerId);
+        const seekers = withoutPlayer(state.seekers, playerId);
+        if (hiders === state.hiders && seekers === state.seekers) return prev;
+        return { ...prev, state: { ...state, hiders, seekers } };
+      }
+
+      const state = prev.state;
+      const hiders = withoutPlayer(state.hiders, playerId);
+      const seekers = withoutPlayer(state.seekers, playerId);
+      if (hiders === state.hiders && seekers === state.seekers) return prev;
+      return { ...prev, state: { ...state, hiders, seekers } };
+    });
+  },
+
+  setHostPlayerId: (hostPlayerId) => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+
+      if (prev.role === 'hider') {
+        return { ...prev, state: { ...prev.state, host_player_id: hostPlayerId } };
+      }
+      return { ...prev, state: { ...prev.state, host_player_id: hostPlayerId } };
+    });
   },
 }));

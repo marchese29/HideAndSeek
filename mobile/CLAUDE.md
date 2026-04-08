@@ -77,7 +77,7 @@ src/
       UtilityBelt.tsx          # Container — three-section row, wires question selection hook
       StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker)
       GameTimer.tsx            # Live timer with connection-colored background
-      BeltActions.tsx          # Info + leave icon buttons
+      BeltActions.tsx          # Info + leave icon buttons (context-aware: last-of-role / host-transfer / normal)
       QuestionTypeBar.tsx      # 4 question type buttons (radar/thermo/match/measure)
       ParamPicker.tsx          # Horizontal scrollable inventory slot picker
       CustomDistanceInput.tsx  # Inline numeric input for custom distance slots
@@ -116,7 +116,7 @@ Copy `.env.example` to `.env` and fill in values.
 ## State Management
 
 - **Zustand — AppStore** (`src/store.ts`) — session context. `gameId`, `playerId`, `playerSecret`, `role` (all null initially; credentials set on create/join, role set on game start, all cleared on leave/kick). Also holds transient `pushToken` + `pushProvider` (not persisted to AsyncStorage — re-fetched each launch). Credentials are per-game and server-minted — returned in `JoinGameResponse`. Does NOT hold game data.
-- **Zustand — GameplayStore** (`src/stores/gameplayStore.ts`) — gameplay state hydrated from SSE. Not persisted — rebuilt from the SSE snapshot on every connection. Discriminated union: `{ status: 'connecting' }` or `{ status: 'connected', role, state }`. The `hydrate()` action replaces state from a `game_state` SSE event; `reset()` reverts to connecting. Used by `useGameplayEvents` hook.
+- **Zustand — GameplayStore** (`src/stores/gameplayStore.ts`) — gameplay state hydrated from SSE. Not persisted — rebuilt from the SSE snapshot on every connection. Discriminated union: `{ status: 'connecting' }` or `{ status: 'connected', role, state }`. The `hydrate()` action replaces state from a `game_state` SSE event; `reset()` reverts to connecting. State includes `host_player_id` for leave/host-transfer UI. Used by `useGameplayEvents` hook.
 - **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (lobby game state, maps). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for lobby game state. Gameplay state uses the GameplayStore instead (SSE deltas mutate nested state that doesn't fit the query cache model).
 - `X-Player-Id` and `X-Player-Secret` headers are injected at runtime via `api.use()` middleware in `client.ts` (only when credentials exist). For endpoints where the OpenAPI spec declares these as required header parameters, also pass `header: authHeader()` in the `params` object to satisfy TypeScript types. Import `authHeader` from `@/api/auth`. `POST /games` and `POST /games/join` do not require auth headers (they mint fresh credentials).
 - API base URL is platform-aware: `localhost:8000` for iOS simulator, `10.0.2.2:8000` for Android emulator. Override via `EXPO_PUBLIC_API_BASE_URL`.
@@ -193,6 +193,9 @@ Both hooks:
 - **`question_answerable`**: Thermometer lock-in — `updateQuestionAnswerable()` updates status and sets `question_deadline`.
 - **`question_answered`**: Terminal — `applyQuestionAnswered()` clears `active_question`, appends to `question_history`, updates `total_exclusion` (seeker). Payload differs by role (hider gets answer details, seeker gets exclusion geometry).
 - **`question_vetoed`** / **`question_abandoned`**: Terminal — `clearActiveQuestion()` sets `active_question = null`.
+- **`player_left`**: Player removed — `removePlayer()` filters player from `hiders`/`seekers` arrays. If the removed `player_id` matches the current player (kicked by host), shows alert, clears session, and navigates home.
+- **`host_changed`**: Host transferred — `setHostPlayerId()` updates `host_player_id` on state.
+- **`game_dissolved`**: Game ended (last hider/seeker left) — shows alert, clears session, navigates home.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 
 ## Conventions
