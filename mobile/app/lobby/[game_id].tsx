@@ -91,6 +91,7 @@ export default function LobbyScreen() {
         body: newHostId ? { new_host_id: newHostId } : null,
       });
       useAppStore.getState().clearSession();
+      router.dismissAll();
       router.replace('/');
     }
   }, [game, game_id, playerId]);
