@@ -1446,6 +1446,852 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * QuestionStatus
+         * @enum {string}
+         */
+        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned";
+        /**
+         * SeekerQuestionAnsweredEvent
+         * @description A question was answered — seeker channel only (with exclusion geometry).
+         *
+         *     Carries answer-time delta fields only. No hider-privileged data
+         *     (no hider_location, no hider feature resolution).
+         */
+        SeekerQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Exclusion */
+            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Total Exclusion */
+            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Answered At */
+            answered_at: string | null;
+        };
+        /** PlayerLocationEvent */
+        PlayerLocationEvent: {
+            /**
+             * Player Id
+             * Format: uuid
+             */
+            player_id: string;
+            /** Name */
+            name: string;
+            color: components["schemas"]["PlayerColor"];
+            role: components["schemas"]["PlayerRole"];
+            coordinates: components["schemas"]["Point"];
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+        };
+        /**
+         * FeatureEventParams
+         * @description Matching/measuring question parameters (seeker resolution only).
+         */
+        FeatureEventParams: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "feature";
+            /** Category */
+            category: string;
+            /** Feature Class */
+            feature_class: number | null;
+            /** Source */
+            source: string;
+            /** Seeker Feature Id */
+            seeker_feature_id: string;
+            /** Seeker Feature Name */
+            seeker_feature_name: string;
+            /** Seeker Distance */
+            seeker_distance: number;
+        };
+        /**
+         * RadarEventParams
+         * @description Radar question parameters.
+         */
+        RadarEventParams: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "radar";
+            /** Radius */
+            radius: number;
+        };
+        /**
+         * ThermometerEventParams
+         * @description Thermometer question parameters.
+         */
+        ThermometerEventParams: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "thermometer";
+            /** Min Travel */
+            min_travel: number;
+        };
+        /**
+         * QuestionAskedEvent
+         * @description A seeker asked a question — both channels.
+         */
+        QuestionAskedEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Slot Index */
+            slot_index: number;
+            /** Parameters */
+            parameters: components["schemas"]["RadarEventParams"] | components["schemas"]["ThermometerEventParams"] | components["schemas"]["FeatureEventParams"];
+            seeker_location_start: components["schemas"]["Point"];
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** Ask Count */
+            ask_count: number;
+            /** Sequence */
+            sequence: number;
+            /** Question Deadline */
+            question_deadline: string | null;
+        };
+        /**
+         * QuestionAnswerableEvent
+         * @description A thermometer question was locked in — both channels.
+         */
+        QuestionAnswerableEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            seeker_location_end: components["schemas"]["Point"];
+            /**
+             * Question Deadline
+             * Format: date-time
+             */
+            question_deadline: string;
+        };
+        /**
+         * HiderQuestionAnsweredEvent
+         * @description A question was answered — hider channel only.
+         *
+         *     Carries answer-time delta fields only (ask-time fields were sent
+         *     with QuestionAskedEvent). Includes hider-privileged data: location
+         *     and feature resolution.
+         */
+        HiderQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Answered At */
+            answered_at: string | null;
+            hider_location: components["schemas"]["Point"] | null;
+            /** Hider Feature Id */
+            hider_feature_id: string | null;
+            /** Hider Feature Name */
+            hider_feature_name: string | null;
+            /** Hider Distance */
+            hider_distance: number | null;
+        };
+        /**
+         * QuestionVetoedEvent
+         * @description A question was vetoed — both channels.
+         */
+        QuestionVetoedEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            /** Slot Index */
+            slot_index: number;
+        };
+        /**
+         * QuestionAbandonedEvent
+         * @description A question was abandoned — both channels.
+         */
+        QuestionAbandonedEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            /** Slot Index */
+            slot_index: number;
+        };
+        /**
+         * StationElectionStatus
+         * @enum {string}
+         */
+        StationElectionStatus: "pending" | "elected" | "auto_assigned" | "ambiguous";
+        /**
+         * PhaseChangedEvent
+         * @description Game transitioned from hiding to seeking — both channels.
+         */
+        PhaseChangedEvent: {
+            /** Phase */
+            phase: string;
+            /**
+             * Seeking Started At
+             * Format: date-time
+             */
+            seeking_started_at: string;
+            station_election_status: components["schemas"]["StationElectionStatus"];
+            /** Hider Station Id */
+            hider_station_id: string | null;
+        };
+        /**
+         * StationElectionEvent
+         * @description Station election status changed — hider channel only.
+         */
+        StationElectionEvent: {
+            station_election_status: components["schemas"]["StationElectionStatus"];
+            /** Hider Station Id */
+            hider_station_id: string | null;
+        };
+        /**
+         * GamePlayerLeftEvent
+         * @description A player left during active gameplay — both channels.
+         */
+        GamePlayerLeftEvent: {
+            /**
+             * Player Id
+             * Format: uuid
+             */
+            player_id: string;
+        };
+        /**
+         * GameHostChangedEvent
+         * @description Host transferred during active gameplay — both channels.
+         */
+        GameHostChangedEvent: {
+            /**
+             * New Host Player Id
+             * Format: uuid
+             */
+            new_host_player_id: string;
+        };
+        /**
+         * GameDissolvedEvent
+         * @description Game dissolved during active gameplay — both channels.
+         */
+        GameDissolvedEvent: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * FeatureParamsResponse
+         * @description Parameters for a matching or measuring question.
+         */
+        FeatureParamsResponse: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "matching" | "measuring";
+            /**
+             * Category
+             * @description Feature category.
+             */
+            category: string;
+            /**
+             * Feature Class
+             * @description Feature class tier, if applicable.
+             * @default null
+             */
+            feature_class: number | null;
+            /**
+             * Source
+             * @description Data source (e.g. map_data).
+             */
+            source: string;
+            /** @description Seeker feature resolution. */
+            seeker_resolution: components["schemas"]["FeatureResolution"];
+            /**
+             * @description Hider feature resolution (populated at answer time).
+             * @default null
+             */
+            hider_resolution: components["schemas"]["FeatureResolution"] | null;
+        };
+        /**
+         * FeatureResolution
+         * @description Resolution result for one player's feature lookup.
+         */
+        FeatureResolution: {
+            /**
+             * Feature Id
+             * @description Stable identifier of the resolved feature.
+             */
+            feature_id: string;
+            /**
+             * Name
+             * @description Human-readable name.
+             */
+            name: string;
+            /**
+             * Distance
+             * @description Distance in convention units.
+             */
+            distance: number;
+        };
+        /**
+         * GamePlayer
+         * @description A player with optional location — visible to roles that can see this player.
+         */
+        GamePlayer: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** @description Server-assigned player color. */
+            color: components["schemas"]["PlayerColor"];
+            role: components["schemas"]["PlayerRole"] | null;
+            /**
+             * @description Last known position (null if not yet reported).
+             * @default null
+             */
+            coordinates: components["schemas"]["Point"] | null;
+            /**
+             * Timestamp
+             * @description Time of last location report.
+             * @default null
+             */
+            timestamp: string | null;
+        };
+        /**
+         * HiderActiveQuestion
+         * @description The active question as seen by the hider.
+         */
+        HiderActiveQuestion: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /**
+             * Asked By
+             * Format: uuid
+             * @description Seeker who asked.
+             */
+            asked_by: string;
+            /**
+             * Slot Index
+             * @description Inventory slot used.
+             */
+            slot_index: number;
+            /**
+             * Question Deadline
+             * @description When auto-answer fires (null if timer not started).
+             * @default null
+             */
+            question_deadline: string | null;
+        };
+        /**
+         * HiderQuestionHistoryEntry
+         * @description A resolved question from the hider's perspective.
+         *
+         *     Full question detail for reconnecting hiders — everything except exclusion
+         *     geometry. Supersedes the removed ``GET /questions/{id}`` detail endpoint.
+         */
+        HiderQuestionHistoryEntry: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /**
+             * Sequence
+             * @description 1-based chronological order within the game.
+             */
+            sequence: number;
+            question_type: components["schemas"]["QuestionType"];
+            /** @description Terminal status: answered, vetoed, or abandoned. */
+            status: components["schemas"]["QuestionStatus"];
+            /**
+             * Ask Count
+             * @description Which attempt this was (1 = first ask).
+             */
+            ask_count: number;
+            /**
+             * Asked By
+             * Format: uuid
+             * @description Seeker who asked.
+             */
+            asked_by: string;
+            /**
+             * Asked At
+             * Format: date-time
+             * @description When the question was asked.
+             */
+            asked_at: string;
+            /**
+             * Slot Index
+             * @description Inventory slot used.
+             */
+            slot_index: number;
+            /**
+             * Parameters
+             * @description Type-specific question parameters.
+             */
+            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"];
+            /** @description GeoJSON Point — seeker position when asked. */
+            seeker_location_start: components["schemas"]["Point"];
+            /**
+             * @description GeoJSON Point — seeker position at lock-in (thermometer only).
+             * @default null
+             */
+            seeker_location_end: components["schemas"]["Point"] | null;
+            /**
+             * Answer
+             * @description yes/no/closer/farther or null if vetoed/abandoned.
+             * @default null
+             */
+            answer: string | null;
+            /**
+             * Answered At
+             * @description When the question was resolved.
+             * @default null
+             */
+            answered_at: string | null;
+            /**
+             * @description GeoJSON Point — hider position at answer time.
+             * @default null
+             */
+            hider_location: components["schemas"]["Point"] | null;
+            /**
+             * Hider Feature Id
+             * @description Hider feature ID (matching/measuring only).
+             * @default null
+             */
+            hider_feature_id: string | null;
+            /**
+             * Hider Feature Name
+             * @description Hider feature name (matching/measuring only).
+             * @default null
+             */
+            hider_feature_name: string | null;
+            /**
+             * Hider Distance
+             * @description Hider distance to feature in convention units (matching/measuring only).
+             * @default null
+             */
+            hider_distance: number | null;
+        };
+        /**
+         * RadarParamsResponse
+         * @description Parameters for a radar question.
+         */
+        RadarParamsResponse: {
+            /**
+             * Type
+             * @default radar
+             * @constant
+             */
+            type: "radar";
+            /**
+             * Radius
+             * @description Radar radius in convention units.
+             */
+            radius: number;
+        };
+        /**
+         * ThermometerParamsResponse
+         * @description Parameters for a thermometer question.
+         */
+        ThermometerParamsResponse: {
+            /**
+             * Type
+             * @default thermometer
+             * @constant
+             */
+            type: "thermometer";
+            /**
+             * Min Travel
+             * @description Minimum travel distance in convention units.
+             */
+            min_travel: number;
+        };
+        /**
+         * HiderGameStateResponse
+         * @description Full hider state snapshot — delivered as initial SSE event.
+         */
+        HiderGameStateResponse: {
+            /**
+             * Game Id
+             * Format: uuid
+             */
+            game_id: string;
+            /**
+             * Phase
+             * @description Current phase: hiding or seeking.
+             */
+            phase: string;
+            /**
+             * Hiding Time Min
+             * @description Hiding phase duration in minutes.
+             */
+            hiding_time_min: number;
+            /** Hiding Started At */
+            hiding_started_at: string | null;
+            /** Seeking Started At */
+            seeking_started_at: string | null;
+            /**
+             * Base Question Delay Min
+             * @description Auto-answer timer duration in minutes.
+             */
+            base_question_delay_min: number;
+            /**
+             * Distance Convention
+             * @description metric or imperial.
+             */
+            distance_convention: string;
+            /** @description Game map boundary. */
+            boundary: components["schemas"]["Polygon"];
+            /**
+             * Districts
+             * @description District boundaries.
+             */
+            districts: unknown[];
+            /**
+             * Stops
+             * @description All playable stops.
+             */
+            stops: components["schemas"]["StopResponse"][];
+            /**
+             * Routes
+             * @description Transit routes with shapes and stop IDs.
+             */
+            routes: components["schemas"]["RouteResponse"][];
+            /**
+             * Self Player Id
+             * Format: uuid
+             * @description Caller's player ID.
+             */
+            self_player_id: string;
+            /**
+             * Host Player Id
+             * Format: uuid
+             * @description Player ID of the game's host.
+             */
+            host_player_id: string;
+            /**
+             * Hiders
+             * @description All hiders with last known positions.
+             */
+            hiders: components["schemas"]["GamePlayer"][];
+            /**
+             * Seekers
+             * @description All seekers with last known positions.
+             */
+            seekers: components["schemas"]["GamePlayer"][];
+            station_election_status: components["schemas"]["StationElectionStatus"];
+            /**
+             * Hider Station Id
+             * @description Assigned station (once elected/assigned).
+             * @default null
+             */
+            hider_station_id: string | null;
+            /**
+             * @description Current unanswered question.
+             * @default null
+             */
+            active_question: components["schemas"]["HiderActiveQuestion"] | null;
+            /**
+             * Question History
+             * @description All resolved questions.
+             */
+            question_history: components["schemas"]["HiderQuestionHistoryEntry"][];
+        };
+        /**
+         * InventorySlotResponse
+         * @description A single inventory slot in the gameplay state.
+         */
+        InventorySlotResponse: {
+            question_type: components["schemas"]["QuestionType"];
+            /**
+             * Slot Index
+             * @description Original template position (stable across the game).
+             */
+            slot_index: number;
+            /**
+             * Distance
+             * @description Preset distance. Radar/thermometer only.
+             * @default null
+             */
+            distance: number | null;
+            /**
+             * Category
+             * @description Feature category. Matching/measuring only.
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Feature Class
+             * @description Feature class tier. Classed categories only.
+             * @default null
+             */
+            feature_class: number | null;
+            /**
+             * Ask Count
+             * @description Number of times this slot has been used.
+             */
+            ask_count: number;
+        };
+        /**
+         * RosterPlayer
+         * @description A player in the roster — identity only, no location fields.
+         */
+        RosterPlayer: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** @description Server-assigned player color. */
+            color: components["schemas"]["PlayerColor"];
+            role: components["schemas"]["PlayerRole"] | null;
+        };
+        /**
+         * SeekerActiveQuestion
+         * @description The active question as seen by the seeker.
+         */
+        SeekerActiveQuestion: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /**
+             * Slot Index
+             * @description Inventory slot used.
+             */
+            slot_index: number;
+            /**
+             * Question Deadline
+             * @description When auto-answer fires (null if timer not started).
+             * @default null
+             */
+            question_deadline: string | null;
+        };
+        /**
+         * SeekerQuestionHistoryEntry
+         * @description A resolved question from the seeker's perspective.
+         *
+         *     Includes answer-time delta fields plus ask-time metadata for reconnecting
+         *     seekers. Supersedes the removed ``GET /questions`` list endpoint.
+         *     No hider-privileged data (no hider_location, no hider feature resolution).
+         */
+        SeekerQuestionHistoryEntry: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /**
+             * Sequence
+             * @description 1-based chronological order within the game.
+             */
+            sequence: number;
+            question_type: components["schemas"]["QuestionType"];
+            /** @description Terminal status: answered, vetoed, or abandoned. */
+            status: components["schemas"]["QuestionStatus"];
+            /**
+             * Ask Count
+             * @description Which attempt this was (1 = first ask).
+             */
+            ask_count: number;
+            /**
+             * Asked By
+             * Format: uuid
+             * @description Seeker who asked.
+             */
+            asked_by: string;
+            /**
+             * Asked At
+             * Format: date-time
+             * @description When the question was asked.
+             */
+            asked_at: string;
+            /**
+             * Slot Index
+             * @description Inventory slot used.
+             */
+            slot_index: number;
+            /**
+             * Answer
+             * @description yes/no/closer/farther or null if vetoed/abandoned.
+             * @default null
+             */
+            answer: string | null;
+            /**
+             * Exclusion
+             * @description This question's exclusion zone.
+             * @default null
+             */
+            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /**
+             * Total Exclusion
+             * @description Cumulative exclusion after this question.
+             * @default null
+             */
+            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /**
+             * Answered At
+             * @description When the question was resolved.
+             * @default null
+             */
+            answered_at: string | null;
+        };
+        /**
+         * SeekerGameStateResponse
+         * @description Full seeker state snapshot — delivered as initial SSE event.
+         */
+        SeekerGameStateResponse: {
+            /**
+             * Game Id
+             * Format: uuid
+             */
+            game_id: string;
+            /**
+             * Phase
+             * @description Current phase: hiding or seeking.
+             */
+            phase: string;
+            /**
+             * Hiding Time Min
+             * @description Hiding phase duration in minutes.
+             */
+            hiding_time_min: number;
+            /** Hiding Started At */
+            hiding_started_at: string | null;
+            /** Seeking Started At */
+            seeking_started_at: string | null;
+            /**
+             * Base Question Delay Min
+             * @description Auto-answer timer duration in minutes.
+             */
+            base_question_delay_min: number;
+            /**
+             * Distance Convention
+             * @description metric or imperial.
+             */
+            distance_convention: string;
+            /** @description Game map boundary. */
+            boundary: components["schemas"]["Polygon"];
+            /**
+             * Districts
+             * @description District boundaries.
+             */
+            districts: unknown[];
+            /**
+             * Stops
+             * @description All playable stops.
+             */
+            stops: components["schemas"]["StopResponse"][];
+            /**
+             * Routes
+             * @description Transit routes with shapes and stop IDs.
+             */
+            routes: components["schemas"]["RouteResponse"][];
+            /**
+             * Self Player Id
+             * Format: uuid
+             * @description Caller's player ID.
+             */
+            self_player_id: string;
+            /**
+             * Host Player Id
+             * Format: uuid
+             * @description Player ID of the game's host.
+             */
+            host_player_id: string;
+            /**
+             * Hiders
+             * @description Hiders — identity only, no location.
+             */
+            hiders: components["schemas"]["RosterPlayer"][];
+            /**
+             * Seekers
+             * @description All seekers with last known positions.
+             */
+            seekers: components["schemas"]["GamePlayer"][];
+            /**
+             * @description Current in-flight question.
+             * @default null
+             */
+            active_question: components["schemas"]["SeekerActiveQuestion"] | null;
+            /**
+             * Question History
+             * @description Resolved questions with answers and exclusion geometry.
+             */
+            question_history: components["schemas"]["SeekerQuestionHistoryEntry"][];
+            /**
+             * Total Exclusion
+             * @description Cumulative exclusion zone.
+             * @default null
+             */
+            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /**
+             * Inventory
+             * @description All inventory slots with current ask counts.
+             */
+            inventory: components["schemas"]["InventorySlotResponse"][];
+        };
     };
     responses: never;
     parameters: never;

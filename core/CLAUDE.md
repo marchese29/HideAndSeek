@@ -25,7 +25,7 @@ src/hideandseek_core/
   conventions.py       # Metric/imperial conversion, default inventory
   exclusion.py         # Exclusion zone geometry, boundary computation
   broadcast/           # Gameplay event production + Redis publishing
-    events.py          # Typed gameplay event dataclasses (frozen, slots)
+    events.py          # Typed gameplay event Pydantic models (frozen, auto-registered for OpenAPI)
     emit.py            # publish_sse(), channel helpers, emit_gameplay()
   queries/             # DB query functions by domain
   logic/               # Business logic (session-free, side-effect-free beyond DB)
@@ -33,20 +33,20 @@ src/hideandseek_core/
 
 ## Architecture Rules
 
-- **Gameplay events live here, lobby events live in server**: Core defines gameplay event dataclasses and publishes them to Redis SSE channels via `emit_gameplay()`. Server defines lobby event dataclasses and publishes them via its own `emit()`, which imports `publish_sse` from core. SSE subscription streams and Pydantic game-state snapshots stay in server.
-- **No HTTP, no Celery**: Core never imports from `hideandseek.schemas`, `hideandseek.routers`, `hideandseek_worker`, or Celery. It does not use Pydantic response schemas.
+- **Gameplay events live here, lobby events live in server**: Core defines gameplay event Pydantic models and publishes them to Redis SSE channels via `emit_gameplay()`. Server defines lobby event dataclasses and publishes them via its own `emit()`, which imports `publish_sse` from core. SSE subscription streams and Pydantic game-state snapshots stay in server.
+- **No HTTP, no Celery**: Core never imports from `hideandseek.schemas`, `hideandseek.routers`, `hideandseek_worker`, or Celery. It uses Pydantic for gameplay event schemas (auto-injected into OpenAPI) but not for HTTP response schemas.
 - **Dependency direction**: `hideandseek-models` ← `hideandseek-core` ← `hideandseek-worker` / `hideandseek` (server). Core never imports from worker or server.
 - **Logic layer is the conversion boundary**: `to_meters()` before geo math, `from_meters()` after. Logic functions use `db.register()` for new objects and mutate tracked ORM objects directly.
 - **ContextVar session access**: Query functions call `db.get_session()` — no session parameters, no decorators.
 
 ## Broadcast
 
-`broadcast/events.py` defines frozen dataclasses for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left, host changed, game dissolved). Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter dataclasses (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`) carry type-specific question parameters.
+`broadcast/events.py` defines frozen Pydantic models for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left, host changed, game dissolved). All gameplay events extend `GameplayEventSchema` which auto-registers them for OpenAPI schema injection via `__init_subclass__`. `game_id = Field(exclude=True)` is on the base — present for construction/routing but excluded from `.model_dump()` and JSON schema. Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter models (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`) are standalone `BaseModel` subclasses with `Literal` type discriminators (`type: Literal['radar'] = 'radar'`), pulled into the OpenAPI spec automatically via `$defs` hoisting.
 
 `broadcast/emit.py` provides:
 - `publish_sse(channel, event_type, data, *, required)` — low-level Redis publish (used by both core's `emit_gameplay` and server's lobby `emit`)
 - `lobby_channel(game_id)`, `hider_channel(game_id)`, `seeker_channel(game_id)` — channel name helpers (used by server's subscribe module)
-- `emit_gameplay(event)` — pattern-matches on gameplay event type, serializes to dicts, publishes to the appropriate Redis channels
+- `emit_gameplay(event)` — pattern-matches on gameplay event type, calls `.model_dump(mode='json')` for serialization, publishes to the appropriate Redis channels
 
 ## Conventions
 

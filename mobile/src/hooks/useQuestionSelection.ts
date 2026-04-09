@@ -52,13 +52,13 @@ function buildPreview(slot: InventorySlotResponse): PreviewQuestion {
       return {
         question_type: 'radar',
         slot_index: slot.slot_index,
-        parameters: { radius: slot.distance! },
+        parameters: { type: 'radar', radius: slot.distance! },
       };
     case 'thermometer':
       return {
         question_type: 'thermometer',
         slot_index: slot.slot_index,
-        parameters: { min_travel: slot.distance! },
+        parameters: { type: 'thermometer', min_travel: slot.distance! },
       };
     default:
       // matching / measuring
@@ -66,6 +66,7 @@ function buildPreview(slot: InventorySlotResponse): PreviewQuestion {
         question_type: slot.question_type,
         slot_index: slot.slot_index,
         parameters: {
+          type: 'feature',
           category: slot.category!,
           feature_class: slot.feature_class,
           source: '',
@@ -82,7 +83,10 @@ function buildCustomPreview(
   slot: InventorySlotResponse,
   distance: number,
 ): PreviewQuestion {
-  const params = questionType === 'thermometer' ? { min_travel: distance } : { radius: distance };
+  const params =
+    questionType === 'thermometer'
+      ? ({ type: 'thermometer', min_travel: distance } as const)
+      : ({ type: 'radar', radius: distance } as const);
   return {
     question_type: questionType,
     slot_index: slot.slot_index,

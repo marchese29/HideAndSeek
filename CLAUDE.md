@@ -45,6 +45,7 @@ CLAUDE.md files exist at:
 - Hook steps use `run_if_changed` with hash caching (`.git/hooks-cache/`) to skip work when staged content hasn't changed since the last successful run.
 - To add a new cached hook step: write a script in `hooks/`, then add a `run_if_changed` call in `hooks/pre-commit`. Signature: `run_if_changed <cache_key> <skip_msg> <run_msg> <command> <path...>` — paths are listed after the command, supporting multiple trigger paths.
 - OpenAPI spec is the contract between server and mobile app — never edit it directly.
+- SSE event types are auto-synced: gameplay events (core) and game state snapshots (server) are injected into the OpenAPI spec by `generate_openapi.py`, then `openapi-typescript` generates TypeScript types. New events auto-register via `GameplayEventSchema` base class (core) or `SSEExposed` mixin (server). `mobile/src/types/gameplay.ts` provides short aliases.
 
 ## Beads (Issue Tracking)
 

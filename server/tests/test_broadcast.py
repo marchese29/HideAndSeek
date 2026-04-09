@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import fakeredis
 import pytest
+from geojson_pydantic import Point as GeoJSONPoint
 from sqlalchemy.orm import Session
 
 from hideandseek.broadcast.emit import emit
@@ -218,7 +219,7 @@ def _location_event(
         name=name,
         color=color,
         role=role,
-        coordinates={'type': 'Point', 'coordinates': [lng, lat]},
+        coordinates=GeoJSONPoint(type='Point', coordinates=[lng, lat]),  # type: ignore[arg-type]
         timestamp=timestamp or datetime(2026, 2, 11, 10, 0, 0, tzinfo=UTC),
     )
 
@@ -309,12 +310,12 @@ class TestEmitGameplaySeekerLocation:
 
         msgs = _drain_channel_messages(pubsub, [hider_ch])
         data = msgs[hider_ch][0]['data']
-        assert data['id'] == str(event.player_id)
+        assert data['player_id'] == str(event.player_id)
         assert data['name'] == 'Bob'
         assert data['color'] == 'blue'
         assert data['role'] == 'seeker'
         assert data['coordinates'] == {'type': 'Point', 'coordinates': [1.5, 52.0]}
-        assert data['timestamp'] == '2026-02-11T10:00:00+00:00'
+        assert data['timestamp'] == '2026-02-11T10:00:00Z'
 
 
 class TestEmitGameplayLocationRedisUnavailable:

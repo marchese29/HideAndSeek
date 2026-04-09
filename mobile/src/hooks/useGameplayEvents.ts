@@ -109,7 +109,7 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         if (data) {
           useGameplayStore
             .getState()
-            .updatePlayerLocation(data.id, data.coordinates, data.timestamp);
+            .updatePlayerLocation(data.player_id, data.coordinates, data.timestamp);
         }
       });
 

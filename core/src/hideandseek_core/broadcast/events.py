@@ -1,44 +1,63 @@
-"""Typed gameplay event dataclasses."""
+"""Typed gameplay event schemas (Pydantic).
+
+Gameplay event models auto-register for OpenAPI schema injection via
+the ``GameplayEventSchema`` base class.  Parameter models are standalone
+``BaseModel`` subclasses — pulled into the spec automatically as ``$defs``
+when their parent event is processed.
+"""
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from geojson_pydantic import Point as GeoJSONPoint
 from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
+from pydantic import BaseModel, ConfigDict, Field
 from shapely.geometry import mapping
 
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
-from hideandseek_models.types import PlayerColor, PlayerRole, QuestionType
+from hideandseek_models.types import (
+    PlayerColor,
+    PlayerRole,
+    QuestionStatus,
+    QuestionType,
+    StationElectionStatus,
+)
 
 if TYPE_CHECKING:
     from hideandseek_models.question import Question
 
 
-# ── Question parameter dataclasses ──────────────────────────────────────
+# ── Question parameter models ──────────────────────────────────────────
 
 
-@dataclass(frozen=True, slots=True)
-class RadarEventParams:
+class RadarEventParams(BaseModel):
     """Radar question parameters."""
 
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal['radar'] = 'radar'
     radius: float
 
 
-@dataclass(frozen=True, slots=True)
-class ThermometerEventParams:
+class ThermometerEventParams(BaseModel):
     """Thermometer question parameters."""
 
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal['thermometer'] = 'thermometer'
     min_travel: float
 
 
-@dataclass(frozen=True, slots=True)
-class FeatureEventParams:
+class FeatureEventParams(BaseModel):
     """Matching/measuring question parameters (seeker resolution only)."""
 
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal['feature'] = 'feature'
     category: str
     feature_class: int | None
     source: str
@@ -73,31 +92,49 @@ def build_event_params(question: Question) -> QuestionEventParams:
         )
 
 
-# ── Gameplay events ──────────────────────────────────────────────────────
+# ── Auto-registering base class ───────────────────────────────────────
 
 
-@dataclass(frozen=True, slots=True)
-class PlayerLocationEvent:
-    game_id: uuid.UUID
+class GameplayEventSchema(BaseModel):
+    """Base for gameplay SSE event schemas.  Auto-registered for OpenAPI injection."""
+
+    model_config = ConfigDict(frozen=True)
+
+    _registry: ClassVar[set[type[GameplayEventSchema]]] = set()
+
+    game_id: uuid.UUID = Field(exclude=True)
+
+    def __init_subclass__(cls, **kwargs):  # noqa: ANN003
+        super().__init_subclass__(**kwargs)
+        GameplayEventSchema._registry.add(cls)
+
+    @classmethod
+    def registered_schemas(cls) -> Sequence[type[GameplayEventSchema]]:
+        """Return all registered gameplay event schemas."""
+        return list(cls._registry)
+
+
+# ── Gameplay events ───────────────────────────────────────────────────
+
+
+class PlayerLocationEvent(GameplayEventSchema):
     player_id: uuid.UUID
     name: str
     color: PlayerColor
     role: PlayerRole
-    coordinates: dict  # Pre-serialized GeoJSON Point
+    coordinates: GeoJSONPoint
     timestamp: datetime
 
 
-@dataclass(frozen=True, slots=True)
-class QuestionAskedEvent:
+class QuestionAskedEvent(GameplayEventSchema):
     """A seeker asked a question — both channels."""
 
-    game_id: uuid.UUID
     question_id: uuid.UUID
-    question_type: str
-    status: str
+    question_type: QuestionType
+    status: QuestionStatus
     asked_by: uuid.UUID
     slot_index: int
-    parameters: QuestionEventParams
+    parameters: QuestionEventParams = Field(discriminator='type')
     seeker_location_start: GeoJSONPoint
     asked_at: datetime
     ask_count: int
@@ -127,14 +164,12 @@ class QuestionAskedEvent:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class QuestionAnswerableEvent:
+class QuestionAnswerableEvent(GameplayEventSchema):
     """A thermometer question was locked in — both channels."""
 
-    game_id: uuid.UUID
     question_id: uuid.UUID
-    question_type: str
-    status: str
+    question_type: QuestionType
+    status: QuestionStatus
     seeker_location_end: GeoJSONPoint
     question_deadline: datetime
 
@@ -154,8 +189,7 @@ class QuestionAnswerableEvent:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class HiderQuestionAnsweredEvent:
+class HiderQuestionAnsweredEvent(GameplayEventSchema):
     """A question was answered — hider channel only.
 
     Carries answer-time delta fields only (ask-time fields were sent
@@ -163,10 +197,9 @@ class HiderQuestionAnsweredEvent:
     and feature resolution.
     """
 
-    game_id: uuid.UUID
     question_id: uuid.UUID
-    question_type: str
-    status: str
+    question_type: QuestionType
+    status: QuestionStatus
     answer: str
     slot_index: int
     asked_by: uuid.UUID
@@ -196,18 +229,16 @@ class HiderQuestionAnsweredEvent:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class SeekerQuestionAnsweredEvent:
+class SeekerQuestionAnsweredEvent(GameplayEventSchema):
     """A question was answered — seeker channel only (with exclusion geometry).
 
     Carries answer-time delta fields only. No hider-privileged data
     (no hider_location, no hider feature resolution).
     """
 
-    game_id: uuid.UUID
     question_id: uuid.UUID
-    question_type: str
-    status: str
+    question_type: QuestionType
+    status: QuestionStatus
     answer: str
     slot_index: int
     asked_by: uuid.UUID
@@ -232,13 +263,11 @@ class SeekerQuestionAnsweredEvent:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class QuestionVetoedEvent:
+class QuestionVetoedEvent(GameplayEventSchema):
     """A question was vetoed — both channels."""
 
-    game_id: uuid.UUID
     question_id: uuid.UUID
-    question_type: str
+    question_type: QuestionType
     slot_index: int
 
     @staticmethod
@@ -251,13 +280,11 @@ class QuestionVetoedEvent:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class QuestionAbandonedEvent:
+class QuestionAbandonedEvent(GameplayEventSchema):
     """A question was abandoned — both channels."""
 
-    game_id: uuid.UUID
     question_id: uuid.UUID
-    question_type: str
+    question_type: QuestionType
     slot_index: int
 
     @staticmethod
@@ -270,47 +297,37 @@ class QuestionAbandonedEvent:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class PhaseChangedEvent:
+class PhaseChangedEvent(GameplayEventSchema):
     """Game transitioned from hiding to seeking — both channels."""
 
-    game_id: uuid.UUID
     phase: str
     seeking_started_at: datetime
-    station_election_status: str
+    station_election_status: StationElectionStatus
     hider_station_id: uuid.UUID | None
 
 
-@dataclass(frozen=True, slots=True)
-class StationElectionEvent:
+class StationElectionEvent(GameplayEventSchema):
     """Station election status changed — hider channel only."""
 
-    game_id: uuid.UUID
-    station_election_status: str
+    station_election_status: StationElectionStatus
     hider_station_id: uuid.UUID | None
 
 
-@dataclass(frozen=True, slots=True)
-class GamePlayerLeftEvent:
+class GamePlayerLeftEvent(GameplayEventSchema):
     """A player left during active gameplay — both channels."""
 
-    game_id: uuid.UUID
     player_id: uuid.UUID
 
 
-@dataclass(frozen=True, slots=True)
-class GameHostChangedEvent:
+class GameHostChangedEvent(GameplayEventSchema):
     """Host transferred during active gameplay — both channels."""
 
-    game_id: uuid.UUID
     new_host_player_id: uuid.UUID
 
 
-@dataclass(frozen=True, slots=True)
-class GameDissolvedEvent:
+class GameDissolvedEvent(GameplayEventSchema):
     """Game dissolved during active gameplay — both channels."""
 
-    game_id: uuid.UUID
     reason: str
 
 

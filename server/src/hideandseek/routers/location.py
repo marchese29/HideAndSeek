@@ -44,7 +44,7 @@ def report_location(
             name=player.name,
             color=player.color,
             role=player.role,
-            coordinates=body.coordinates.model_dump(mode='json'),
+            coordinates=body.coordinates,
             timestamp=body.timestamp,
         )
     )

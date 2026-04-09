@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from geojson_pydantic import LineString as GeoJSONLineString
 from geojson_pydantic import MultiLineString as GeoJSONMultiLineString
@@ -608,7 +608,22 @@ class InventorySlotResponse(BaseModel):
     ask_count: int = Field(description='Number of times this slot has been used.')
 
 
-class HiderGameStateResponse(BaseModel):
+class SSEExposed:
+    """Mixin marking a Pydantic schema for OpenAPI injection (SSE-only, not on REST routes)."""
+
+    _registry: ClassVar[set[type[SSEExposed]]] = set()
+
+    def __init_subclass__(cls, **kwargs):  # noqa: ANN003
+        super().__init_subclass__(**kwargs)
+        SSEExposed._registry.add(cls)
+
+    @classmethod
+    def registered_schemas(cls) -> Sequence[type[SSEExposed]]:
+        """Return all registered SSE-exposed schemas."""
+        return list(cls._registry)
+
+
+class HiderGameStateResponse(SSEExposed, BaseModel):
     """Full hider state snapshot — delivered as initial SSE event."""
 
     game_id: uuid.UUID
@@ -636,7 +651,7 @@ class HiderGameStateResponse(BaseModel):
     question_history: list[HiderQuestionHistoryEntry] = Field(description='All resolved questions.')
 
 
-class SeekerGameStateResponse(BaseModel):
+class SeekerGameStateResponse(SSEExposed, BaseModel):
     """Full seeker state snapshot — delivered as initial SSE event."""
 
     game_id: uuid.UUID
