@@ -41,6 +41,26 @@ export const BeltActions = memo(function BeltActions({ disabled }: BeltActionsPr
       ...state.seekers.filter((p) => p.id !== playerId),
     ];
 
+    // Kickable players with role context for last-of-role warnings
+    const kickablePlayers = [
+      ...state.hiders
+        .filter((p) => p.id !== playerId)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          role: 'hider' as const,
+          lastOfRole: state.hiders.length === 1,
+        })),
+      ...state.seekers
+        .filter((p) => p.id !== playerId)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          role: 'seeker' as const,
+          lastOfRole: state.seekers.length === 1,
+        })),
+    ];
+
     async function doLeave(newHostId?: string) {
       try {
         await api.DELETE('/games/{game_id}/players/{player_id}', {
@@ -58,17 +78,46 @@ export const BeltActions = memo(function BeltActions({ disabled }: BeltActionsPr
       router.replace('/');
     }
 
-    if (isLastOfRole) {
-      const roleLabel = myRole === 'hider' ? 'hider' : 'seeker';
-      Alert.alert(
-        'End Game',
-        `You are the last ${roleLabel}. Leaving will end the game for everyone.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Leave', style: 'destructive', onPress: () => void doLeave() },
-        ],
-      );
-    } else if (isHost && otherPlayers.length > 0) {
+    async function doKick(targetPlayerId: string) {
+      try {
+        await api.DELETE('/games/{game_id}/players/{player_id}', {
+          params: {
+            path: { game_id: gameId!, player_id: targetPlayerId },
+            header: authHeader(),
+          },
+        });
+      } catch {
+        Alert.alert('Error', 'Failed to remove player.');
+      }
+    }
+
+    function showKickPicker() {
+      Alert.alert('Kick Player', 'Choose a player to remove.', [
+        { text: 'Cancel', style: 'cancel' },
+        ...kickablePlayers.map((p) => ({
+          text: p.lastOfRole ? `${p.name} (last ${p.role})` : p.name,
+          onPress: () => {
+            if (p.lastOfRole) {
+              Alert.alert(
+                'End Game',
+                `${p.name} is the last ${p.role}. Removing them will end the game for everyone.`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'End Game', style: 'destructive', onPress: () => void doKick(p.id) },
+                ],
+              );
+            } else {
+              Alert.alert('Remove Player', `Are you sure you want to remove ${p.name}?`, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: () => void doKick(p.id) },
+              ]);
+            }
+          },
+        })),
+      ]);
+    }
+
+    function showNominationFlow() {
       Alert.alert('Transfer Host', 'Choose a new host before leaving.', [
         { text: 'Cancel', style: 'cancel' },
         ...otherPlayers.map((p) => ({
@@ -81,6 +130,37 @@ export const BeltActions = memo(function BeltActions({ disabled }: BeltActionsPr
           },
         })),
       ]);
+    }
+
+    if (isHost && otherPlayers.length > 0) {
+      if (isLastOfRole) {
+        const roleLabel = myRole === 'hider' ? 'hider' : 'seeker';
+        Alert.alert(
+          'Host Options',
+          `You are the last ${roleLabel}. Leaving will end the game for everyone.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'End Game', style: 'destructive', onPress: () => void doLeave() },
+            { text: 'Kick Player', onPress: showKickPicker },
+          ],
+        );
+      } else {
+        Alert.alert('Host Options', 'What would you like to do?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Leave Game', onPress: showNominationFlow },
+          { text: 'Kick Player', style: 'destructive', onPress: showKickPicker },
+        ]);
+      }
+    } else if (isLastOfRole) {
+      const roleLabel = myRole === 'hider' ? 'hider' : 'seeker';
+      Alert.alert(
+        'End Game',
+        `You are the last ${roleLabel}. Leaving will end the game for everyone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Leave', style: 'destructive', onPress: () => void doLeave() },
+        ],
+      );
     } else {
       Alert.alert('Leave Game', 'Your data will be deleted and you cannot rejoin.', [
         { text: 'Cancel', style: 'cancel' },

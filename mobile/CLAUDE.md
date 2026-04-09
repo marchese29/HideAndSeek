@@ -77,7 +77,7 @@ src/
       UtilityBelt.tsx          # Container — three-section row, wires question selection hook
       StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker)
       GameTimer.tsx            # Live timer with connection-colored background
-      BeltActions.tsx          # Info + leave icon buttons (context-aware: last-of-role / host-transfer / normal)
+      BeltActions.tsx          # Info + leave icon buttons (context-aware: host-kick / last-of-role / host-transfer / normal)
       QuestionTypeBar.tsx      # 4 question type buttons (radar/thermo/match/measure)
       ParamPicker.tsx          # Horizontal scrollable inventory slot picker
       CustomDistanceInput.tsx  # Inline numeric input for custom distance slots
