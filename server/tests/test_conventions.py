@@ -168,3 +168,12 @@ def test_effective_radius_falls_back_to_code_default(session: Session):
     result = effective_hiding_zone_radius_m(game)
     # Default for metric medium is 500m
     assert result == 500
+
+
+def test_effective_radius_uses_game_size_not_map_size(session: Session):
+    """Game-level size override drives the code-level radius default."""
+    gm = create_game_map(session)  # map size=medium, hiding_zone_radius=None
+    game = create_game(session, map_id=gm.id, size=MapSize.large)
+    result = effective_hiding_zone_radius_m(game)
+    # Large metric default is 1000m, not medium's 500m
+    assert result == 1000

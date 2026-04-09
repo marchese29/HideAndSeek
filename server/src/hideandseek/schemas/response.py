@@ -47,16 +47,31 @@ if TYPE_CHECKING:
 
 
 class MapSummary(BaseModel):
-    """A map in the browse list — name, size, and region."""
+    """A map in the browse list — name, size, region, and timing defaults."""
 
     id: uuid.UUID
     name: str
     size: MapSize
     region: str = Field(description='Geographic region from the transit dataset.')
+    default_hiding_time_min: int | None = Field(
+        default=None,
+        description='Map-level hiding time override (minutes). Null means use size default.',
+    )
+    default_base_question_delay_min: int | None = Field(
+        default=None,
+        description='Map-level question delay override (minutes). Null means use code default.',
+    )
 
     @staticmethod
     def from_model(game_map: GameMapModel, region: str) -> MapSummary:
-        return MapSummary(id=game_map.id, name=game_map.name, size=game_map.size, region=region)
+        return MapSummary(
+            id=game_map.id,
+            name=game_map.name,
+            size=game_map.size,
+            region=region,
+            default_hiding_time_min=game_map.default_hiding_time_min,
+            default_base_question_delay_min=game_map.default_base_question_delay_min,
+        )
 
 
 class MapDetail(BaseModel):
@@ -175,6 +190,7 @@ class GameResponse(BaseModel):
     map_id: uuid.UUID
     host_player_id: uuid.UUID = Field(description="Player ID of the game's host.")
     status: GameStatus
+    size: MapSize = Field(description='Effective game size (may differ from map size).')
     convention: str = Field(description='Distance convention: "metric" or "imperial".')
     join_code: str | None = Field(
         description='4-character code for joining. Null once hiding starts.'
@@ -200,6 +216,7 @@ class GameResponse(BaseModel):
             map_id=game.map_id,
             host_player_id=game.host_player_id,
             status=game.status,
+            size=game.size,
             convention=game.game_map.convention,
             join_code=game.join_code,
             hiding_time_min=game.hiding_time_min,

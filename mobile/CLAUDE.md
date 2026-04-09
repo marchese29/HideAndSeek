@@ -24,7 +24,7 @@ This app requires **development builds** (not Expo Go) because `react-native-map
 app/                           # expo-router file-based routes (stack navigator)
   _layout.tsx                  # Root Stack layout + QueryClientProvider
   index.tsx                    # Home screen
-  create.tsx                   # Create Game screen
+  create.tsx                   # Create Game screen (name, map, size picker, timing config)
   join.tsx                     # Join Game screen
   lobby/
     [game_id].tsx              # Lobby screen

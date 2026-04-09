@@ -18,12 +18,29 @@ import { useAppStore } from '@/store';
 import { requestLocationPermission } from '@/utils/locationPermission';
 
 type MapSummary = components['schemas']['MapSummary'];
+type MapSize = 'small' | 'medium' | 'large';
+
+const HIDING_TIME_DEFAULTS: Record<MapSize, number> = { small: 30, medium: 60, large: 180 };
+const DEFAULT_QUESTION_DELAY = 5;
+const SELECTABLE_SIZES: MapSize[] = ['small', 'medium', 'large'];
+
+function resolveHidingTime(mapOverride: number | null | undefined, size: MapSize): number {
+  return mapOverride ?? HIDING_TIME_DEFAULTS[size];
+}
+
+function resolveQuestionDelay(mapOverride: number | null | undefined): number {
+  return mapOverride ?? DEFAULT_QUESTION_DELAY;
+}
 
 export default function CreateGameScreen() {
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [selectedSize, setSelectedSize] = useState<MapSize | null>(null);
+  const [hidingTime, setHidingTime] = useState('');
+  const [questionDelay, setQuestionDelay] = useState('');
 
   const { data: maps, isLoading: mapsLoading } = useQuery<MapSummary[]>({
     queryKey: ['maps'],
@@ -34,7 +51,29 @@ export default function CreateGameScreen() {
     },
   });
 
+  const selectedMap = maps?.find((m) => m.id === selectedMapId);
+  const isSpecialMap = selectedMap?.size === 'special';
   const canSubmit = selectedMapId !== null && name.trim().length > 0 && !loading;
+
+  function handleMapSelect(map: MapSummary) {
+    setSelectedMapId(map.id);
+    if (map.size === 'special') {
+      // Special maps: no size picker, use map overrides directly
+      setSelectedSize(null);
+      setHidingTime(String(map.default_hiding_time_min ?? ''));
+      setQuestionDelay(String(resolveQuestionDelay(map.default_base_question_delay_min)));
+    } else {
+      const size = map.size as MapSize;
+      setSelectedSize(size);
+      setHidingTime(String(resolveHidingTime(map.default_hiding_time_min, size)));
+      setQuestionDelay(String(resolveQuestionDelay(map.default_base_question_delay_min)));
+    }
+  }
+
+  function handleSizeChange(size: MapSize) {
+    setSelectedSize(size);
+    setHidingTime(String(resolveHidingTime(selectedMap?.default_hiding_time_min ?? null, size)));
+  }
 
   async function handleCreate() {
     if (!selectedMapId) return;
@@ -44,10 +83,18 @@ export default function CreateGameScreen() {
     await requestLocationPermission();
 
     const { pushToken, pushProvider } = useAppStore.getState();
+    const parsedHidingTime = parseInt(hidingTime, 10);
+    const parsedQuestionDelay = parseInt(questionDelay, 10);
+
     const { data, error: apiError } = await api.POST('/games', {
       body: {
         map_id: selectedMapId,
         name: name.trim(),
+        size: selectedSize ?? undefined,
+        hiding_time_min: Number.isFinite(parsedHidingTime) ? parsedHidingTime : undefined,
+        base_question_delay_min: Number.isFinite(parsedQuestionDelay)
+          ? parsedQuestionDelay
+          : undefined,
         device_token: pushToken ?? undefined,
         device_token_provider: pushProvider ?? 'apns',
       },
@@ -71,7 +118,7 @@ export default function CreateGameScreen() {
     return (
       <Pressable
         style={[styles.mapItem, selected && styles.mapItemSelected]}
-        onPress={() => setSelectedMapId(item.id)}
+        onPress={() => handleMapSelect(item)}
       >
         <View style={styles.mapInfo}>
           <Text style={[styles.mapName, selected && styles.mapNameSelected]}>{item.name}</Text>
@@ -105,6 +152,63 @@ export default function CreateGameScreen() {
           contentContainerStyle={styles.mapList}
           style={styles.mapListContainer}
         />
+      )}
+
+      {selectedMap && !isSpecialMap && (
+        <>
+          <Text style={styles.label}>Game Size</Text>
+          <View style={styles.sizeRow}>
+            {SELECTABLE_SIZES.map((size) => (
+              <Pressable
+                key={size}
+                style={[styles.sizeButton, selectedSize === size && styles.sizeButtonSelected]}
+                onPress={() => handleSizeChange(size)}
+              >
+                <Text
+                  style={[
+                    styles.sizeButtonText,
+                    selectedSize === size && styles.sizeButtonTextSelected,
+                  ]}
+                >
+                  {size.charAt(0).toUpperCase() + size.slice(1)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
+
+      {selectedMap && (
+        <>
+          <View style={styles.timingRow}>
+            <View style={styles.timingField}>
+              <Text style={styles.label}>Hiding Time</Text>
+              <View style={styles.inputWithUnit}>
+                <TextInput
+                  style={styles.timingInput}
+                  value={hidingTime}
+                  onChangeText={setHidingTime}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                />
+                <Text style={styles.unitText}>min</Text>
+              </View>
+            </View>
+            <View style={styles.timingField}>
+              <Text style={styles.label}>Answer Time</Text>
+              <View style={styles.inputWithUnit}>
+                <TextInput
+                  style={styles.timingInput}
+                  value={questionDelay}
+                  onChangeText={setQuestionDelay}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                />
+                <Text style={styles.unitText}>min</Text>
+              </View>
+            </View>
+          </View>
+        </>
       )}
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -186,6 +290,55 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#888',
     textTransform: 'uppercase',
+  },
+  sizeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sizeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  sizeButtonSelected: {
+    borderColor: '#3498DB',
+    backgroundColor: '#EBF5FB',
+  },
+  sizeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#888',
+  },
+  sizeButtonTextSelected: {
+    color: '#2C3E50',
+  },
+  timingRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  timingField: {
+    flex: 1,
+  },
+  inputWithUnit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  timingInput: {
+    flex: 1,
+    fontSize: 18,
+    paddingVertical: 12,
+  },
+  unitText: {
+    fontSize: 14,
+    color: '#888',
+    fontWeight: '600',
   },
   error: {
     color: '#E74C3C',

@@ -69,11 +69,13 @@ MAP_ID="<from GET /maps>"
 # HOST_PLAYER_ID, HOST_SECRET, HIDER_PLAYER_ID, HIDER_SECRET, etc.
 
 # 1. Create game (host is automatically the first player, no auth needed)
+#    Optional: size (small/medium/large), hiding_time_min, base_question_delay_min
 curl -s -X POST localhost:8000/games \
   -H "Content-Type: application/json" \
-  -d "{\"map_id\": \"$MAP_ID\", \"name\": \"HostName\"}"
+  -d "{\"map_id\": \"$MAP_ID\", \"name\": \"HostName\", \"size\": \"large\"}"
 # → returns JoinGameResponse: game state under ['game'], player_id + player_secret for auth
 # → host gets server-assigned color (red, blue, green, ...)
+# → game.size reflects the chosen size; hiding_time_min defaults to size (30/60/180)
 
 # 1b. Connect to lobby SSE stream (in another terminal — stays open)
 curl -N localhost:8000/games/<game_id>/lobby/events \
@@ -310,3 +312,4 @@ Business logic, queries, DB infra, geo math, push, and redis live in the `hidean
   - **Mutation endpoints return 204**: `POST /questions/*` (ask, lock-in, answer, veto, abandon) and `POST /hider-station` return 204 with no body. State updates flow to clients exclusively through SSE events. Push notifications remain as supplementary wake-up alerts.
   - **`publish_sse(channel, ...)`** (`hideandseek_core.broadcast.emit`): low-level Redis publish shared by both `emit_gameplay` (core) and `emit` (server lobby). Channel helpers: `lobby_channel()`, `hider_channel()`, `seeker_channel()`.
   - **`Question.slot_index`** — stored at ask time from `InventorySlot.slot_index`. Used in gameplay state question schemas.
+  - **Configurable game parameters**: `POST /games` accepts optional `size` (small/medium/large — not special), `hiding_time_min`, and `base_question_delay_min` overrides. Three-level fallback: request → map → code default (by size). `Game.size` is stored on the game (can differ from `GameMap.size`), used by `effective_hiding_zone_radius_m()`. `MapSummary` exposes nullable `default_hiding_time_min` and `default_base_question_delay_min` for client-side default computation. Inventory stays map-based (not affected by game size override).

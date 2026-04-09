@@ -10,7 +10,7 @@ from hideandseek_core.queries.games import create_game as query_create_game
 from hideandseek_core.queries.location import delete_player_locations
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap
-from hideandseek_models.types import MAX_PLAYERS, GameStatus, PlayerColor, PlayerRole
+from hideandseek_models.types import MAX_PLAYERS, GameStatus, MapSize, PlayerColor, PlayerRole
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +48,7 @@ def create_game_with_host(
     secret_hash: str,
     hiding_time_min: int,
     base_question_delay_min: int,
+    size: MapSize,
     excluded_stop_ids: list[uuid.UUID],
     excluded_route_ids: list[uuid.UUID],
 ) -> tuple[Game, Player]:
@@ -64,7 +65,7 @@ def create_game_with_host(
         base_question_delay_min=base_question_delay_min,
         default_inventory=game_map.default_inventory,
         convention=game_map.convention,
-        size=game_map.size,
+        size=size,
         excluded_stop_ids=excluded_stop_ids,
         excluded_route_ids=excluded_route_ids,
     )

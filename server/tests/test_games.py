@@ -62,6 +62,37 @@ def test_create_game(client: TestClient, session: Session):
     assert game['players'][0]['color'] == 'red'
 
 
+def test_create_game_includes_size(client: TestClient, session: Session):
+    """POST /games returns the game's effective size."""
+    gm = create_game_map(session)
+    resp = client.post('/games', json={'map_id': str(gm.id), 'name': 'Host'})
+    assert resp.status_code == 201
+    assert resp.json()['game']['size'] == 'medium'
+
+
+def test_create_game_size_override(client: TestClient, session: Session):
+    """POST /games with size override stores the chosen size on the game."""
+    gm = create_game_map(session)  # default size=medium
+    resp = client.post(
+        '/games',
+        json={'map_id': str(gm.id), 'name': 'Host', 'size': 'large'},
+    )
+    assert resp.status_code == 201
+    game = resp.json()['game']
+    assert game['size'] == 'large'
+    assert game['hiding_time_min'] == 180  # large default
+
+
+def test_create_game_size_special_rejected(client: TestClient, session: Session):
+    """POST /games rejects 'special' as a user-selected size."""
+    gm = create_game_map(session)
+    resp = client.post(
+        '/games',
+        json={'map_id': str(gm.id), 'name': 'Host', 'size': 'special'},
+    )
+    assert resp.status_code == 422
+
+
 def test_create_game_map_not_found(client: TestClient):
     resp = client.post(
         '/games',

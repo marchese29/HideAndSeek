@@ -73,7 +73,13 @@ from hideandseek_core.queries.maps import get_map
 from hideandseek_core.queries.questions import get_inventory_slots
 from hideandseek_core.queries.stops import get_stops_near_point, validate_stop_playable
 from hideandseek_models.game import Game, Player
-from hideandseek_models.types import GameStatus, PlayerRole, PushEventType, StationElectionStatus
+from hideandseek_models.types import (
+    GameStatus,
+    MapSize,
+    PlayerRole,
+    PushEventType,
+    StationElectionStatus,
+)
 from hideandseek_worker.celery_app import app as celery_app
 from hideandseek_worker.tasks.game_timers import transition_hiding_to_seeking
 from hideandseek_worker.tasks.push import send_push
@@ -90,12 +96,16 @@ def create_game(
     if not game_map:
         raise HTTPException(status_code=404, detail='Map not found.')
 
+    if body.size == MapSize.special:
+        raise HTTPException(status_code=422, detail='Cannot select special as game size.')
+
+    size = body.size or game_map.size
     raw_secret, secret_hash = generate_credentials()
 
     hiding_time = resolve_hiding_time_min(
         request_override=body.hiding_time_min,
         map_default=game_map.default_hiding_time_min,
-        size=game_map.size,
+        size=size,
     )
     question_delay = resolve_base_question_delay_min(
         request_override=body.base_question_delay_min,
@@ -108,6 +118,7 @@ def create_game(
         secret_hash=secret_hash,
         hiding_time_min=hiding_time,
         base_question_delay_min=question_delay,
+        size=size,
         excluded_stop_ids=body.excluded_stop_ids,
         excluded_route_ids=body.excluded_route_ids,
     )

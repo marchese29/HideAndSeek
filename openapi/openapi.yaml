@@ -1340,6 +1340,12 @@ components:
           title: Device Token Provider
           description: 'Push provider: "apns" (iOS) or "fcm" (Android).'
           default: apns
+        size:
+          anyOf:
+          - $ref: '#/components/schemas/MapSize'
+          - type: 'null'
+          description: Override game size (small, medium, large). Affects timing and
+            hiding zone.
         hiding_time_min:
           anyOf:
           - type: integer
@@ -1556,6 +1562,9 @@ components:
           description: Player ID of the game's host.
         status:
           $ref: '#/components/schemas/GameStatus'
+        size:
+          $ref: '#/components/schemas/MapSize'
+          description: Effective game size (may differ from map size).
         convention:
           type: string
           title: Convention
@@ -1606,6 +1615,7 @@ components:
       - map_id
       - host_player_id
       - status
+      - size
       - convention
       - join_code
       - hiding_time_min
@@ -1970,6 +1980,20 @@ components:
           type: string
           title: Region
           description: Geographic region from the transit dataset.
+        default_hiding_time_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Hiding Time Min
+          description: Map-level hiding time override (minutes). Null means use size
+            default.
+        default_base_question_delay_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Base Question Delay Min
+          description: Map-level question delay override (minutes). Null means use
+            code default.
       type: object
       required:
       - id
@@ -1977,7 +2001,8 @@ components:
       - size
       - region
       title: MapSummary
-      description: "A map in the browse list \u2014 name, size, and region."
+      description: "A map in the browse list \u2014 name, size, region, and timing\
+        \ defaults."
     MultiLineString:
       properties:
         bbox:

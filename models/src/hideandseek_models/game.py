@@ -11,7 +11,13 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek_models.base import Base
-from hideandseek_models.types import GameStatus, PlayerColor, PlayerRole, StationElectionStatus
+from hideandseek_models.types import (
+    GameStatus,
+    MapSize,
+    PlayerColor,
+    PlayerRole,
+    StationElectionStatus,
+)
 
 if TYPE_CHECKING:
     from hideandseek_models.game_map import GameMap
@@ -29,6 +35,7 @@ class Game(Base):
     join_code: Mapped[str | None] = mapped_column(unique=True, index=True, default=None)
     hiding_time_min: Mapped[int] = mapped_column(default=60)
     base_question_delay_min: Mapped[int] = mapped_column(default=5)
+    size: Mapped[MapSize] = mapped_column(default=MapSize.medium)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
     hiding_started_at: Mapped[datetime | None] = mapped_column(default=None)
     seeking_started_at: Mapped[datetime | None] = mapped_column(default=None)

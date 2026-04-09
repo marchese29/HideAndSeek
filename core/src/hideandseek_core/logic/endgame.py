@@ -27,7 +27,7 @@ def effective_hiding_zone_radius_m(game: Game) -> float:
     radius_conv = (
         game.hiding_zone_radius_override
         or gm.hiding_zone_radius
-        or get_default_hiding_zone_radius(gm.convention, gm.size)
+        or get_default_hiding_zone_radius(gm.convention, game.size)
     )
     return to_meters(radius_conv, gm.convention)
 

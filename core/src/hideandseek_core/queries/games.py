@@ -74,6 +74,7 @@ def create_game(
         join_code=generate_join_code(),
         hiding_time_min=hiding_time_min,
         base_question_delay_min=base_question_delay_min,
+        size=size,
         excluded_stop_ids=[str(sid) for sid in excluded_stop_ids] if excluded_stop_ids else [],
         excluded_route_ids=[str(rid) for rid in excluded_route_ids] if excluded_route_ids else [],
     )

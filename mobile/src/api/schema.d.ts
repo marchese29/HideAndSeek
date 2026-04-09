@@ -649,6 +649,8 @@ export interface components {
              * @default apns
              */
             device_token_provider: string;
+            /** @description Override game size (small, medium, large). Affects timing and hiding zone. */
+            size?: components["schemas"]["MapSize"] | null;
             /**
              * Hiding Time Min
              * @description Override hiding phase duration. Defaults to map size.
@@ -777,6 +779,8 @@ export interface components {
              */
             host_player_id: string;
             status: components["schemas"]["GameStatus"];
+            /** @description Effective game size (may differ from map size). */
+            size: components["schemas"]["MapSize"];
             /**
              * Convention
              * @description Distance convention: "metric" or "imperial".
@@ -1054,7 +1058,7 @@ export interface components {
         MapSize: "small" | "medium" | "large" | "special";
         /**
          * MapSummary
-         * @description A map in the browse list — name, size, and region.
+         * @description A map in the browse list — name, size, region, and timing defaults.
          */
         MapSummary: {
             /**
@@ -1070,6 +1074,16 @@ export interface components {
              * @description Geographic region from the transit dataset.
              */
             region: string;
+            /**
+             * Default Hiding Time Min
+             * @description Map-level hiding time override (minutes). Null means use size default.
+             */
+            default_hiding_time_min?: number | null;
+            /**
+             * Default Base Question Delay Min
+             * @description Map-level question delay override (minutes). Null means use code default.
+             */
+            default_base_question_delay_min?: number | null;
         };
         /**
          * MultiLineString

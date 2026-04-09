@@ -8,7 +8,7 @@ from datetime import datetime
 from geojson_pydantic import Point
 from pydantic import BaseModel, Field
 
-from hideandseek_models.types import PlayerColor, PlayerRole
+from hideandseek_models.types import MapSize, PlayerColor, PlayerRole
 
 # ── Games ─────────────────────────────────────────────────────────────────────
 
@@ -33,6 +33,10 @@ class CreateGameRequest(BaseModel):
     device_token_provider: str = Field(
         default='apns',
         description='Push provider: "apns" (iOS) or "fcm" (Android).',
+    )
+    size: MapSize | None = Field(
+        default=None,
+        description='Override game size (small, medium, large). Affects timing and hiding zone.',
     )
     hiding_time_min: int | None = Field(
         default=None, ge=1, description='Override hiding phase duration. Defaults to map size.'
