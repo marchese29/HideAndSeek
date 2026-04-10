@@ -19,6 +19,7 @@ AI-generated design documents and artifacts for the HideAndSeek game.
 - `gameplay-mobile.md` — Mobile gameplay experience: single route with role/phase-dependent rendering, map view (boundary, stops, player pins, total exclusion), SSE-driven Zustand state, question drawer (hider) + question banner (seeker), utility belt, location reporting, stale location indicator, permissions at create/join time.
 - `utility-belt.md` — Utility belt HUD redesign: zone-based layout (state action + timer, toolbelt, info + leave), context strip (hider station name, seeker question timeline with exclusion scrubbing), connection status via timer color, phase/role-specific state action button.
 - `question-flow-mobile.md` — Mobile question flow: seeker question selection via belt takeover (type → parameter → preview → ask), unified Question Banner for both roles (replaces drawer + old banner), boundary-line exclusion previews, thermometer two-phase UX, hider answer/veto/randomize actions, server preview endpoint. Supersedes question UI in `gameplay-mobile.md` sections 6–7.
+- `tentacles-question.md` — Tentacles question type: seeker picks a POI category, server finds all POIs within a configured distance, hider's answer is the nearest POI (or miss if out of range). Non-binary answer, Voronoi-based exclusion. Point geometry only (for now — HideAndSeek-9ci for complex geometries). Server changes (model, ask/answer, exclusion, events, preview) and mobile seeker experience.
 
 ## Conventions
 
