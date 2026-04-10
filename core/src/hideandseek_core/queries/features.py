@@ -96,3 +96,45 @@ def get_features_by_category(
     if feature_class is not None:
         stmt = stmt.where(MapFeature.feature_class == feature_class)
     return session.scalars(stmt).all()
+
+
+def get_features_within_distance(
+    game: Game,
+    category: FeatureCategory,
+    location: Point,
+    distance_m: float,
+) -> list[MapFeature]:
+    """Find all MapFeatures of a category within distance_m of a location.
+
+    Uses ST_DWithin for indexed spatial filtering. Returns features linked
+    to the game's map via GameMapFeature.
+    """
+    session = get_session()
+    point_wkb = from_shape(location, srid=4326)
+    stmt = (
+        select(MapFeature)
+        .join(GameMapFeature)
+        .where(
+            GameMapFeature.game_map_id == game.map_id,
+            MapFeature.category == category,
+            func.ST_DWithin(MapFeature.shape, point_wkb, distance_m),
+        )
+    )
+    return list(session.scalars(stmt).all())
+
+
+def get_features_by_stable_ids(
+    game: Game,
+    stable_ids: list[str],
+) -> list[MapFeature]:
+    """Fetch MapFeatures by their stable_ids, scoped to the game's map."""
+    session = get_session()
+    stmt = (
+        select(MapFeature)
+        .join(GameMapFeature)
+        .where(
+            GameMapFeature.game_map_id == game.map_id,
+            MapFeature.stable_id.in_(stable_ids),
+        )
+    )
+    return list(session.scalars(stmt).all())

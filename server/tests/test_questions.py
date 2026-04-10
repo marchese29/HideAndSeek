@@ -884,6 +884,29 @@ def test_inventory_includes_feature_slots(client: TestClient, session: Session):
     assert 'hospital' in measuring_cats
 
 
+def test_tentacles_inventory_slots_created(client: TestClient, session: Session):
+    """When map has tentacle_categories, inventory includes tentacles slots."""
+    gm = create_game_map(
+        session,
+        tentacle_categories=[
+            {'category': 'museum', 'distance': 2000},
+            {'category': 'hospital', 'distance': 3000},
+        ],
+    )
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    inv = client.get(
+        f'/games/{game.id}/inventory',
+        headers=_headers(game.host_player_id),
+    ).json()
+    slots = inv['tentacles_slots']
+    assert len(slots) == 2
+    # Sorted by category: hospital < museum
+    assert slots[0]['category'] == 'hospital'
+    assert slots[0]['distance'] == 3000
+    assert slots[1]['category'] == 'museum'
+    assert slots[1]['distance'] == 2000
+
+
 # ── POST /games/{game_id}/questions/{question_id}/abandon ─────────────────────
 
 

@@ -7,7 +7,12 @@ from hideandseek_models.inventory import InventorySlot
 from hideandseek_models.location import LocationUpdate
 from hideandseek_models.map_feature import GameMapFeature, MapFeature
 from hideandseek_models.question import Question
-from hideandseek_models.question_params import FeatureQuestionParams, RadarParams, ThermometerParams
+from hideandseek_models.question_params import (
+    FeatureQuestionParams,
+    RadarParams,
+    TentacleQuestionParams,
+    ThermometerParams,
+)
 from hideandseek_models.transit import Route, RouteStop, Stop, TransitDataset
 from hideandseek_models.types import (
     MAX_PLAYERS,
@@ -40,6 +45,7 @@ __all__ = [
     'Route',
     'RouteStop',
     'Stop',
+    'TentacleQuestionParams',
     'ThermometerParams',
     'TransitDataset',
     # Enums

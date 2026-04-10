@@ -7,12 +7,15 @@ from sqlalchemy.orm import Session
 
 from hideandseek_core.geo import distance_to_feature
 from hideandseek_core.queries.features import (
+    get_features_by_stable_ids,
+    get_features_within_distance,
     get_map_feature_categories,
     resolve_containing_feature,
     resolve_nearest_feature,
 )
 from hideandseek_models.types import FeatureCategory
 from tests.conftest import (
+    create_game,
     create_game_map,
     create_game_map_feature,
     create_map_feature,
@@ -254,3 +257,88 @@ def test_distance_to_feature_polygon_outside() -> None:
     dist = distance_to_feature(player, poly)
     # 1 degree of latitude ≈ 111 km
     assert 110_000 < dist < 112_000
+
+
+# ── get_features_within_distance ───────────────────────────────────────────
+
+
+def test_get_features_within_distance(session: Session) -> None:
+    """Features within distance are returned, those outside are not."""
+    gm = create_game_map(session)
+    game = create_game(session, map_id=gm.id)
+
+    near1 = create_map_feature(session, name='Near 1', shape=Point(0.5, 0.5))
+    near2 = create_map_feature(session, name='Near 2', shape=Point(0.501, 0.5))
+    far = create_map_feature(session, name='Far Away', shape=Point(5.0, 5.0))
+    create_game_map_feature(session, gm.id, near1.id)
+    create_game_map_feature(session, gm.id, near2.id)
+    create_game_map_feature(session, gm.id, far.id)
+
+    results = get_features_within_distance(
+        game=game,
+        category=FeatureCategory.hospital,
+        location=Point(0.5, 0.5),
+        distance_m=1000,
+    )
+    ids = {f.id for f in results}
+    assert near1.id in ids
+    assert near2.id in ids
+    assert far.id not in ids
+
+
+def test_get_features_within_distance_excludes_other_categories(session: Session) -> None:
+    """Only features of the requested category are returned."""
+    gm = create_game_map(session)
+    game = create_game(session, map_id=gm.id)
+
+    hospital = create_map_feature(
+        session, name='Hospital', category=FeatureCategory.hospital, shape=Point(0.5, 0.5)
+    )
+    museum = create_map_feature(
+        session, name='Museum', category=FeatureCategory.museum, shape=Point(0.5, 0.5)
+    )
+    create_game_map_feature(session, gm.id, hospital.id)
+    create_game_map_feature(session, gm.id, museum.id)
+
+    results = get_features_within_distance(
+        game=game,
+        category=FeatureCategory.hospital,
+        location=Point(0.5, 0.5),
+        distance_m=1000,
+    )
+    ids = {f.id for f in results}
+    assert hospital.id in ids
+    assert museum.id not in ids
+
+
+# ── get_features_by_stable_ids ─────────────────────────────────────────────
+
+
+def test_get_features_by_stable_ids(session: Session) -> None:
+    """Features are fetched by their stable_ids."""
+    gm = create_game_map(session)
+    game = create_game(session, map_id=gm.id)
+
+    f1 = create_map_feature(session, stable_id='feat-a', name='A')
+    f2 = create_map_feature(session, stable_id='feat-b', name='B')
+    create_game_map_feature(session, gm.id, f1.id)
+    create_game_map_feature(session, gm.id, f2.id)
+
+    results = get_features_by_stable_ids(game=game, stable_ids=['feat-a', 'feat-b'])
+    ids = {f.id for f in results}
+    assert f1.id in ids
+    assert f2.id in ids
+    assert len(results) == 2
+
+
+def test_get_features_by_stable_ids_scoped_to_map(session: Session) -> None:
+    """Features on a different map are not returned."""
+    gm_a = create_game_map(session)
+    gm_b = create_game_map(session)
+    game_b = create_game(session, map_id=gm_b.id)
+
+    feature = create_map_feature(session, stable_id='feat-x')
+    create_game_map_feature(session, gm_a.id, feature.id)
+
+    results = get_features_by_stable_ids(game=game_b, stable_ids=['feat-x'])
+    assert len(results) == 0

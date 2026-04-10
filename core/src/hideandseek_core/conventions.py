@@ -7,7 +7,8 @@ Conversion happens at the boundary in logic.py.
 
 from __future__ import annotations
 
-from hideandseek_models.types import DistanceConvention, MapSize
+from hideandseek_models.game_map import GameMap
+from hideandseek_models.types import DistanceConvention, FeatureCategory, MapSize
 
 _MILES_PER_METER = 1609.344
 
@@ -145,3 +146,15 @@ def get_default_inventory(convention: DistanceConvention, size: MapSize) -> dict
         'radars': [{'distance': d} for d in radars] + [{'distance': None}],
         'thermometers': [{'distance': d} for d in thermos] + [{'distance': None}],
     }
+
+
+def resolve_tentacle_distance(game_map: GameMap, category: FeatureCategory) -> float:
+    """Look up the configured tentacle distance for a category on a map.
+
+    Returns the distance in the map's convention units.
+    Raises ValueError if the category is not configured for tentacles on this map.
+    """
+    for entry in game_map.tentacle_categories:
+        if entry['category'] == category.value:
+            return entry['distance']
+    raise ValueError(f'Category {category} is not configured for tentacles on map {game_map.name}')

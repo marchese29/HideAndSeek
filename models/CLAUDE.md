@@ -21,12 +21,12 @@ src/hideandseek_models/
                            #   category classification sets
   geo_types.py             # Custom SQLAlchemy column types (ShapelyGeography, ShapelyGeometry)
   game.py                  # Game, Player
-  game_map.py              # GameMap
+  game_map.py              # GameMap (tentacle_categories JSON column for tentacles config)
   inventory.py             # InventorySlot
   location.py              # LocationUpdate
   map_feature.py           # MapFeature, GameMapFeature
   question.py              # Question
-  question_params.py       # RadarParams, ThermometerParams, FeatureQuestionParams
+  question_params.py       # RadarParams, ThermometerParams, FeatureQuestionParams, TentacleQuestionParams
   transit.py               # TransitDataset, Stop, Route, RouteStop
   device_token.py          # DeviceToken
 ```

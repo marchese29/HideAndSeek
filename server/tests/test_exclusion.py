@@ -8,10 +8,12 @@ from hideandseek_core.exclusion import (
     boundary_matching,
     boundary_measuring,
     boundary_radar,
+    boundary_tentacles,
     boundary_thermometer,
     exclude_matching,
     exclude_measuring,
     exclude_radar,
+    exclude_tentacles,
     exclude_thermometer,
 )
 
@@ -181,3 +183,58 @@ def test_boundary_measuring_is_line():
     result = boundary_measuring(GAME_MAP, 5000, pois)
     assert not result.is_empty
     assert result.geom_type in ('LinearRing', 'LineString', 'MultiLineString')
+
+
+# ── exclude_tentacles ───────────────────────────────────────────────────────
+
+
+def test_tentacles_hit_excludes_outside_voronoi_cell():
+    """On hit, everything outside the answered POI's Voronoi cell (within circle) is excluded."""
+    # Three POIs spread east-west: answered is the center one
+    answered_poi = Point(0, 0)
+    other_pois = [Point(-0.03, 0), Point(0.03, 0)]
+    result = exclude_tentacles(GAME_MAP, Point(0, 0), 5000, answered_poi, other_pois)
+    assert not result.is_empty
+    # A point near one of the other POIs should be excluded
+    assert result.contains(Point(0.04, 0))
+    # A point near the answered POI should NOT be excluded
+    assert not result.contains(Point(0, 0))
+
+
+def test_tentacles_hit_single_poi_degrades_to_radar():
+    """Single POI hit: exclusion is game_map minus circle (same as radar hit)."""
+    answered_poi = Point(0, 0)
+    result = exclude_tentacles(GAME_MAP, Point(0, 0), 1000, answered_poi, [])
+    assert not result.is_empty
+    # Center should NOT be excluded (hider is in the circle)
+    assert not result.contains(Point(0, 0))
+    # A far point should be excluded
+    assert result.contains(Point(0.05, 0.05))
+
+
+def test_tentacles_excludes_outside_circle():
+    """On hit, points far outside the distance circle are excluded."""
+    answered_poi = Point(0, 0)
+    other_pois = [Point(0.01, 0)]
+    result = exclude_tentacles(GAME_MAP, Point(0, 0), 2000, answered_poi, other_pois)
+    # A point well outside the circle should be excluded
+    assert result.contains(Point(0.08, 0.08))
+
+
+# ── boundary_tentacles ─────────────────────────────────────────────────────
+
+
+def test_boundary_tentacles_is_line():
+    """Tentacles boundary is a line, not a filled polygon."""
+    pois = [Point(-0.02, 0), Point(0.02, 0)]
+    result = boundary_tentacles(GAME_MAP, Point(0, 0), 5000, pois)
+    assert not result.is_empty
+    assert result.geom_type in ('LinearRing', 'LineString', 'MultiLineString', 'GeometryCollection')
+
+
+def test_boundary_tentacles_single_poi_is_circle():
+    """Single POI boundary is just the circle ring (same as radar)."""
+    pois = [Point(0, 0)]
+    result = boundary_tentacles(GAME_MAP, Point(0, 0), 1000, pois)
+    expected = boundary_radar(GAME_MAP, Point(0, 0), 1000)
+    assert result.equals(expected)

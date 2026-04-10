@@ -17,6 +17,7 @@ from hideandseek_models.question import Question
 from hideandseek_models.types import (
     MATCHING_CATEGORIES,
     MEASURING_CATEGORIES,
+    FeatureCategory,
     QuestionStatus,
     QuestionType,
     category_key,
@@ -116,6 +117,7 @@ def list_questions(game: Game) -> Sequence[Question]:
                 joinedload(Question.radar_params),
                 joinedload(Question.thermometer_params),
                 joinedload(Question.feature_params),
+                joinedload(Question.tentacle_params),
             )
             .order_by(Question.sequence)
         )
@@ -210,6 +212,20 @@ def create_inventory_slots(
             session.add(slot)
             slots.append(slot)
             idx += 1
+
+    # Tentacles slots from map's tentacle_categories
+    tentacle_cats = game.game_map.tentacle_categories or []
+    sorted_tentacles = sorted(tentacle_cats, key=lambda e: e['category'])
+    for idx, entry in enumerate(sorted_tentacles):
+        slot = InventorySlot(
+            game=game,
+            question_type=QuestionType.tentacles,
+            slot_index=idx,
+            category=FeatureCategory(entry['category']),
+            distance=entry['distance'],
+        )
+        session.add(slot)
+        slots.append(slot)
 
     session.flush()
     return slots

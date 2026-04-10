@@ -22,8 +22,8 @@ src/hideandseek_core/
   redis_client.py      # Redis client factory (sync + async)
   geo.py               # Pure geodesic distance functions (pyproj)
   geo_helpers.py       # Shapely-to-GeoJSON conversion helpers
-  conventions.py       # Metric/imperial conversion, default inventory
-  exclusion.py         # Exclusion zone geometry, boundary computation
+  conventions.py       # Metric/imperial conversion, default inventory, resolve_tentacle_distance()
+  exclusion.py         # Exclusion zone geometry, boundary computation (incl. tentacles Voronoi)
   broadcast/           # Gameplay event production + Redis publishing
     events.py          # Typed gameplay event Pydantic models (frozen, auto-registered for OpenAPI)
     emit.py            # publish_sse(), channel helpers, emit_gameplay()

@@ -31,6 +31,7 @@ class GameMap(Base):
     default_hiding_time_min: Mapped[int | None] = mapped_column(default=None)
     default_base_question_delay_min: Mapped[int | None] = mapped_column(default=None)
     hiding_zone_radius: Mapped[float | None] = mapped_column(default=None)
+    tentacle_categories: Mapped[list] = mapped_column(JSON, default=list)
     notes: Mapped[str | None] = mapped_column(default=None)
 
     transit_dataset: Mapped[TransitDataset] = relationship()

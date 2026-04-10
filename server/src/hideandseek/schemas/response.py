@@ -153,6 +153,7 @@ class InventoryResponse(BaseModel):
     thermometer_slots: list[SlotResponse] = Field(description='Thermometer question slots.')
     matching_slots: list[SlotResponse] = Field(description='Matching question slots.')
     measuring_slots: list[SlotResponse] = Field(description='Measuring question slots.')
+    tentacles_slots: list[SlotResponse] = Field(description='Tentacles question slots.')
 
     @staticmethod
     def from_slots(slots: Sequence[InventorySlotModel]) -> InventoryResponse:
@@ -161,6 +162,7 @@ class InventoryResponse(BaseModel):
             'thermometer': [],
             'matching': [],
             'measuring': [],
+            'tentacles': [],
         }
         for s in slots:
             groups[s.question_type].append(
@@ -177,6 +179,7 @@ class InventoryResponse(BaseModel):
             thermometer_slots=groups['thermometer'],
             matching_slots=groups['matching'],
             measuring_slots=groups['measuring'],
+            tentacles_slots=groups['tentacles'],
         )
 
 

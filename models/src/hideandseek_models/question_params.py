@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import JSON, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek_models.base import Base
@@ -59,3 +59,21 @@ class FeatureQuestionParams(Base):
     hider_distance: Mapped[float | None] = mapped_column(default=None)
 
     question: Mapped[Question] = relationship(back_populates='feature_params')
+
+
+class TentacleQuestionParams(Base):
+    """Parameters for a tentacles question (one-to-one with Question).
+
+    Seeker fields (category, poi_ids) are set at ask time.
+    Answer fields (hit, hider_feature_id) are populated at answer time.
+    """
+
+    __tablename__ = 'tentacle_question_params'
+
+    question_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('question.id'), primary_key=True)
+    category: Mapped[FeatureCategory]
+    poi_ids: Mapped[list] = mapped_column(JSON)
+    hit: Mapped[bool | None] = mapped_column(default=None)
+    hider_feature_id: Mapped[str | None] = mapped_column(default=None)
+
+    question: Mapped[Question] = relationship(back_populates='tentacle_params')

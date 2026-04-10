@@ -10,10 +10,11 @@ from hideandseek_core.conventions import (
     from_meters,
     get_default_hiding_zone_radius,
     get_default_inventory,
+    resolve_tentacle_distance,
     to_meters,
 )
 from hideandseek_core.logic.endgame import effective_hiding_zone_radius_m
-from hideandseek_models.types import DistanceConvention, MapSize
+from hideandseek_models.types import DistanceConvention, FeatureCategory, MapSize
 from tests.conftest import create_game, create_game_map
 
 # ── to_meters / from_meters ─────────────────────────────────────────────
@@ -177,3 +178,29 @@ def test_effective_radius_uses_game_size_not_map_size(session: Session):
     result = effective_hiding_zone_radius_m(game)
     # Large metric default is 1000m, not medium's 500m
     assert result == 1000
+
+
+# ── resolve_tentacle_distance ──────────────────────────────────────────
+
+
+def test_resolve_tentacle_distance_found(session: Session):
+    """Returns the distance for a configured tentacle category."""
+    gm = create_game_map(
+        session,
+        tentacle_categories=[
+            {'category': 'museum', 'distance': 2000},
+            {'category': 'hospital', 'distance': 3000},
+        ],
+    )
+    assert resolve_tentacle_distance(gm, FeatureCategory.museum) == 2000
+    assert resolve_tentacle_distance(gm, FeatureCategory.hospital) == 3000
+
+
+def test_resolve_tentacle_distance_not_found(session: Session):
+    """Raises ValueError for unconfigured category."""
+    gm = create_game_map(
+        session,
+        tentacle_categories=[{'category': 'museum', 'distance': 2000}],
+    )
+    with pytest.raises(ValueError, match='hospital'):
+        resolve_tentacle_distance(gm, FeatureCategory.hospital)

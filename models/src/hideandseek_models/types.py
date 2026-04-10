@@ -178,6 +178,7 @@ class QuestionType(StrEnum):
     thermometer = 'thermometer'
     matching = 'matching'
     measuring = 'measuring'
+    tentacles = 'tentacles'
 
 
 class QuestionStatus(StrEnum):

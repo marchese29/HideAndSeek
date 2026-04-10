@@ -27,7 +27,11 @@ from hideandseek_models.inventory import InventorySlot
 from hideandseek_models.location import LocationUpdate
 from hideandseek_models.map_feature import GameMapFeature, MapFeature
 from hideandseek_models.question import Question
-from hideandseek_models.question_params import RadarParams, ThermometerParams
+from hideandseek_models.question_params import (
+    RadarParams,
+    TentacleQuestionParams,
+    ThermometerParams,
+)
 from hideandseek_models.transit import Stop, TransitDataset
 from hideandseek_models.types import (
     MATCHING_CATEGORIES,
@@ -241,6 +245,19 @@ def _create_inventory_slots(session: Session, game: Game, template: dict[str, An
             session.add(slot)
             idx += 1
 
+    # Tentacles slots from map's tentacle_categories
+    tentacle_cats = game.game_map.tentacle_categories or []
+    sorted_tentacles = sorted(tentacle_cats, key=lambda e: e['category'])
+    for idx, entry in enumerate(sorted_tentacles):
+        slot = InventorySlot(
+            game_id=game.id,
+            question_type=QuestionType.tentacles,
+            slot_index=idx,
+            category=FeatureCategory(entry['category']),
+            distance=entry['distance'],
+        )
+        session.add(slot)
+
     session.flush()
 
 
@@ -338,6 +355,15 @@ def create_question(session: Session, game_id: uuid.UUID, **overrides: Any) -> Q
         session.flush()
     elif q.question_type == QuestionType.thermometer and q.thermometer_params is None:
         session.add(ThermometerParams(question_id=q.id, min_travel=0.5))
+        session.flush()
+    elif q.question_type == QuestionType.tentacles and q.tentacle_params is None:
+        session.add(
+            TentacleQuestionParams(
+                question_id=q.id,
+                category=FeatureCategory.museum,
+                poi_ids=[],
+            )
+        )
         session.flush()
 
     session.refresh(q)

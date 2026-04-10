@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from hideandseek_models.question_params import (
         FeatureQuestionParams,
         RadarParams,
+        TentacleQuestionParams,
         ThermometerParams,
     )
 
@@ -63,6 +64,10 @@ class Question(Base):
         uselist=False,
     )
     feature_params: Mapped[FeatureQuestionParams | None] = relationship(
+        back_populates='question',
+        uselist=False,
+    )
+    tentacle_params: Mapped[TentacleQuestionParams | None] = relationship(
         back_populates='question',
         uselist=False,
     )

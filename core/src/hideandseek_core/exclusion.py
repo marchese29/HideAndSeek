@@ -166,6 +166,55 @@ def exclude_thermometer(
     return exclude_matching(game_map, seeker_end, [seeker_start], same=seeker_closer)
 
 
+def exclude_tentacles(
+    game_map: BaseGeometry,
+    seeker_location: Point,
+    distance_m: float,
+    answered_poi: Point,
+    other_pois: Sequence[Point],
+) -> BaseGeometry:
+    """Exclusion zone for a tentacles hit.
+
+    Computes Voronoi cells for all in-circle POIs, intersects the answered POI's
+    cell with the distance circle to get the "safe zone" where the hider is.
+    Excludes everything else in the game boundary.
+
+    On a miss, the caller should use exclude_radar(hit=False) instead.
+    """
+    circle = _buffer(seeker_location, distance_m)
+
+    if not other_pois:
+        # Single POI: safe zone is the entire circle (equivalent to radar hit)
+        return game_map.difference(circle)
+
+    all_pois = [answered_poi, *list(other_pois)]
+    centroid = game_map.centroid
+    proj = f'+proj=aeqd +lat_0={centroid.y} +lon_0={centroid.x} +datum=WGS84 +units=m'
+    to_local = Transformer.from_crs('EPSG:4326', proj, always_xy=True).transform
+    to_wgs = Transformer.from_crs(proj, 'EPSG:4326', always_xy=True).transform
+
+    local_map = transform(to_local, game_map)
+    local_circle = transform(to_local, circle)
+    local_answered = transform(to_local, answered_poi)
+    local_all = [transform(to_local, p) for p in all_pois]
+
+    points = [p.centroid for p in local_all]
+    regions = voronoi_polygons(MultiPoint(points), extend_to=local_map.envelope)
+
+    answered_cell = None
+    for cell in regions.geoms:
+        if cell.contains(local_answered.centroid):
+            answered_cell = cell
+            break
+
+    if answered_cell is None:
+        raise RuntimeError('No Voronoi cell containing answered POI was found')
+
+    safe_zone = answered_cell.intersection(local_circle)
+    exclusion = local_map.difference(safe_zone)
+    return transform(to_wgs, exclusion)
+
+
 # ── Hiding zone ───────────────────────────────────────────────────────────
 
 
@@ -301,3 +350,43 @@ def boundary_measuring(
     """
     combined = unary_union([_buffer(poi, distance_m) for poi in pois])
     return game_map.intersection(combined.boundary)
+
+
+def boundary_tentacles(
+    game_map: BaseGeometry,
+    seeker_location: Point,
+    distance_m: float,
+    pois: Sequence[Point],
+) -> BaseGeometry:
+    """Preview boundary for a tentacles question.
+
+    Returns the distance circle ring plus Voronoi cell edges within the circle,
+    clipped to the game map. For a single POI, returns just the circle ring.
+    """
+    if len(pois) <= 1:
+        return boundary_radar(game_map, seeker_location, distance_m)
+
+    circle = _buffer(seeker_location, distance_m)
+
+    centroid = game_map.centroid
+    proj = f'+proj=aeqd +lat_0={centroid.y} +lon_0={centroid.x} +datum=WGS84 +units=m'
+    to_local = Transformer.from_crs('EPSG:4326', proj, always_xy=True).transform
+    to_wgs = Transformer.from_crs(proj, 'EPSG:4326', always_xy=True).transform
+
+    local_map = transform(to_local, game_map)
+    local_circle = transform(to_local, circle)
+    local_pois = [transform(to_local, p) for p in pois]
+
+    points = [p.centroid for p in local_pois]
+    regions = voronoi_polygons(MultiPoint(points), extend_to=local_map.envelope)
+
+    # Voronoi cell edges clipped to circle
+    voronoi_edges = unary_union([cell.boundary for cell in regions.geoms]).intersection(
+        local_circle
+    )
+
+    # Circle ring clipped to game map
+    circle_ring = local_circle.boundary
+
+    combined = unary_union([voronoi_edges, circle_ring])
+    return transform(to_wgs, local_map.intersection(combined))
