@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
-from shapely.geometry import Point, Polygon
+from shapely.geometry import MultiPolygon, Point, Polygon
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
@@ -154,7 +154,7 @@ def create_game_map(session: Session, **overrides: Any) -> GameMap:
     defaults: dict[str, Any] = {
         'name': 'Test Map',
         'size': MapSize.medium,
-        'boundary': Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+        'boundary': MultiPolygon([Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])]),
         'districts': [],
         'district_classes': [],
         'default_inventory': _DEFAULT_INVENTORY_TEMPLATE,

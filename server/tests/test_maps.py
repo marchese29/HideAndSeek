@@ -48,7 +48,7 @@ def test_get_map(client: TestClient, session: Session):
     data = response.json()
     assert data['name'] == 'London Z1-3'
     assert data['notes'] == 'Classic map.'
-    assert data['boundary']['type'] == 'Polygon'
+    assert data['boundary']['type'] == 'MultiPolygon'
     assert 'default_inventory' in data
 
 

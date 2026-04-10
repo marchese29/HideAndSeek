@@ -88,7 +88,7 @@ class TestBuildHiderGameState:
         state = build_hider_game_state(game, hider)
 
         assert state.boundary is not None
-        assert state.boundary.type == 'Polygon'
+        assert state.boundary.type == 'MultiPolygon'
         assert isinstance(state.districts, list)
 
     def test_players_with_locations(self, session: Session) -> None:

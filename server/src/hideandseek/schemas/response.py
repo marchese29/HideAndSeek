@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from geojson_pydantic import LineString as GeoJSONLineString
 from geojson_pydantic import MultiLineString as GeoJSONMultiLineString
+from geojson_pydantic import MultiPolygon as GeoJSONMultiPolygon
 from geojson_pydantic import Point as GeoJSONPoint
-from geojson_pydantic import Polygon as GeoJSONPolygon
 from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
 from pydantic import BaseModel, Field, TypeAdapter
 from shapely.geometry import mapping
@@ -81,7 +81,7 @@ class MapDetail(BaseModel):
     name: str
     size: MapSize
     transit_dataset_id: uuid.UUID
-    boundary: GeoJSONPolygon = Field(description='GeoJSON Polygon defining the playable area.')
+    boundary: GeoJSONMultiPolygon = Field(description='GeoJSON Polygon defining the playable area.')
     districts: list = Field(description='District boundaries with id, name, class, and geometry.')
     district_classes: list = Field(description='District class definitions (tier + label).')
     default_inventory: dict = Field(description='Default question inventory for games on this map.')
@@ -100,7 +100,7 @@ class MapDetail(BaseModel):
             name=gm.name,
             size=gm.size,
             transit_dataset_id=gm.transit_dataset_id,
-            boundary=GeoJSONPolygon(**mapping(gm.boundary)),
+            boundary=GeoJSONMultiPolygon(**mapping(gm.boundary)),
             districts=gm.districts,
             district_classes=gm.district_classes,
             default_inventory=gm.default_inventory,
@@ -320,7 +320,7 @@ class EffectiveMapResponse(BaseModel):
 
     name: str
     size: MapSize
-    boundary: GeoJSONPolygon = Field(description='GeoJSON Polygon.')
+    boundary: GeoJSONMultiPolygon = Field(description='GeoJSON Polygon.')
     districts: list
     district_classes: list
     stops: list[StopResponse]
@@ -332,7 +332,7 @@ class EffectiveMapResponse(BaseModel):
         return EffectiveMapResponse(
             name=gm.name,
             size=gm.size,
-            boundary=GeoJSONPolygon(**mapping(gm.boundary)),
+            boundary=GeoJSONMultiPolygon(**mapping(gm.boundary)),
             districts=gm.districts,
             district_classes=gm.district_classes,
             stops=[StopResponse.from_model(s) for s in data.stops],
@@ -633,7 +633,7 @@ class HiderGameStateResponse(SSEExposed, BaseModel):
     seeking_started_at: datetime | None
     base_question_delay_min: int = Field(description='Auto-answer timer duration in minutes.')
     distance_convention: str = Field(description='metric or imperial.')
-    boundary: GeoJSONPolygon = Field(description='Game map boundary.')
+    boundary: GeoJSONMultiPolygon = Field(description='Game map boundary.')
     districts: list = Field(description='District boundaries.')
     stops: list[StopResponse] = Field(description='All playable stops.')
     routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
@@ -661,7 +661,7 @@ class SeekerGameStateResponse(SSEExposed, BaseModel):
     seeking_started_at: datetime | None
     base_question_delay_min: int = Field(description='Auto-answer timer duration in minutes.')
     distance_convention: str = Field(description='metric or imperial.')
-    boundary: GeoJSONPolygon = Field(description='Game map boundary.')
+    boundary: GeoJSONMultiPolygon = Field(description='Game map boundary.')
     districts: list = Field(description='District boundaries.')
     stops: list[StopResponse] = Field(description='All playable stops.')
     routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')

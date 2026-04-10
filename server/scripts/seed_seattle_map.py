@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 from itertools import combinations
 
-from shapely.geometry import Polygon
+from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
 
@@ -631,7 +631,7 @@ def main() -> None:
             size=size,
             convention=convention,
             transit_dataset_id=dataset_id,
-            boundary=Polygon(BOUNDARY_COORDS),
+            boundary=MultiPolygon([Polygon(BOUNDARY_COORDS)]),
             districts=districts,
             district_classes=district_classes,
             default_inventory=get_default_inventory(convention, size),

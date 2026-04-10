@@ -36,7 +36,7 @@ src/hideandseek_models/
 Minimal — only what the ORM models need:
 - `sqlalchemy` — ORM declarative base, column types, relationships
 - `geoalchemy2` — PostGIS column types (Geography, Geometry)
-- `shapely` — Python geometry objects (Point, Polygon, LineString)
+- `shapely` — Python geometry objects (Point, Polygon, MultiPolygon, LineString)
 - `pydantic` — `DistrictClass` value object in `types.py`
 
 ## Conventions
@@ -47,6 +47,7 @@ Minimal — only what the ORM models need:
 - Enums are `StrEnum` — stored as VARCHAR via `type_annotation_map` on `Base`
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int)
 - Two spatial column types: `ShapelyGeography` (distance/proximity) and `ShapelyGeometry` (topological). See `geo_types.py`.
+- `GameMap.boundary` is `MULTIPOLYGON` — always stored as `MultiPolygon` (single polygons wrapped at creation via `MultiPolygon([polygon])`).
 - No business logic — models define schema only
 - Style rules match the server (ruff + pyright, single quotes, 100 char line length)
 

@@ -673,7 +673,7 @@ export interface components {
             name: string;
             size: components["schemas"]["MapSize"];
             /** @description GeoJSON Polygon. */
-            boundary: components["schemas"]["Polygon"];
+            boundary: components["schemas"]["MultiPolygon"];
             /** Districts */
             districts: unknown[];
             /** District Classes */
@@ -1020,7 +1020,7 @@ export interface components {
              */
             transit_dataset_id: string;
             /** @description GeoJSON Polygon defining the playable area. */
-            boundary: components["schemas"]["Polygon"];
+            boundary: components["schemas"]["MultiPolygon"];
             /**
              * Districts
              * @description District boundaries with id, name, class, and geometry.
@@ -1447,10 +1447,93 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * GameHostChangedEvent
+         * @description Host transferred during active gameplay — both channels.
+         */
+        GameHostChangedEvent: {
+            /**
+             * New Host Player Id
+             * Format: uuid
+             */
+            new_host_player_id: string;
+        };
+        /**
          * QuestionStatus
          * @enum {string}
          */
         QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned";
+        /**
+         * QuestionAnswerableEvent
+         * @description A thermometer question was locked in — both channels.
+         */
+        QuestionAnswerableEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            seeker_location_end: components["schemas"]["Point"];
+            /**
+             * Question Deadline
+             * Format: date-time
+             */
+            question_deadline: string;
+        };
+        /** PlayerLocationEvent */
+        PlayerLocationEvent: {
+            /**
+             * Player Id
+             * Format: uuid
+             */
+            player_id: string;
+            /** Name */
+            name: string;
+            color: components["schemas"]["PlayerColor"];
+            role: components["schemas"]["PlayerRole"];
+            coordinates: components["schemas"]["Point"];
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+        };
+        /**
+         * HiderQuestionAnsweredEvent
+         * @description A question was answered — hider channel only.
+         *
+         *     Carries answer-time delta fields only (ask-time fields were sent
+         *     with QuestionAskedEvent). Includes hider-privileged data: location
+         *     and feature resolution.
+         */
+        HiderQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Answered At */
+            answered_at: string | null;
+            hider_location: components["schemas"]["Point"] | null;
+            /** Hider Feature Id */
+            hider_feature_id: string | null;
+            /** Hider Feature Name */
+            hider_feature_name: string | null;
+            /** Hider Distance */
+            hider_distance: number | null;
+        };
         /**
          * SeekerQuestionAnsweredEvent
          * @description A question was answered — seeker channel only (with exclusion geometry).
@@ -1481,24 +1564,6 @@ export interface components {
             total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
             /** Answered At */
             answered_at: string | null;
-        };
-        /** PlayerLocationEvent */
-        PlayerLocationEvent: {
-            /**
-             * Player Id
-             * Format: uuid
-             */
-            player_id: string;
-            /** Name */
-            name: string;
-            color: components["schemas"]["PlayerColor"];
-            role: components["schemas"]["PlayerRole"];
-            coordinates: components["schemas"]["Point"];
-            /**
-             * Timestamp
-             * Format: date-time
-             */
-            timestamp: string;
         };
         /**
          * FeatureEventParams
@@ -1584,60 +1649,6 @@ export interface components {
             question_deadline: string | null;
         };
         /**
-         * QuestionAnswerableEvent
-         * @description A thermometer question was locked in — both channels.
-         */
-        QuestionAnswerableEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            seeker_location_end: components["schemas"]["Point"];
-            /**
-             * Question Deadline
-             * Format: date-time
-             */
-            question_deadline: string;
-        };
-        /**
-         * HiderQuestionAnsweredEvent
-         * @description A question was answered — hider channel only.
-         *
-         *     Carries answer-time delta fields only (ask-time fields were sent
-         *     with QuestionAskedEvent). Includes hider-privileged data: location
-         *     and feature resolution.
-         */
-        HiderQuestionAnsweredEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
-            /**
-             * Asked By
-             * Format: uuid
-             */
-            asked_by: string;
-            /** Answered At */
-            answered_at: string | null;
-            hider_location: components["schemas"]["Point"] | null;
-            /** Hider Feature Id */
-            hider_feature_id: string | null;
-            /** Hider Feature Name */
-            hider_feature_name: string | null;
-            /** Hider Distance */
-            hider_distance: number | null;
-        };
-        /**
          * QuestionVetoedEvent
          * @description A question was vetoed — both channels.
          */
@@ -1705,17 +1716,6 @@ export interface components {
              * Format: uuid
              */
             player_id: string;
-        };
-        /**
-         * GameHostChangedEvent
-         * @description Host transferred during active gameplay — both channels.
-         */
-        GameHostChangedEvent: {
-            /**
-             * New Host Player Id
-             * Format: uuid
-             */
-            new_host_player_id: string;
         };
         /**
          * GameDissolvedEvent
@@ -1997,7 +1997,7 @@ export interface components {
              */
             distance_convention: string;
             /** @description Game map boundary. */
-            boundary: components["schemas"]["Polygon"];
+            boundary: components["schemas"]["MultiPolygon"];
             /**
              * Districts
              * @description District boundaries.
@@ -2232,7 +2232,7 @@ export interface components {
              */
             distance_convention: string;
             /** @description Game map boundary. */
-            boundary: components["schemas"]["Polygon"];
+            boundary: components["schemas"]["MultiPolygon"];
             /**
              * Districts
              * @description District boundaries.

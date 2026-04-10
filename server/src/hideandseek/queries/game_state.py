@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from geojson_pydantic import MultiPolygon as GeoJSONMultiPolygon
 from geojson_pydantic import Point as GeoJSONPoint
-from geojson_pydantic import Polygon as GeoJSONPolygon
 from shapely.geometry import mapping
 
 from hideandseek.schemas.params import build_question_params
@@ -117,7 +117,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         seeking_started_at=game.seeking_started_at,
         base_question_delay_min=game.base_question_delay_min,
         distance_convention=game_map.convention,
-        boundary=GeoJSONPolygon(**mapping(game_map.boundary)),
+        boundary=GeoJSONMultiPolygon(**mapping(game_map.boundary)),
         districts=game_map.districts,
         stops=[StopResponse.from_model(s) for s in stops],
         routes=[
@@ -222,7 +222,7 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
         seeking_started_at=game.seeking_started_at,
         base_question_delay_min=game.base_question_delay_min,
         distance_convention=game_map.convention,
-        boundary=GeoJSONPolygon(**mapping(game_map.boundary)),
+        boundary=GeoJSONMultiPolygon(**mapping(game_map.boundary)),
         districts=game_map.districts,
         stops=[StopResponse.from_model(s) for s in stops],
         routes=[

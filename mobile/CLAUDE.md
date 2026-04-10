@@ -58,7 +58,7 @@ src/
     time.ts                    # parseUtc() — server timestamp parsing (shared by timer hooks)
   components/                  # Reusable UI components
     GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins, preview overlay)
-    BoundaryOverlay.tsx        # Game boundary polygon (outline-only stroke)
+    BoundaryOverlay.tsx        # Game boundary MultiPolygon (outline-only stroke, one <Polygon> per part)
     ExclusionOverlay.tsx       # Exclusion zone polygon overlay (translucent red, seeker seeking phase only, zIndex 2000)
     PreviewBoundaryOverlay.tsx # Question preview boundary polyline (dashed blue, seeker only, zIndex 1500)
     StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
@@ -166,7 +166,7 @@ Both hooks:
 - **Map provider**: Platform default (Apple Maps on iOS, Google Maps on Android) — no `provider` prop on `<MapView>`.
 - **GeoJSON conversion**: All server geometries are GeoJSON (`[lon, lat]`). `src/utils/geo.ts` provides `toLatLng()`, `lineStringToCoords()`, and `polygonToCoords()` to convert to `react-native-maps` `{ latitude, longitude }` format. Also provides `haversineMeters()` for distance between GeoJSON Points and `metersToConvention()` for meters→km/mi conversion.
 - **Initial region**: Computed from boundary polygon via `regionFromBoundary()` with 10% padding. Uses `initialRegion` (not `region`) so users can pan/zoom freely.
-- **Boundary**: Outline-only `<Polygon>` stroke, no fill.
+- **Boundary**: `BoundaryOverlay` renders `MultiPolygon` as one outline-only `<Polygon>` per part (no fill). Uses `multiPolygonToParts()` from `utils/geo.ts`. `regionFromBoundary()` computes the bounding box across all parts.
 - **Transit routes**: Colored `<Polyline>` per route (using the route's hex color from the server) with white dot `<Marker>`s at each stop along the route. Rendered by `TransitRoute` component. Stops on multiple routes get overlapping dots (no deduplication needed).
 - **Stops**: Rendered as white dots along route polylines (not standalone markers). Stop data is still delivered as a flat `stops` array; `routes` carry `stop_ids` referencing into that array.
 - **Player pins**: `Marker.Animated` with `AnimatedRegion` — colored circle with first initial. Pins glide smoothly (500ms timing animation) when coordinates update. Self pin has white ring. Hider pins are semi-transparent (0.4 opacity) with italic initial — signals their location is approximate/private. Stale locations (>60s) turn gray instead of using the player's color.

@@ -77,20 +77,21 @@ export function metersToConvention(meters: number, convention: string): number {
 }
 
 /** Compute an initialRegion that fits the boundary with 10% padding. */
-export function regionFromBoundary(polygon: GeoJSONPolygon): Region {
-  const ring = polygon.coordinates[0];
+export function regionFromBoundary(multi: GeoJSONMultiPolygon): Region {
   let minLat = Infinity;
   let maxLat = -Infinity;
   let minLon = Infinity;
   let maxLon = -Infinity;
 
-  for (const pair of ring) {
-    const lon = pair[0];
-    const lat = pair[1];
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-    if (lon < minLon) minLon = lon;
-    if (lon > maxLon) maxLon = lon;
+  for (const polyCoords of multi.coordinates) {
+    for (const pair of polyCoords[0]) {
+      const lon = pair[0];
+      const lat = pair[1];
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+    }
   }
 
   return {

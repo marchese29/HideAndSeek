@@ -1,22 +1,28 @@
 import React from 'react';
 import { Polygon } from 'react-native-maps';
 
-import type { GeoJSONPolygon } from '@/types/gameplay';
-import { polygonToCoords } from '@/utils/geo';
+import type { GeoJSONMultiPolygon } from '@/types/gameplay';
+import { multiPolygonToParts } from '@/utils/geo';
 
 interface BoundaryOverlayProps {
-  boundary: GeoJSONPolygon;
+  boundary: GeoJSONMultiPolygon;
 }
 
 export const BoundaryOverlay = React.memo(function BoundaryOverlay({
   boundary,
 }: BoundaryOverlayProps) {
+  const parts = multiPolygonToParts(boundary);
   return (
-    <Polygon
-      coordinates={polygonToCoords(boundary)}
-      strokeColor="rgba(44, 62, 80, 0.6)"
-      strokeWidth={2}
-      fillColor="transparent"
-    />
+    <>
+      {parts.map((part, i) => (
+        <Polygon
+          key={i}
+          coordinates={part.coordinates}
+          strokeColor="rgba(44, 62, 80, 0.6)"
+          strokeWidth={2}
+          fillColor="transparent"
+        />
+      ))}
+    </>
   );
 });

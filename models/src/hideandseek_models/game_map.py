@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from shapely.geometry import Polygon
+from shapely.geometry import MultiPolygon
 from sqlalchemy import JSON, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,7 +24,7 @@ class GameMap(Base):
     size: Mapped[MapSize]
     convention: Mapped[DistanceConvention] = mapped_column(default=DistanceConvention.metric)
     transit_dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('transit_dataset.id'))
-    boundary: Mapped[Polygon] = mapped_column(ShapelyGeometry('POLYGON', srid=4326))
+    boundary: Mapped[MultiPolygon] = mapped_column(ShapelyGeometry('MULTIPOLYGON', srid=4326))
     districts: Mapped[list] = mapped_column(JSON, default=list)
     district_classes: Mapped[list] = mapped_column(JSON, default=list)
     default_inventory: Mapped[dict] = mapped_column(JSON, default=dict)
