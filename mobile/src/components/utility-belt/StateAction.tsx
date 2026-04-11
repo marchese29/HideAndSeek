@@ -37,7 +37,7 @@ function resolveAction(
 
   if (phase === 'seeking') {
     if (role === 'seeker' && hasActiveQuestion) {
-      return { icon: 'timer-sand', label: 'Waiting', pressable: false };
+      return { icon: 'chat-question-outline', label: 'Browse', pressable: true };
     }
     if (role === 'seeker') {
       return { icon: 'chat-question-outline', label: 'Questions', pressable: true };

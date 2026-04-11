@@ -7,6 +7,7 @@ import { PlayerPin } from '@/components/PlayerPin';
 import { PreviewBoundaryOverlay } from '@/components/PreviewBoundaryOverlay';
 import { TentaclePOIOverlay } from '@/components/TentaclePOIOverlay';
 import { TransitRoute } from '@/components/TransitRoute';
+import { useActiveQuestionBoundary } from '@/hooks/useActiveQuestionBoundary';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, GamePlayer, HiderGameState, SeekerGameState } from '@/types/gameplay';
@@ -42,6 +43,8 @@ export function GameMap({ role, state, gameInfo }: GameMapProps) {
     questionType: previewQuestionType,
     tentaclePois,
   } = usePreviewBoundary();
+  const { boundary: activeBoundary, questionType: activeQuestionType } =
+    useActiveQuestionBoundary();
 
   // Periodic tick forces the players memo to recompute staleness
   const [staleTick, setStaleTick] = useState(0);
@@ -126,6 +129,13 @@ export function GameMap({ role, state, gameInfo }: GameMapProps) {
       ))}
       {role === 'seeker' && state.phase === 'seeking' && (
         <ExclusionOverlay exclusion={(state as SeekerGameState).total_exclusion} />
+      )}
+      {role === 'seeker' && (
+        <PreviewBoundaryOverlay
+          boundary={activeBoundary}
+          questionType={activeQuestionType}
+          variant="active"
+        />
       )}
       {role === 'seeker' && (
         <PreviewBoundaryOverlay boundary={previewBoundary} questionType={previewQuestionType} />

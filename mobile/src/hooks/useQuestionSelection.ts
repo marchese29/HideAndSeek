@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { InventorySlotResponse, PreviewQuestion } from '@/types/gameplay';
@@ -131,13 +131,17 @@ export function useQuestionSelection(
 
   const setPreviewQuestion = useGameplayStore((s) => s.setPreviewQuestion);
 
-  // Auto-close selection when a question gets asked (activeQuestion appears)
+  // Dismiss selection when a question is asked (rising edge only).
+  // Intentionally does NOT clear previewQuestion — the surviving preview
+  // gets "promoted" to askable once the answer lands.
+  const prevHadActive = useRef(hasActiveQuestion);
   useEffect(() => {
-    if (hasActiveQuestion && state.step !== 'closed') {
+    if (hasActiveQuestion && !prevHadActive.current) {
       setSelectedSlotIndex(null);
       dispatch({ type: 'close' });
     }
-  }, [hasActiveQuestion, state.step]);
+    prevHadActive.current = hasActiveQuestion;
+  }, [hasActiveQuestion]);
 
   const slotsForType = useMemo(() => {
     if (state.step !== 'param' && state.step !== 'custom') return [];
@@ -177,13 +181,11 @@ export function useQuestionSelection(
         setPreviewQuestion(null);
       } else {
         setSelectedSlotIndex(slot.slot_index);
-        if (!hasActiveQuestion) {
-          setPreviewQuestion(buildPreview(slot));
-        }
+        setPreviewQuestion(buildPreview(slot));
       }
       dispatch({ type: 'select_param' });
     },
-    [hasActiveQuestion, setPreviewQuestion, selectedSlotIndex],
+    [setPreviewQuestion, selectedSlotIndex],
   );
 
   const openCustom = useCallback(() => {
@@ -199,12 +201,12 @@ export function useQuestionSelection(
       const customSlot = inventory.find(
         (s) => s.question_type === state.questionType && s.distance === null,
       );
-      if (customSlot && !hasActiveQuestion) {
+      if (customSlot) {
         setPreviewQuestion(buildCustomPreview(state.questionType, customSlot, distance));
       }
       dispatch({ type: 'submit_custom' });
     },
-    [state, inventory, hasActiveQuestion, setPreviewQuestion],
+    [state, inventory, setPreviewQuestion],
   );
 
   const close = useCallback(() => {
