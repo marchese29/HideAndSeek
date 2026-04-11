@@ -13,6 +13,7 @@ const TYPE_COLORS: Record<string, TypeColors> = {
   thermometer: { active: 'rgb(255, 191, 65)', inactive: 'rgb(248, 215, 152)' },
   matching: { active: 'rgb(33, 47, 64)', inactive: 'rgb(135, 143, 151)' },
   measuring: { active: 'rgb(77, 162, 100)', inactive: 'rgb(158, 201, 169)' },
+  tentacles: { active: 'rgb(138, 92, 199)', inactive: 'rgb(183, 152, 217)' },
 };
 
 interface ParamPickerProps {
@@ -26,8 +27,13 @@ interface ParamPickerProps {
 }
 
 function formatSlotLabel(slot: InventorySlotResponse, convention: string): string {
+  const unit = convention === 'metric' ? 'km' : 'mi';
+  // Tentacles: both category and distance are set
+  if (slot.category && slot.distance !== null) {
+    const label = slot.category.replaceAll('_', ' ');
+    return `${label} ${slot.distance} ${unit}`;
+  }
   if (slot.distance !== null) {
-    const unit = convention === 'metric' ? 'km' : 'mi';
     return `${slot.distance} ${unit}`;
   }
   if (slot.category) {

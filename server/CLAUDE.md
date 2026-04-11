@@ -295,7 +295,7 @@ tests/                                  # pytest (one file per router + features
                                         #   exclusion, conventions)
 scripts/generate_openapi.py             # OpenAPI spec regeneration
 scripts/import_seattle_gtfs.py          # Seattle GTFS transit data import
-scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + districts)
+scripts/seed_seattle_map.py            # Seattle GameMap seeding (boundary + districts + hospital POIs + tentacle categories)
 ```
 
 Business logic, queries, DB infra, geo math, push, and redis live in the `hideandseek-core` package (`core/`). Celery tasks (game timers, push delivery) live in the `hideandseek-worker` package (`worker/`). See `core/CLAUDE.md` and `worker/CLAUDE.md`.

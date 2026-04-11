@@ -6,6 +6,7 @@ interface QuestionTypeBarProps {
   onSelectType: (type: string) => void;
   selectedType: string | null;
   disabled: boolean;
+  availableTypes: Set<string>;
 }
 
 interface TypeColors {
@@ -18,9 +19,10 @@ const TYPE_COLORS: Record<string, TypeColors> = {
   thermometer: { active: 'rgb(255, 191, 65)', inactive: 'rgb(248, 215, 152)' },
   matching: { active: 'rgb(33, 47, 64)', inactive: 'rgb(135, 143, 151)' },
   measuring: { active: 'rgb(77, 162, 100)', inactive: 'rgb(158, 201, 169)' },
+  tentacles: { active: 'rgb(138, 92, 199)', inactive: 'rgb(183, 152, 217)' },
 };
 
-const QUESTION_TYPES: {
+const ALL_QUESTION_TYPES: {
   type: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
@@ -29,17 +31,20 @@ const QUESTION_TYPES: {
   { type: 'thermometer', icon: 'thermometer', label: 'Thermo' },
   { type: 'matching', icon: 'map-marker-multiple', label: 'Match' },
   { type: 'measuring', icon: 'ruler', label: 'Measure' },
+  { type: 'tentacles', icon: 'asterisk', label: 'Tentacles' },
 ];
 
 export const QuestionTypeBar = memo(function QuestionTypeBar({
   onSelectType,
   selectedType,
   disabled,
+  availableTypes,
 }: QuestionTypeBarProps) {
-  // Split into rows of 2
-  const rows: (typeof QUESTION_TYPES)[] = [];
-  for (let i = 0; i < QUESTION_TYPES.length; i += 2) {
-    rows.push(QUESTION_TYPES.slice(i, i + 2));
+  const types = ALL_QUESTION_TYPES.filter((t) => availableTypes.has(t.type));
+  // Always 3 rows of 2 — last row may have fewer
+  const rows: (typeof types)[] = [];
+  for (let i = 0; i < types.length; i += 2) {
+    rows.push(types.slice(i, i + 2));
   }
 
   return (

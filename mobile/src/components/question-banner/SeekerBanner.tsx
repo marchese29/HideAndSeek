@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import { abandonQuestion, lockInThermometer } from '@/api/questions';
+import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
   HiderActiveQuestion,
@@ -29,6 +30,7 @@ const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.gl
   thermometer: 'thermometer',
   matching: 'map-marker-multiple',
   measuring: 'ruler',
+  tentacles: 'asterisk',
 };
 
 function questionTypeIcon(questionType: string): keyof typeof MaterialCommunityIcons.glyphMap {
@@ -40,6 +42,7 @@ const ASK_PATHS = {
   thermometer: '/games/{game_id}/questions/thermometer',
   matching: '/games/{game_id}/questions/matching',
   measuring: '/games/{game_id}/questions/measuring',
+  tentacles: '/games/{game_id}/questions/tentacles',
 } as const;
 
 function formatQuestionLabel(
@@ -50,6 +53,11 @@ function formatQuestionLabel(
   const typeName = questionType.charAt(0).toUpperCase() + questionType.slice(1);
   if (!slot) return typeName;
   const unit = convention === 'metric' ? 'km' : 'mi';
+  // Tentacles: both category and distance are set
+  if (slot.category && slot.distance !== null) {
+    const label = slot.category.replaceAll('_', ' ');
+    return `${label} (${slot.distance} ${unit})`;
+  }
   if (slot.distance !== null) return `${slot.distance} ${unit}`;
   if (slot.category) return slot.category.replaceAll('_', ' ');
   return typeName;
@@ -71,6 +79,7 @@ export const SeekerBanner = memo(function SeekerBanner({
     s.status === 'connected' ? s.state.distance_convention : 'imperial',
   );
   const selfLocation = useGameplayStore((s) => s.selfLocation);
+  const { tentaclePois } = usePreviewBoundary();
 
   const activeSlot = useMemo(() => {
     if (!activeQuestion) return undefined;
@@ -186,6 +195,12 @@ export const SeekerBanner = memo(function SeekerBanner({
     const previewLabel = previewQuestion.custom_distance
       ? `${previewQuestion.custom_distance} ${convention === 'metric' ? 'km' : 'mi'}`
       : formatQuestionLabel(previewQuestion.question_type, previewSlot, convention);
+
+    // Tentacles: show POI count or zero-POI warning
+    const isTentacles = previewQuestion.question_type === 'tentacles';
+    const poiCount = isTentacles && tentaclePois ? tentaclePois.length : null;
+    const zeroPoi = poiCount === 0;
+
     return (
       <View style={styles.container}>
         <MaterialCommunityIcons
@@ -193,9 +208,21 @@ export const SeekerBanner = memo(function SeekerBanner({
           size={20}
           color="#fff"
         />
-        <Text style={styles.label} numberOfLines={1}>
-          {previewLabel}
-        </Text>
+        {zeroPoi ? (
+          <View style={styles.labelColumn}>
+            <Text style={styles.label} numberOfLines={1}>
+              {previewLabel}
+            </Text>
+            <Text style={styles.warningText} numberOfLines={1}>
+              No {previewSlot?.category?.replaceAll('_', ' ') ?? 'POIs'} in range — hit impossible
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.label} numberOfLines={1}>
+            {previewLabel}
+            {poiCount !== null && poiCount > 0 ? ` — ${poiCount} in range` : ''}
+          </Text>
+        )}
         <Pressable
           style={({ pressed }) => [
             styles.button,
@@ -300,6 +327,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     flexShrink: 1,
+  },
+  labelColumn: {
+    flex: 1,
+    flexShrink: 1,
+    justifyContent: 'center',
+  },
+  warningText: {
+    color: 'rgb(241, 196, 15)',
+    fontSize: 11,
   },
   button: {
     flexShrink: 0,

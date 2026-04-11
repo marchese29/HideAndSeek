@@ -60,7 +60,7 @@ src/
     GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins, preview overlay)
     BoundaryOverlay.tsx        # Game boundary MultiPolygon (outline-only stroke, one <Polygon> per part)
     ExclusionOverlay.tsx       # Exclusion zone polygon overlay (translucent red, seeker seeking phase only, zIndex 2000)
-    PreviewBoundaryOverlay.tsx # Question preview boundary polyline (dashed blue, seeker only, zIndex 1500)
+    PreviewBoundaryOverlay.tsx # Question preview boundary polyline (solid, type-colored, seeker only, zIndex 1500)
     StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
     TransitRoute.tsx           # Transit route polyline + white stop dots
     PlayerPin.tsx              # Player map pin (animated — colored circle + initial + self ring + hider badge + stack count)
@@ -78,9 +78,10 @@ src/
       StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker)
       GameTimer.tsx            # Live timer with connection-colored background
       BeltActions.tsx          # Info + leave icon buttons (context-aware: host-kick / last-of-role / host-transfer / normal)
-      QuestionTypeBar.tsx      # 4 question type buttons (radar/thermo/match/measure)
+      QuestionTypeBar.tsx      # Question type buttons (radar/thermo/match/measure/tentacles), filtered by inventory
       ParamPicker.tsx          # Horizontal scrollable inventory slot picker
       CustomDistanceInput.tsx  # Inline numeric input for custom distance slots
+    TentaclePOIOverlay.tsx     # Tentacles preview POI markers (purple dots with name callouts)
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types
 assets/                        # Images, fonts
@@ -172,7 +173,8 @@ Both hooks:
 - **Player pins**: `Marker.Animated` with `AnimatedRegion` — colored circle with first initial. Pins glide smoothly (500ms timing animation) when coordinates update. Self pin has white ring. Hider pins are semi-transparent (0.4 opacity) with italic initial — signals their location is approximate/private. Stale locations (>60s) turn gray instead of using the player's color.
 - **Stack detection**: Co-located players are detected by rounding coordinates to 4 decimal places (~11m). The topmost pin shows a "+N" count badge.
 - **Exclusion zones**: `ExclusionOverlay` renders `total_exclusion` (GeoJSON Polygon or MultiPolygon) as translucent red fill (`rgba(231, 76, 60, 0.25)`) with `zIndex={2000}`. Rendered on top of all other overlays (boundary, routes, pins) — seeker seeking phase only. Handles MultiPolygon (multiple `<Polygon>` elements) and polygon holes. Reactively updates via `question_answered` SSE → store → prop change.
-- **Preview boundary**: `PreviewBoundaryOverlay` renders the exclusion preview boundary (LineString/MultiLineString) as dashed blue `<Polyline>` (`rgba(52, 152, 219, 0.7)`) with `zIndex={1500}`. Shown when a seeker selects a question slot (except thermometer). `usePreviewBoundary` hook fetches from `GET /questions/preview` and caches via TanStack Query keyed by question type + quantized location (4 decimal places ≈ 11m). Disappears when preview is cleared.
+- **Preview boundary**: `PreviewBoundaryOverlay` renders the exclusion preview boundary (LineString/MultiLineString) as solid `<Polyline>` (1.5px, type-colored) with `zIndex={1500}`. Shown when a seeker selects a question slot (except thermometer). `usePreviewBoundary` hook fetches from `GET /questions/preview` and caches via TanStack Query keyed by question type + quantized location (4 decimal places ≈ 11m). Also returns `tentaclePois` for tentacles previews. Disappears when preview is cleared.
+- **Tentacle POI markers**: `TentaclePOIOverlay` renders purple dot markers at POI locations during tentacles preview (`zIndex={1600}`). Tap shows POI name callout. Only shown when `tentaclePois` is non-empty.
 - **Rendering order**: Players sorted by self-last (highest `zIndex`), then alphabetical. Self pin always renders on top. Preview boundary at `zIndex={1500}`, exclusion overlay at `zIndex={2000}` renders above everything.
 - **`tracksViewChanges`**: Normally `false` for performance. `Marker.Animated` doesn't reliably re-snapshot on its own, so `PlayerPin` briefly pulses `tracksViewChanges={true}` for 200ms when staleness transitions — just enough for the native map to capture the new color. This preserves position animations (key-based recreation would destroy the `AnimatedRegion`).
 - **Zustand selectors**: Use individual primitive/reference selectors (e.g., `s.status`, `s.role`, `s.state`) — never return new object literals from selectors (causes infinite re-render loops with Zustand's `===` equality check).

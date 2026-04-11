@@ -4,7 +4,7 @@ import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { GeoJSONGeometry } from '@/types/gameplay';
+import type { GeoJSONGeometry, TentaclePOIPreviewResponse } from '@/types/gameplay';
 
 /** Quantize to 4 decimal places (~11 m) for cache-key stability. */
 function quantize(value: number): number {
@@ -19,6 +19,7 @@ function quantize(value: number): number {
 export function usePreviewBoundary(): {
   boundary: GeoJSONGeometry | null;
   questionType: string | null;
+  tentaclePois: TentaclePOIPreviewResponse[] | null;
 } {
   const gameId = useAppStore((s) => s.gameId);
   const previewQuestion = useGameplayStore((s) => s.previewQuestion);
@@ -46,7 +47,12 @@ export function usePreviewBoundary(): {
         params: {
           path: { game_id: gameId! },
           query: {
-            question_type: questionType as 'radar' | 'thermometer' | 'matching' | 'measuring',
+            question_type: questionType as
+              | 'radar'
+              | 'thermometer'
+              | 'matching'
+              | 'measuring'
+              | 'tentacles',
             slot_index: slotIndex!,
             lat: selfLocation!.coordinates.coordinates[1],
             lng: selfLocation!.coordinates.coordinates[0],
@@ -65,5 +71,6 @@ export function usePreviewBoundary(): {
   return {
     boundary: (data?.boundary as GeoJSONGeometry | undefined) ?? null,
     questionType,
+    tentaclePois: (data?.tentacle_pois as TentaclePOIPreviewResponse[] | undefined) ?? null,
   };
 }

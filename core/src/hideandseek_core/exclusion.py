@@ -32,7 +32,7 @@ def _buffer(geom: BaseGeometry, radius_m: float) -> BaseGeometry:
     """Buffer a WGS84 geometry by a metric radius and return the result in WGS84.
 
     Projects to a local azimuthal equidistant (AEQD) plane centered on the geometry's
-    centroid, applies the buffer there (180 points per circle for ~2-degree resolution),
+    centroid, applies the buffer there (360 points per circle for ~1-degree resolution),
     and projects back. A per-geometry projection is used for accuracy; if this becomes
     a bottleneck, a single projection centered on the game map could be shared.
     """
@@ -41,7 +41,7 @@ def _buffer(geom: BaseGeometry, radius_m: float) -> BaseGeometry:
     )
     to_local = Transformer.from_crs('EPSG:4326', projection, always_xy=True).transform
     to_wgs = Transformer.from_crs(projection, 'EPSG:4326', always_xy=True).transform
-    return transform(to_wgs, transform(to_local, geom).buffer(radius_m, quad_segs=45))
+    return transform(to_wgs, transform(to_local, geom).buffer(radius_m, quad_segs=90))
 
 
 def exclude_radar(

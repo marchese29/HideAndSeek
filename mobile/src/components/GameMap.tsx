@@ -5,6 +5,7 @@ import { BoundaryOverlay } from '@/components/BoundaryOverlay';
 import { ExclusionOverlay } from '@/components/ExclusionOverlay';
 import { PlayerPin } from '@/components/PlayerPin';
 import { PreviewBoundaryOverlay } from '@/components/PreviewBoundaryOverlay';
+import { TentaclePOIOverlay } from '@/components/TentaclePOIOverlay';
 import { TransitRoute } from '@/components/TransitRoute';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
@@ -35,7 +36,11 @@ interface PlayerEntry {
 export function GameMap({ role, state }: GameMapProps) {
   const initialRegion = useMemo(() => regionFromBoundary(state.boundary), [state.boundary]);
   const selfLocation = useGameplayStore((s) => s.selfLocation);
-  const { boundary: previewBoundary, questionType: previewQuestionType } = usePreviewBoundary();
+  const {
+    boundary: previewBoundary,
+    questionType: previewQuestionType,
+    tentaclePois,
+  } = usePreviewBoundary();
 
   // Periodic tick forces the players memo to recompute staleness
   const [staleTick, setStaleTick] = useState(0);
@@ -123,6 +128,9 @@ export function GameMap({ role, state }: GameMapProps) {
       )}
       {role === 'seeker' && (
         <PreviewBoundaryOverlay boundary={previewBoundary} questionType={previewQuestionType} />
+      )}
+      {role === 'seeker' && tentaclePois && tentaclePois.length > 0 && (
+        <TentaclePOIOverlay pois={tentaclePois} />
       )}
     </MapView>
   );

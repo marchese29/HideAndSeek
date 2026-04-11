@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 from itertools import combinations
 
-from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry import MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
 
@@ -564,6 +564,29 @@ def _coords_to_geojson_polygon(coords: list[list[float]]) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Hospital POIs from OpenStreetMap (Overpass API, April 2026)
+# (name, lat, lon, stable_id)
+# ---------------------------------------------------------------------------
+
+HOSPITALS: list[tuple[str, float, float, str]] = [
+    ('Navos West Seattle Campus', 47.534445, -122.366224, 'navos-west-seattle-campus'),
+    ('VA Medical Center - Seattle', 47.5630065, -122.3082632, 'va-medical-center-seattle'),
+    ('St. Anne Hospital', 47.4574623, -122.3424072, 'st-anne-hospital'),
+    ('Swedish Medical Center Ballard Campus', 47.6675911, -122.3802424, 'swedish-ballard'),
+    ('Kaiser Permanente Capitol Hill Campus', 47.6199564, -122.3120786, 'kaiser-capitol-hill'),
+    ('Virginia Mason Hospital', 47.6100706, -122.3278853, 'virginia-mason'),
+    ('Swedish First Hill Medical Center', 47.6086102, -122.3222589, 'swedish-first-hill'),
+    ('Fairfax Hospital', 47.719426, -122.2046766, 'fairfax-hospital'),
+    ('Valley Medical Center', 47.4434502, -122.2138148, 'valley-medical-center'),
+    ('Cascade Behavioral Health', 47.487416, -122.2957506, 'cascade-behavioral-health'),
+    ('Schick Shadel Hospital', 47.4945774, -122.3506862, 'schick-shadel-hospital'),
+    ('Swedish Cherry Hill Medical Center', 47.6071124, -122.310904, 'swedish-cherry-hill'),
+    ('UW Medicine Northwest Campus', 47.7147962, -122.3377343, 'uw-medicine-northwest'),
+    ("Seattle Children's Hospital", 47.663096, -122.2829494, 'seattle-childrens'),
+]
+
+
 def main() -> None:
     create_db_and_tables()
 
@@ -635,6 +658,9 @@ def main() -> None:
             districts=districts,
             district_classes=district_classes,
             default_inventory=get_default_inventory(convention, size),
+            tentacle_categories=[
+                {'category': 'hospital', 'distance': 1},  # 1 mile (imperial)
+            ],
         )
         session.add(game_map)
         session.flush()
@@ -651,6 +677,18 @@ def main() -> None:
             session.flush()
             session.add(GameMapFeature(game_map_id=game_map.id, map_feature_id=feature.id))
 
+        # Create MapFeature + GameMapFeature for each hospital POI
+        for hosp_name, lat, lon, hosp_stable_id in HOSPITALS:
+            feature = MapFeature(
+                category=FeatureCategory.hospital,
+                stable_id=hosp_stable_id,
+                name=hosp_name,
+                shape=Point(lon, lat),
+            )
+            session.add(feature)
+            session.flush()
+            session.add(GameMapFeature(game_map_id=game_map.id, map_feature_id=feature.id))
+
         map_name = game_map.name
         map_id = game_map.id
 
@@ -659,6 +697,8 @@ def main() -> None:
     print(f'  Boundary: {len(BOUNDARY_COORDS)} points')
     print(f'  Districts: {len(districts)}')
     print(f'  District border features: {len(borders)}')
+    print(f'  Hospital POIs: {len(HOSPITALS)}')
+    print('  Tentacle categories: hospital (1 mi)')
 
 
 if __name__ == '__main__':

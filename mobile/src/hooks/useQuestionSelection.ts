@@ -60,6 +60,18 @@ function buildPreview(slot: InventorySlotResponse): PreviewQuestion {
         slot_index: slot.slot_index,
         parameters: { type: 'thermometer', min_travel: slot.distance! },
       };
+    case 'tentacles':
+      return {
+        question_type: 'tentacles',
+        slot_index: slot.slot_index,
+        parameters: {
+          type: 'tentacles',
+          category: slot.category!,
+          distance: slot.distance!,
+          poi_ids: [],
+          poi_names: [],
+        },
+      };
     default:
       // matching / measuring
       return {

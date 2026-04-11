@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useQuestionSelection } from '@/hooks/useQuestionSelection';
@@ -38,6 +38,11 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
       ? selection.state.questionType
       : null;
 
+  const availableTypes = useMemo(
+    () => new Set((seekerState?.inventory ?? []).map((s) => s.question_type)),
+    [seekerState?.inventory],
+  );
+
   return (
     <View style={styles.container}>
       {/* Left: State action + Timer */}
@@ -69,6 +74,7 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
             onSelectType={selection.selectType}
             selectedType={selectedType}
             disabled={disabled}
+            availableTypes={availableTypes}
           />
         )}
         {isSeekerSeeking && selection.state.step === 'param' && (

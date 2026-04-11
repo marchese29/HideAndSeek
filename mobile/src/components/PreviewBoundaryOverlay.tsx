@@ -9,11 +9,11 @@ const TYPE_STROKE_COLORS: Record<string, string> = {
   thermometer: 'rgb(255, 191, 65)',
   matching: 'rgb(33, 47, 64)',
   measuring: 'rgb(77, 162, 100)',
+  tentacles: 'rgb(138, 92, 199)',
 };
 const FALLBACK_STROKE_COLOR = 'rgb(52, 152, 219)';
-const STROKE_WIDTH = 2;
+const STROKE_WIDTH = 1.5;
 const Z_INDEX = 1500;
-const LINE_DASH_PATTERN = [2, 4];
 
 interface PreviewBoundaryOverlayProps {
   boundary: GeoJSONGeometry | null;
@@ -43,7 +43,6 @@ export const PreviewBoundaryOverlay = React.memo(function PreviewBoundaryOverlay
           strokeColor={strokeColor}
           strokeWidth={STROKE_WIDTH}
           zIndex={Z_INDEX}
-          lineDashPattern={LINE_DASH_PATTERN}
         />
       ))}
     </>

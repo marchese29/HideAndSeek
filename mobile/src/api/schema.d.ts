@@ -1495,114 +1495,6 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
-         * QuestionStatus
-         * @enum {string}
-         */
-        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned";
-        /**
-         * QuestionAnswerableEvent
-         * @description A thermometer question was locked in — both channels.
-         */
-        QuestionAnswerableEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            seeker_location_end: components["schemas"]["Point"];
-            /**
-             * Question Deadline
-             * Format: date-time
-             */
-            question_deadline: string;
-        };
-        /** PlayerLocationEvent */
-        PlayerLocationEvent: {
-            /**
-             * Player Id
-             * Format: uuid
-             */
-            player_id: string;
-            /** Name */
-            name: string;
-            color: components["schemas"]["PlayerColor"];
-            role: components["schemas"]["PlayerRole"];
-            coordinates: components["schemas"]["Point"];
-            /**
-             * Timestamp
-             * Format: date-time
-             */
-            timestamp: string;
-        };
-        /**
-         * HiderQuestionAnsweredEvent
-         * @description A question was answered — hider channel only.
-         *
-         *     Carries answer-time delta fields only (ask-time fields were sent
-         *     with QuestionAskedEvent). Includes hider-privileged data: location
-         *     and feature resolution.
-         */
-        HiderQuestionAnsweredEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
-            /**
-             * Asked By
-             * Format: uuid
-             */
-            asked_by: string;
-            /** Answered At */
-            answered_at: string | null;
-            hider_location: components["schemas"]["Point"] | null;
-            /** Hider Feature Id */
-            hider_feature_id: string | null;
-            /** Hider Feature Name */
-            hider_feature_name: string | null;
-            /** Hider Distance */
-            hider_distance: number | null;
-        };
-        /**
-         * SeekerQuestionAnsweredEvent
-         * @description A question was answered — seeker channel only (with exclusion geometry).
-         *
-         *     Carries answer-time delta fields only. No hider-privileged data
-         *     (no hider_location, no hider feature resolution).
-         */
-        SeekerQuestionAnsweredEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
-            /**
-             * Asked By
-             * Format: uuid
-             */
-            asked_by: string;
-            /** Exclusion */
-            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-            /** Total Exclusion */
-            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-            /** Answered At */
-            answered_at: string | null;
-        };
-        /**
          * FeatureEventParams
          * @description Matching/measuring question parameters (seeker resolution only).
          */
@@ -1625,6 +1517,11 @@ export interface components {
             /** Seeker Distance */
             seeker_distance: number;
         };
+        /**
+         * QuestionStatus
+         * @enum {string}
+         */
+        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned";
         /**
          * RadarEventParams
          * @description Radar question parameters.
@@ -1715,6 +1612,109 @@ export interface components {
             sequence: number;
             /** Question Deadline */
             question_deadline: string | null;
+        };
+        /** PlayerLocationEvent */
+        PlayerLocationEvent: {
+            /**
+             * Player Id
+             * Format: uuid
+             */
+            player_id: string;
+            /** Name */
+            name: string;
+            color: components["schemas"]["PlayerColor"];
+            role: components["schemas"]["PlayerRole"];
+            coordinates: components["schemas"]["Point"];
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+        };
+        /**
+         * QuestionAnswerableEvent
+         * @description A thermometer question was locked in — both channels.
+         */
+        QuestionAnswerableEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            seeker_location_end: components["schemas"]["Point"];
+            /**
+             * Question Deadline
+             * Format: date-time
+             */
+            question_deadline: string;
+        };
+        /**
+         * HiderQuestionAnsweredEvent
+         * @description A question was answered — hider channel only.
+         *
+         *     Carries answer-time delta fields only (ask-time fields were sent
+         *     with QuestionAskedEvent). Includes hider-privileged data: location
+         *     and feature resolution.
+         */
+        HiderQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Answered At */
+            answered_at: string | null;
+            hider_location: components["schemas"]["Point"] | null;
+            /** Hider Feature Id */
+            hider_feature_id: string | null;
+            /** Hider Feature Name */
+            hider_feature_name: string | null;
+            /** Hider Distance */
+            hider_distance: number | null;
+        };
+        /**
+         * SeekerQuestionAnsweredEvent
+         * @description A question was answered — seeker channel only (with exclusion geometry).
+         *
+         *     Carries answer-time delta fields only. No hider-privileged data
+         *     (no hider_location, no hider feature resolution).
+         */
+        SeekerQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Exclusion */
+            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Total Exclusion */
+            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Answered At */
+            answered_at: string | null;
         };
         /**
          * QuestionVetoedEvent

@@ -2640,6 +2640,43 @@ components:
       - msg
       - type
       title: ValidationError
+    FeatureEventParams:
+      description: Matching/measuring question parameters (seeker resolution only).
+      properties:
+        type:
+          const: feature
+          default: feature
+          title: Type
+          type: string
+        category:
+          title: Category
+          type: string
+        feature_class:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Feature Class
+        source:
+          title: Source
+          type: string
+        seeker_feature_id:
+          title: Seeker Feature Id
+          type: string
+        seeker_feature_name:
+          title: Seeker Feature Name
+          type: string
+        seeker_distance:
+          title: Seeker Distance
+          type: number
+      required:
+      - category
+      - feature_class
+      - source
+      - seeker_feature_id
+      - seeker_feature_name
+      - seeker_distance
+      title: FeatureEventParams
+      type: object
     QuestionStatus:
       enum:
       - asked
@@ -2650,8 +2687,74 @@ components:
       - abandoned
       title: QuestionStatus
       type: string
-    QuestionAnswerableEvent:
-      description: "A thermometer question was locked in \u2014 both channels."
+    RadarEventParams:
+      description: Radar question parameters.
+      properties:
+        type:
+          const: radar
+          default: radar
+          title: Type
+          type: string
+        radius:
+          title: Radius
+          type: number
+      required:
+      - radius
+      title: RadarEventParams
+      type: object
+    TentacleEventParams:
+      description: "Tentacles question parameters \u2014 category, distance, and in-circle\
+        \ POIs."
+      properties:
+        type:
+          const: tentacles
+          default: tentacles
+          title: Type
+          type: string
+        category:
+          description: POI category (e.g. museum, hospital).
+          title: Category
+          type: string
+        distance:
+          description: Tentacle distance in convention units.
+          title: Distance
+          type: number
+        poi_ids:
+          description: Stable IDs of POIs within the distance circle.
+          items:
+            type: string
+          title: Poi Ids
+          type: array
+        poi_names:
+          description: Human-readable names, matching poi_ids order.
+          items:
+            type: string
+          title: Poi Names
+          type: array
+      required:
+      - category
+      - distance
+      - poi_ids
+      - poi_names
+      title: TentacleEventParams
+      type: object
+    ThermometerEventParams:
+      description: Thermometer question parameters.
+      properties:
+        type:
+          const: thermometer
+          default: thermometer
+          title: Type
+          type: string
+        min_travel:
+          title: Min Travel
+          type: number
+      required:
+      - min_travel
+      title: ThermometerEventParams
+      type: object
+    QuestionAskedEvent:
+      description: "A seeker asked a question \u2014 both channels."
       properties:
         question_id:
           format: uuid
@@ -2661,19 +2764,58 @@ components:
           $ref: '#/components/schemas/QuestionType'
         status:
           $ref: '#/components/schemas/QuestionStatus'
-        seeker_location_end:
-          $ref: '#/components/schemas/Point'
-        question_deadline:
-          format: date-time
-          title: Question Deadline
+        asked_by:
+          format: uuid
+          title: Asked By
           type: string
+        slot_index:
+          title: Slot Index
+          type: integer
+        parameters:
+          discriminator:
+            mapping:
+              feature: '#/components/schemas/FeatureEventParams'
+              radar: '#/components/schemas/RadarEventParams'
+              tentacles: '#/components/schemas/TentacleEventParams'
+              thermometer: '#/components/schemas/ThermometerEventParams'
+            propertyName: type
+          oneOf:
+          - $ref: '#/components/schemas/RadarEventParams'
+          - $ref: '#/components/schemas/ThermometerEventParams'
+          - $ref: '#/components/schemas/FeatureEventParams'
+          - $ref: '#/components/schemas/TentacleEventParams'
+          title: Parameters
+        seeker_location_start:
+          $ref: '#/components/schemas/Point'
+        asked_at:
+          format: date-time
+          title: Asked At
+          type: string
+        ask_count:
+          title: Ask Count
+          type: integer
+        sequence:
+          title: Sequence
+          type: integer
+        question_deadline:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Question Deadline
       required:
       - question_id
       - question_type
       - status
-      - seeker_location_end
+      - asked_by
+      - slot_index
+      - parameters
+      - seeker_location_start
+      - asked_at
+      - ask_count
+      - sequence
       - question_deadline
-      title: QuestionAnswerableEvent
+      title: QuestionAskedEvent
       type: object
     PlayerLocationEvent:
       properties:
@@ -2702,6 +2844,31 @@ components:
       - coordinates
       - timestamp
       title: PlayerLocationEvent
+      type: object
+    QuestionAnswerableEvent:
+      description: "A thermometer question was locked in \u2014 both channels."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        seeker_location_end:
+          $ref: '#/components/schemas/Point'
+        question_deadline:
+          format: date-time
+          title: Question Deadline
+          type: string
+      required:
+      - question_id
+      - question_type
+      - status
+      - seeker_location_end
+      - question_deadline
+      title: QuestionAnswerableEvent
       type: object
     HiderQuestionAnsweredEvent:
       description: "A question was answered \u2014 hider channel only.\n\nCarries\
@@ -2849,173 +3016,6 @@ components:
       - total_exclusion
       - answered_at
       title: SeekerQuestionAnsweredEvent
-      type: object
-    FeatureEventParams:
-      description: Matching/measuring question parameters (seeker resolution only).
-      properties:
-        type:
-          const: feature
-          default: feature
-          title: Type
-          type: string
-        category:
-          title: Category
-          type: string
-        feature_class:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Feature Class
-        source:
-          title: Source
-          type: string
-        seeker_feature_id:
-          title: Seeker Feature Id
-          type: string
-        seeker_feature_name:
-          title: Seeker Feature Name
-          type: string
-        seeker_distance:
-          title: Seeker Distance
-          type: number
-      required:
-      - category
-      - feature_class
-      - source
-      - seeker_feature_id
-      - seeker_feature_name
-      - seeker_distance
-      title: FeatureEventParams
-      type: object
-    RadarEventParams:
-      description: Radar question parameters.
-      properties:
-        type:
-          const: radar
-          default: radar
-          title: Type
-          type: string
-        radius:
-          title: Radius
-          type: number
-      required:
-      - radius
-      title: RadarEventParams
-      type: object
-    TentacleEventParams:
-      description: "Tentacles question parameters \u2014 category, distance, and in-circle\
-        \ POIs."
-      properties:
-        type:
-          const: tentacles
-          default: tentacles
-          title: Type
-          type: string
-        category:
-          description: POI category (e.g. museum, hospital).
-          title: Category
-          type: string
-        distance:
-          description: Tentacle distance in convention units.
-          title: Distance
-          type: number
-        poi_ids:
-          description: Stable IDs of POIs within the distance circle.
-          items:
-            type: string
-          title: Poi Ids
-          type: array
-        poi_names:
-          description: Human-readable names, matching poi_ids order.
-          items:
-            type: string
-          title: Poi Names
-          type: array
-      required:
-      - category
-      - distance
-      - poi_ids
-      - poi_names
-      title: TentacleEventParams
-      type: object
-    ThermometerEventParams:
-      description: Thermometer question parameters.
-      properties:
-        type:
-          const: thermometer
-          default: thermometer
-          title: Type
-          type: string
-        min_travel:
-          title: Min Travel
-          type: number
-      required:
-      - min_travel
-      title: ThermometerEventParams
-      type: object
-    QuestionAskedEvent:
-      description: "A seeker asked a question \u2014 both channels."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        asked_by:
-          format: uuid
-          title: Asked By
-          type: string
-        slot_index:
-          title: Slot Index
-          type: integer
-        parameters:
-          discriminator:
-            mapping:
-              feature: '#/components/schemas/FeatureEventParams'
-              radar: '#/components/schemas/RadarEventParams'
-              tentacles: '#/components/schemas/TentacleEventParams'
-              thermometer: '#/components/schemas/ThermometerEventParams'
-            propertyName: type
-          oneOf:
-          - $ref: '#/components/schemas/RadarEventParams'
-          - $ref: '#/components/schemas/ThermometerEventParams'
-          - $ref: '#/components/schemas/FeatureEventParams'
-          - $ref: '#/components/schemas/TentacleEventParams'
-          title: Parameters
-        seeker_location_start:
-          $ref: '#/components/schemas/Point'
-        asked_at:
-          format: date-time
-          title: Asked At
-          type: string
-        ask_count:
-          title: Ask Count
-          type: integer
-        sequence:
-          title: Sequence
-          type: integer
-        question_deadline:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Question Deadline
-      required:
-      - question_id
-      - question_type
-      - status
-      - asked_by
-      - slot_index
-      - parameters
-      - seeker_location_start
-      - asked_at
-      - ask_count
-      - sequence
-      - question_deadline
-      title: QuestionAskedEvent
       type: object
     QuestionVetoedEvent:
       description: "A question was vetoed \u2014 both channels."
