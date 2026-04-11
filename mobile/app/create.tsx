@@ -49,6 +49,7 @@ export default function CreateGameScreen() {
       if (error) throw error;
       return data;
     },
+    staleTime: 0,
   });
 
   const selectedMap = maps?.find((m) => m.id === selectedMapId);

@@ -146,6 +146,7 @@ export default function LobbyScreen() {
       <View style={styles.footer}>
         {isHost && (
           <View style={styles.startSection}>
+            {startHelper !== '' && <Text style={styles.helperText}>{startHelper}</Text>}
             <Pressable
               style={[styles.startButton, (!canStart || !connected) && styles.buttonDisabled]}
               onPress={() => void handleStart()}
@@ -153,7 +154,6 @@ export default function LobbyScreen() {
             >
               <Text style={styles.startButtonText}>Start Game</Text>
             </Pressable>
-            {startHelper !== '' && <Text style={styles.helperText}>{startHelper}</Text>}
           </View>
         )}
 
