@@ -1,10 +1,14 @@
-import { memo, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo } from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
 
+import { authHeader } from '@/api/auth';
+import { api } from '@/api/client';
 import { useQuestionSelection } from '@/hooks/useQuestionSelection';
+import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, HiderGameState, SeekerGameState } from '@/types/gameplay';
 
 import { BeltActions } from './BeltActions';
+import { CandidateStatus } from './CandidateStatus';
 import { CustomDistanceInput } from './CustomDistanceInput';
 import { GameTimer } from './GameTimer';
 import { ParamPicker } from './ParamPicker';
@@ -16,6 +20,9 @@ interface UtilityBeltProps {
   state: HiderGameState | SeekerGameState;
   gameInfo: GameInfo;
   connected: boolean;
+  gameId: string;
+  highlightedStopId: string | null;
+  onHighlightStop: (stopId: string | null) => void;
 }
 
 export const UtilityBelt = memo(function UtilityBelt({
@@ -23,9 +30,13 @@ export const UtilityBelt = memo(function UtilityBelt({
   state,
   gameInfo,
   connected,
+  gameId,
+  highlightedStopId,
+  onHighlightStop,
 }: UtilityBeltProps) {
   const stationElectionStatus =
     role === 'hider' ? (state as HiderGameState).station_election_status : undefined;
+  const candidateStations = role === 'hider' ? (state as HiderGameState).candidate_stations : null;
   const disabled = !connected;
 
   const isSeekerSeeking = role === 'seeker' && state.phase === 'seeking';
@@ -49,6 +60,65 @@ export const UtilityBelt = memo(function UtilityBelt({
     [seekerState?.inventory],
   );
 
+  // ── Stop selection logic ──────────────────────────────────────────────────
+  const isHiderHiding =
+    role === 'hider' &&
+    state.phase === 'hiding' &&
+    stationElectionStatus !== 'elected' &&
+    stationElectionStatus !== 'auto_assigned';
+
+  // Auto-highlight when there's exactly one candidate
+  useEffect(() => {
+    if (!isHiderHiding || !candidateStations) return;
+    if (candidateStations.length === 1) {
+      onHighlightStop(candidateStations[0]);
+    }
+  }, [isHiderHiding, candidateStations, onHighlightStop]);
+
+  // Resolve highlighted stop name for the confirmation dialog
+  const highlightedStopName = useMemo(() => {
+    if (!highlightedStopId) return null;
+    return gameInfo.stops.find((s) => s.id === highlightedStopId)?.name ?? 'Selected stop';
+  }, [highlightedStopId, gameInfo.stops]);
+
+  const handleSetStop = useCallback(() => {
+    if (!highlightedStopId || !highlightedStopName) return;
+
+    Alert.alert(
+      'Set Stop',
+      `Set ${highlightedStopName} as your hiding station? This can't be changed later.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => {
+            const selfLocation = useGameplayStore.getState().selfLocation;
+            if (!selfLocation) {
+              Alert.alert('Location unavailable', 'Waiting for a GPS fix. Try again in a moment.');
+              return;
+            }
+            void (async () => {
+              const { error } = await api.POST('/games/{game_id}/hider-station', {
+                params: { path: { game_id: gameId }, header: authHeader() },
+                body: { station_id: highlightedStopId, location: selfLocation.coordinates },
+              });
+              if (error) {
+                const detail = (error as { detail?: string }).detail;
+                Alert.alert(
+                  'Election failed',
+                  detail ?? 'Not all hiders are in range. Move closer and try again.',
+                );
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [highlightedStopId, highlightedStopName, gameId]);
+
+  // "Set Stop" is pressable only when a candidate is highlighted
+  const canSetStop = isHiderHiding && highlightedStopId !== null;
+
   return (
     <View style={styles.container}>
       {/* Left: State action + Timer */}
@@ -59,8 +129,8 @@ export const UtilityBelt = memo(function UtilityBelt({
             phase={state.phase}
             stationElectionStatus={stationElectionStatus}
             hasActiveQuestion={isSeekerSeeking && hasActiveQuestion}
-            disabled={disabled}
-            onPress={isSeekerSeeking ? selection.toggle : undefined}
+            disabled={disabled || (isHiderHiding && !canSetStop)}
+            onPress={isSeekerSeeking ? selection.toggle : canSetStop ? handleSetStop : undefined}
             active={isSeekerSeeking && selection.isOpen}
           />
         </View>
@@ -73,8 +143,15 @@ export const UtilityBelt = memo(function UtilityBelt({
         />
       </View>
 
-      {/* Center: Question selection (seeker seeking) or empty placeholder */}
+      {/* Center: Question selection (seeker seeking) or candidate status (hider hiding) */}
       <View style={styles.center}>
+        {isHiderHiding && (
+          <CandidateStatus
+            candidateStationIds={candidateStations}
+            stops={gameInfo.stops}
+            highlightedStopId={highlightedStopId}
+          />
+        )}
         {isSeekerSeeking && selection.state.step === 'type' && (
           <QuestionTypeBar
             onSelectType={selection.selectType}

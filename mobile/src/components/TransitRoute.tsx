@@ -8,9 +8,15 @@ import { shapeToCoordArrays, toLatLng } from '@/utils/geo';
 interface TransitRouteProps {
   route: RouteResponse;
   stops: StopResponse[];
+  /** Stop IDs to skip rendering (candidate stops rendered separately). */
+  hiddenStopIds?: Set<string>;
 }
 
-export const TransitRoute = React.memo(function TransitRoute({ route, stops }: TransitRouteProps) {
+export const TransitRoute = React.memo(function TransitRoute({
+  route,
+  stops,
+  hiddenStopIds,
+}: TransitRouteProps) {
   const segments = useMemo(() => shapeToCoordArrays(route.shape), [route.shape]);
 
   const routeStops = useMemo(() => {
@@ -20,11 +26,12 @@ export const TransitRoute = React.memo(function TransitRoute({ route, stops }: T
     for (const id of route.stop_ids) {
       if (seen.has(id)) continue;
       seen.add(id);
+      if (hiddenStopIds?.has(id)) continue;
       const stop = stopMap.get(id);
       if (stop) result.push(stop);
     }
     return result;
-  }, [stops, route.stop_ids]);
+  }, [stops, route.stop_ids, hiddenStopIds]);
 
   return (
     <>

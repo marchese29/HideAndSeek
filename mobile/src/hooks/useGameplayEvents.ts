@@ -20,12 +20,14 @@ import type {
   QuestionVetoedDelta,
   SeekerGameState,
   SeekerQuestionAnsweredDelta,
+  StationElectionDelta,
 } from '@/types/gameplay';
 
 type GameplayEventType =
   | 'game_state'
   | 'phase_changed'
   | 'player_location'
+  | 'station_election'
   | 'question_asked'
   | 'question_answerable'
   | 'question_answered'
@@ -107,9 +109,18 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
       es.addEventListener('player_location', (event) => {
         const data = parseData<PlayerLocationDelta>(event);
         if (data) {
-          useGameplayStore
-            .getState()
-            .updatePlayerLocation(data.player_id, data.coordinates, data.timestamp);
+          const store = useGameplayStore.getState();
+          store.updatePlayerLocation(data.player_id, data.coordinates, data.timestamp);
+          if (data.candidate_stations !== undefined) {
+            store.updateCandidateStations(data.candidate_stations);
+          }
+        }
+      });
+
+      es.addEventListener('station_election', (event) => {
+        const data = parseData<StationElectionDelta>(event);
+        if (data) {
+          useGameplayStore.getState().applyStationElection(data);
         }
       });
 

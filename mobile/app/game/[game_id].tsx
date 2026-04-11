@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -21,6 +21,36 @@ export default function GameplayScreen() {
   const role = useGameplayStore((s) => s.role);
   const state = useGameplayStore((s) => s.state);
 
+  // Highlighted candidate stop — bridges UtilityBelt and GameMap
+  const [highlightedStopId, setHighlightedStopId] = useState<string | null>(null);
+
+  // Guard: marker onPress and MapView onPress both fire on the same tap on Apple Maps.
+  // The ref prevents the map press from immediately clearing what the marker press just set.
+  const markerPressedRef = useRef(false);
+
+  const handleHighlightStop = useCallback((stopId: string | null) => {
+    setHighlightedStopId(stopId);
+  }, []);
+
+  const handleCandidateStopPress = useCallback((stopId: string) => {
+    markerPressedRef.current = true;
+    setHighlightedStopId(stopId);
+  }, []);
+
+  const handleMapPress = useCallback(() => {
+    if (markerPressedRef.current) {
+      markerPressedRef.current = false;
+      return;
+    }
+    setHighlightedStopId(null);
+  }, []);
+
+  // Clear candidate selection when phase transitions (e.g. hiding → seeking)
+  const phase = state?.phase;
+  useEffect(() => {
+    setHighlightedStopId(null);
+  }, [phase]);
+
   // Suppress Android hardware back button
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
@@ -36,7 +66,14 @@ export default function GameplayScreen() {
           <ActivityIndicator size="large" color="#7F8C8D" />
         </View>
       ) : (
-        <GameMap role={role} state={state} gameInfo={gameInfo} />
+        <GameMap
+          role={role}
+          state={state}
+          gameInfo={gameInfo}
+          highlightedStopId={highlightedStopId}
+          onCandidateStopPress={handleCandidateStopPress}
+          onMapPress={handleMapPress}
+        />
       )}
 
       {permissionDenied && <LocationDeniedBanner />}
@@ -45,7 +82,15 @@ export default function GameplayScreen() {
       {ready && (
         <View style={styles.beltWrapper}>
           <QuestionBanner role={role} gameId={game_id} connected={connected} />
-          <UtilityBelt role={role} state={state} gameInfo={gameInfo} connected={connected} />
+          <UtilityBelt
+            role={role}
+            state={state}
+            gameInfo={gameInfo}
+            connected={connected}
+            gameId={game_id}
+            highlightedStopId={highlightedStopId}
+            onHighlightStop={handleHighlightStop}
+          />
         </View>
       )}
     </SafeAreaView>

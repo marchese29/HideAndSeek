@@ -46,6 +46,7 @@ export type PhaseChangedDelta = S['PhaseChangedEvent'];
 export type PlayerLeftDelta = S['GamePlayerLeftEvent'];
 export type HostChangedDelta = S['GameHostChangedEvent'];
 export type GameDissolvedDelta = S['GameDissolvedEvent'];
+export type StationElectionDelta = S['StationElectionEvent'];
 
 // ── Question Event Parameters ───────────────────────────────────────────────
 

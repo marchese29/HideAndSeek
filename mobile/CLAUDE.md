@@ -51,6 +51,7 @@ src/
     useLocationTracking.ts     # Foreground GPS tracking + POST /location + optimistic self update
     useLobbyEvents.ts          # Lobby SSE subscription with auto-reconnect + connection status
     useActiveQuestionBoundary.ts # Fetches + caches exclusion boundary for the active question (TanStack Query, ask-time location)
+    useHidingZone.ts           # Fetches + caches hiding zone polygon for a candidate stop (TanStack Query, staleTime=Infinity)
     usePreviewBoundary.ts      # Fetches + caches exclusion preview boundary for browse slot (TanStack Query, quantized location key)
     useQuestionSelection.ts    # Question selection state machine (belt takeover flow)
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
@@ -59,12 +60,14 @@ src/
     locationPermission.ts      # requestLocationPermission() — foreground permission helper
     time.ts                    # parseUtc() — server timestamp parsing (shared by timer hooks)
   components/                  # Reusable UI components
-    GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins, preview overlay)
+    GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins, preview overlay, candidate stops)
     BoundaryOverlay.tsx        # Game boundary MultiPolygon (outline-only stroke, one <Polygon> per part)
+    CandidateStopOverlay.tsx   # Candidate stop markers (blue dots, green when highlighted, zIndex 500, hider hiding phase)
     ExclusionOverlay.tsx       # Exclusion zone polygon overlay (translucent red, seeker seeking phase only, zIndex 2000)
+    HidingZoneOverlay.tsx      # Hiding zone polygon preview (translucent blue fill, zIndex 450, shown for highlighted candidate)
     PreviewBoundaryOverlay.tsx # Question preview boundary polyline (solid, type-colored, seeker only, zIndex 1500)
     StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
-    TransitRoute.tsx           # Transit route polyline + white stop dots
+    TransitRoute.tsx           # Transit route polyline + white stop dots (hides candidates via hiddenStopIds)
     PlayerPin.tsx              # Player map pin (animated — colored circle + initial + self ring + hider badge + stack count)
     LocationDeniedBanner.tsx   # Warning banner when location permission denied
     ConnectionDot.tsx          # SSE connection status dot (green/red) — used in lobby
@@ -76,8 +79,9 @@ src/
       BannerCountdown.tsx      # MM:SS countdown to question deadline
     utility-belt/              # Gameplay utility belt + question selection
       index.ts                 # Barrel export
-      UtilityBelt.tsx          # Container — three-section row, wires question selection hook
-      StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker)
+      UtilityBelt.tsx          # Container — three-section row, wires question selection + stop selection
+      CandidateStatus.tsx      # Belt center status text for hiders (stop name / "Tap a stop" / "No stops in range")
+      StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker, "Set Stop" for hider)
       GameTimer.tsx            # Live timer with connection-colored background
       BeltActions.tsx          # Info + leave icon buttons (context-aware: host-kick / last-of-role / host-transfer / normal)
       QuestionTypeBar.tsx      # Question type buttons (radar/thermo/match/measure/tentacles), filtered by inventory
@@ -191,7 +195,8 @@ Both hooks:
 ## SSE Delta Events
 
 - **`game_state`**: Dynamic-only snapshot on connect — `hydrate()` replaces entire `GameplayStore` state. Static data (boundary, stops, routes, timing, convention) is NOT in this event — it's fetched once via `GET /games/{id}/info` and cached by `useGameInfo`.
-- **`player_location`**: Real-time position delta — `updatePlayerLocation()` patches a single player's coordinates in the `hiders`/`seekers` arrays without replacing the full state. For seeker state, only `seekers` is patched (hiders are `RosterPlayer[]` with no coordinates).
+- **`player_location`**: Real-time position delta — `updatePlayerLocation()` patches a single player's coordinates in the `hiders`/`seekers` arrays without replacing the full state. For seeker state, only `seekers` is patched (hiders are `RosterPlayer[]` with no coordinates). Hider location events also carry `candidate_stations` — dispatched via `updateCandidateStations()` with shallow array comparison to avoid unnecessary re-renders.
+- **`station_election`**: Station elected — `applyStationElection()` patches `station_election_status` and `hider_station_id`, nullifies `candidate_stations` when elected/auto_assigned.
 - **`phase_changed`**: Hiding-to-seeking transition — `applyPhaseChanged()` patches `phase`, `seeking_started_at`, and (hider only) `station_election_status` + `hider_station_id`.
 - **`question_asked`**: New question — `setActiveQuestion()` constructs the role-appropriate active question from the delta. `question_deadline` comes from the server (authoritative). Clears `previewQuestion`. Seeker store also persists `parameters` and `seeker_location_start` for thermometer lock-in distance validation (absent after SSE reconnection — gracefully falls back to enabled).
 - **`question_answerable`**: Thermometer lock-in — `updateQuestionAnswerable()` updates status and sets `question_deadline`.
@@ -201,6 +206,17 @@ Both hooks:
 - **`host_changed`**: Host transferred — `setHostPlayerId()` updates `host_player_id` on state.
 - **`game_dissolved`**: Game ended (last hider/seeker left) — shows alert, clears session, navigates home.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
+
+## Stop Selection (Hider Hiding Phase)
+
+- **Candidate stops**: Server sends `candidate_stations` (stop UUIDs where all hiders are within hiding zone radius) via `game_state` snapshot and `player_location` SSE events. Stored inline on `HiderGameState`.
+- **Map overlay**: `CandidateStopOverlay` renders candidate stops as blue dot markers (`zIndex=500`). Highlighted stop turns green. `TransitRoute` hides its white dots for candidate stops via `hiddenStopIds` to avoid Apple Maps z-index conflicts.
+- **Zone preview**: `HidingZoneOverlay` renders the hiding zone polygon (translucent blue, `zIndex=450`) for the highlighted candidate. Fetched via `useHidingZone` hook (`GET /hiding-zone?station_id=`, cached with `staleTime=Infinity`).
+- **Selection flow**: Tap a candidate dot on the map → dot highlights green, zone appears, belt center shows stop name. Tap "Set Stop" → native `Alert.alert` confirmation (warns selection is permanent). Confirm → `POST /hider-station`. Tap map background → clears selection.
+- **Single candidate**: Auto-highlighted via `useEffect` in `UtilityBelt` — zone and name appear immediately, one tap to confirm.
+- **Ambiguous resolution**: When `station_election_status` transitions to `ambiguous` (hiding timer expired with multiple candidates), candidates remain available and the same selection flow applies.
+- **Apple Maps marker tap quirk**: Both `Marker.onPress` and `MapView.onPress` fire on the same tap. A ref-based guard in `GameplayScreen` (`markerPressedRef`) prevents the map press from clearing the marker press's selection.
+- **State bridge**: `highlightedStopId` is lifted to `GameplayScreen` (ephemeral UI state, not in Zustand) and passed to both `GameMap` and `UtilityBelt`. Cleared on phase transition.
 
 ## Conventions
 

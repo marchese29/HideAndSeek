@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import MapView from 'react-native-maps';
 
 import { BoundaryOverlay } from '@/components/BoundaryOverlay';
+import { CandidateStopOverlay } from '@/components/CandidateStopOverlay';
 import { ExclusionOverlay } from '@/components/ExclusionOverlay';
+import { HidingZoneOverlay } from '@/components/HidingZoneOverlay';
 import { PlayerPin } from '@/components/PlayerPin';
 import { PreviewBoundaryOverlay } from '@/components/PreviewBoundaryOverlay';
 import { TentaclePOIOverlay } from '@/components/TentaclePOIOverlay';
 import { TransitRoute } from '@/components/TransitRoute';
 import { useActiveQuestionBoundary } from '@/hooks/useActiveQuestionBoundary';
+import { useHidingZone } from '@/hooks/useHidingZone';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, GamePlayer, HiderGameState, SeekerGameState } from '@/types/gameplay';
@@ -27,6 +30,9 @@ interface GameMapProps {
   role: 'hider' | 'seeker';
   state: HiderGameState | SeekerGameState;
   gameInfo: GameInfo;
+  highlightedStopId?: string | null;
+  onCandidateStopPress?: (stopId: string) => void;
+  onMapPress?: () => void;
 }
 
 interface PlayerEntry {
@@ -35,7 +41,14 @@ interface PlayerEntry {
   isHider: boolean;
 }
 
-export function GameMap({ role, state, gameInfo }: GameMapProps) {
+export function GameMap({
+  role,
+  state,
+  gameInfo,
+  highlightedStopId,
+  onCandidateStopPress,
+  onMapPress,
+}: GameMapProps) {
   const initialRegion = useMemo(() => regionFromBoundary(gameInfo.boundary), [gameInfo.boundary]);
   const selfLocation = useGameplayStore((s) => s.selfLocation);
   const {
@@ -45,6 +58,18 @@ export function GameMap({ role, state, gameInfo }: GameMapProps) {
   } = usePreviewBoundary();
   const { boundary: activeBoundary, questionType: activeQuestionType } =
     useActiveQuestionBoundary();
+
+  // Hiding zone preview for the highlighted candidate stop
+  const { hidingZone } = useHidingZone(highlightedStopId ?? null);
+
+  // Candidate stations from hider state
+  const candidateStations = role === 'hider' ? (state as HiderGameState).candidate_stations : null;
+
+  // Hide candidate stops from TransitRoute so they don't fight for z-index
+  const hiddenStopIds = useMemo(
+    () => (candidateStations ? new Set(candidateStations) : undefined),
+    [candidateStations],
+  );
 
   // Periodic tick forces the players memo to recompute staleness
   const [staleTick, setStaleTick] = useState(0);
@@ -111,11 +136,25 @@ export function GameMap({ role, state, gameInfo }: GameMapProps) {
   }, [state.seekers, state.self_player_id, hiders, selfLocation, staleTick]);
 
   return (
-    <MapView style={{ flex: 1 }} initialRegion={initialRegion} onPress={() => {}}>
+    <MapView style={{ flex: 1 }} initialRegion={initialRegion} onPress={onMapPress}>
       <BoundaryOverlay boundary={gameInfo.boundary} />
       {gameInfo.routes.map((route) => (
-        <TransitRoute key={route.id} route={route} stops={gameInfo.stops} />
+        <TransitRoute
+          key={route.id}
+          route={route}
+          stops={gameInfo.stops}
+          hiddenStopIds={hiddenStopIds}
+        />
       ))}
+      {candidateStations && candidateStations.length > 0 && onCandidateStopPress && (
+        <CandidateStopOverlay
+          candidateStationIds={candidateStations}
+          stops={gameInfo.stops}
+          highlightedStopId={highlightedStopId ?? null}
+          onStopPress={onCandidateStopPress}
+        />
+      )}
+      <HidingZoneOverlay hidingZone={hidingZone} />
       {players.map(({ player, isSelf, isHider, isStale, index, stackCount }) => (
         <PlayerPin
           key={player.id}

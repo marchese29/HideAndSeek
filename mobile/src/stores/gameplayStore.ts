@@ -15,6 +15,7 @@ import type {
   SeekerGameState,
   SeekerQuestionAnsweredDelta,
   SeekerQuestionHistoryEntry,
+  StationElectionDelta,
 } from '@/types/gameplay';
 
 interface SelfLocation {
@@ -38,6 +39,8 @@ interface GameplayActions {
   applyQuestionAnswered: (delta: HiderQuestionAnsweredDelta | SeekerQuestionAnsweredDelta) => void;
   applyPhaseChanged: (delta: PhaseChangedDelta) => void;
   setPreviewQuestion: (preview: PreviewQuestion | null) => void;
+  updateCandidateStations: (candidates: string[] | null) => void;
+  applyStationElection: (delta: StationElectionDelta) => void;
   removePlayer: (playerId: string) => void;
   setHostPlayerId: (hostPlayerId: string) => void;
 }
@@ -55,6 +58,16 @@ const initialState: GameplayData & {
   selfLocation: null,
   previewQuestion: null,
 };
+
+/** Shallow-compare two string arrays (or nulls). */
+function candidatesEqual(a: string[] | null, b: string[] | null): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
 
 /** Remove a player from an array by ID. Returns the same reference if not found. */
 function withoutPlayer<T extends { id: string }>(players: T[], playerId: string): T[] {
@@ -337,6 +350,32 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
 
   setPreviewQuestion: (preview) => {
     set({ previewQuestion: preview });
+  },
+
+  updateCandidateStations: (candidates) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
+      if (candidatesEqual(prev.state.candidate_stations, candidates)) return prev;
+      return { ...prev, state: { ...prev.state, candidate_stations: candidates } };
+    });
+  },
+
+  applyStationElection: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
+      const elected =
+        delta.station_election_status === 'elected' ||
+        delta.station_election_status === 'auto_assigned';
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          station_election_status: delta.station_election_status,
+          hider_station_id: delta.hider_station_id,
+          candidate_stations: elected ? null : prev.state.candidate_stations,
+        },
+      };
+    });
   },
 
   removePlayer: (playerId) => {
