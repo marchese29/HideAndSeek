@@ -215,7 +215,6 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         return {
           ...prev,
           state: { ...prev.state, active_question: activeQuestion },
-          previewQuestion: null,
         };
       }
 
@@ -237,7 +236,6 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
       return {
         ...prev,
         state: { ...prev.state, active_question: activeQuestion, inventory },
-        previewQuestion: null,
       };
     });
   },
@@ -268,9 +266,9 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
     set((prev) => {
       if (prev.status !== 'connected') return prev;
       if (prev.role === 'hider') {
-        return { ...prev, state: { ...prev.state, active_question: null } };
+        return { ...prev, state: { ...prev.state, active_question: null }, previewQuestion: null };
       }
-      return { ...prev, state: { ...prev.state, active_question: null } };
+      return { ...prev, state: { ...prev.state, active_question: null }, previewQuestion: null };
     });
   },
 
@@ -287,6 +285,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         return {
           ...prev,
           state: { ...state, active_question: null, question_history: history },
+          previewQuestion: null,
         };
       }
 
@@ -305,6 +304,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           question_history: history,
           total_exclusion: seekerDelta.total_exclusion ?? prev.state.total_exclusion,
         },
+        previewQuestion: null,
       };
     });
   },
