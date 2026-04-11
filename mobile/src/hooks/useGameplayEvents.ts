@@ -164,7 +164,7 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           useAppStore.getState().clearSession();
           closedRef.current = true;
           es.close();
-          router.dismissAll();
+          if (router.canDismiss()) router.dismissAll();
           router.replace('/');
         } else {
           useGameplayStore.getState().removePlayer(data.player_id);
@@ -185,7 +185,7 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           useAppStore.getState().clearSession();
           closedRef.current = true;
           es.close();
-          router.dismissAll();
+          if (router.canDismiss()) router.dismissAll();
           router.replace('/');
         }
       });

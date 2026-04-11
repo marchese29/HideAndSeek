@@ -47,6 +47,54 @@ def test_report_location(client: TestClient, session: Session):
     assert resp.status_code == 204
 
 
+def test_report_location_hider_during_hiding(client: TestClient, session: Session):
+    game = create_game(session, status=GameStatus.hiding)
+    hider = create_player(session, game.id, role=PlayerRole.hider)
+
+    resp = client.post(
+        f'/games/{game.id}/location',
+        json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+
+
+def test_report_location_seeker_during_hiding_rejected(client: TestClient, session: Session):
+    game = create_game(session, status=GameStatus.hiding)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
+
+    resp = client.post(
+        f'/games/{game.id}/location',
+        json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 409
+
+
+def test_report_location_in_lobby_rejected(client: TestClient, session: Session):
+    game = create_game(session, status=GameStatus.lobby)
+    player = create_player(session, game.id, role=PlayerRole.seeker)
+
+    resp = client.post(
+        f'/games/{game.id}/location',
+        json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
+        headers=_headers(player.id),
+    )
+    assert resp.status_code == 409
+
+
+def test_report_location_when_finished_rejected(client: TestClient, session: Session):
+    game = create_game(session, status=GameStatus.finished)
+    player = create_player(session, game.id, role=PlayerRole.seeker)
+
+    resp = client.post(
+        f'/games/{game.id}/location',
+        json={'coordinates': _point(), 'timestamp': '2026-02-11T10:00:00Z'},
+        headers=_headers(player.id),
+    )
+    assert resp.status_code == 409
+
+
 def test_report_location_not_in_game(client: TestClient, session: Session):
     game = create_game(session, status=GameStatus.seeking)
     resp = client.post(

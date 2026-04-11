@@ -44,6 +44,11 @@ export default function HomeScreen() {
           useAppStore.getState().clearSession();
           setChecking(false);
         }
+      })
+      .catch(() => {
+        // Server unreachable — clear stale session and show home screen
+        useAppStore.getState().clearSession();
+        setChecking(false);
       });
   }, []);
 

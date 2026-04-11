@@ -130,11 +130,12 @@ curl -s "localhost:8000/games/<game_id>/nearby-stations?lat=<lat>&lng=<lon>" \
 #    - 1 valid candidate → auto_assigned
 #    - 0 or 2+ candidates → ambiguous (hider must elect via POST /hider-station)
 
-# 7. Report seeker location (returns 204, broadcasts via SSE to both channels)
+# 7. Report seeker location (seeking phase only — returns 409 during hiding)
 curl -s -X POST localhost:8000/games/<game_id>/location \
   -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
   -d '{"coordinates": {"type": "Point", "coordinates": [<lon>, <lat>]}, "timestamp": "<ISO8601>"}'
 # → 204 No Content. Location broadcast to both hider + seeker SSE channels.
+# → 409 if game is not active, or if seeker during hiding phase.
 ```
 
 ### Radar question

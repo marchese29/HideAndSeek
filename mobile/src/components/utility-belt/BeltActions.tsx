@@ -74,7 +74,7 @@ export const BeltActions = memo(function BeltActions({ disabled }: BeltActionsPr
         // Game may already be dissolved — still clear session
       }
       useAppStore.getState().clearSession();
-      router.dismissAll();
+      if (router.canDismiss()) router.dismissAll();
       router.replace('/');
     }
 

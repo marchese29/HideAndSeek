@@ -39,6 +39,14 @@ export function useLocationTracking(gameId: string): { permissionDenied: boolean
     let cancelled = false;
 
     async function pollLocation() {
+      // Seekers don't report location during the hiding phase — no need to
+      // burn GPS/battery on requests the server will reject.
+      const { role, state } = useGameplayStore.getState();
+      if (role === 'seeker' && state?.phase === 'hiding') {
+        scheduleNext();
+        return;
+      }
+
       try {
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,

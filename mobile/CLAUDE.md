@@ -182,7 +182,7 @@ Both hooks:
 ## Location Tracking
 
 - **Permission flow**: `requestLocationPermission()` in `utils/locationPermission.ts` is called at create/join time (before entering the game). This prompts the OS dialog early. The gameplay screen checks existing status — no re-prompt.
-- **Foreground tracking**: `useLocationTracking` hook polls `Location.getCurrentPositionAsync()` on a manual 10s `setInterval`. Uses polling instead of `watchPositionAsync` because iOS ignores `timeInterval` — a stationary player would stop reporting entirely. Stops on unmount. Re-checks permission on foreground resume (user may toggle in Settings).
+- **Foreground tracking**: `useLocationTracking` hook polls `Location.getCurrentPositionAsync()` on a manual 10s `setInterval`. Uses polling instead of `watchPositionAsync` because iOS ignores `timeInterval` — a stationary player would stop reporting entirely. Stops on unmount. Re-checks permission on foreground resume (user may toggle in Settings). Seekers skip GPS/POST during the hiding phase (reads phase from `GameplayStore` each tick) — polling resumes automatically when phase transitions to seeking.
 - **Server-confirmed self-location**: Each GPS fix is POSTed to the server; `selfLocation` in `GameplayStore` is only updated on successful response (not optimistic). This means the self pin correctly goes gray if the server is unreachable. `GameMap` prefers `selfLocation` over SSE data for the self player. `hydrate()` clears `selfLocation` once the SSE snapshot's timestamp catches up.
 - **Permission denied**: `LocationDeniedBanner` renders between map and utility belt when location access is refused. Links to device Settings via `Linking.openSettings()`.
 

@@ -13,6 +13,7 @@ from hideandseek_core.broadcast.events import PlayerLocationEvent
 from hideandseek_core.db import session_dependency
 from hideandseek_core.queries.location import create_location_update, get_location_history
 from hideandseek_models.game import Game, Player
+from hideandseek_models.types import PlayerRole
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['location'], dependencies=[Depends(session_dependency)]
@@ -26,6 +27,16 @@ def report_location(
     player: Player = Depends(get_player_in_game),
 ) -> None:
     """Report the caller's location. Updates are broadcast via SSE."""
+    if not game.status.is_active:
+        raise HTTPException(
+            status_code=409,
+            detail='Location updates are only accepted during active gameplay.',
+        )
+    if game.status.is_hiding and player.role == PlayerRole.seeker:
+        raise HTTPException(
+            status_code=409,
+            detail='Seekers cannot report location during the hiding phase.',
+        )
     assert player.role is not None  # guaranteed during active gameplay
     coords = body.coordinates.coordinates
     point = Point(float(coords[0]), float(coords[1]))

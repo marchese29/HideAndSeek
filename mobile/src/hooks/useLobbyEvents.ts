@@ -116,7 +116,7 @@ export function useLobbyEvents(gameId: string): { connected: boolean } {
           Alert.alert('Removed', 'You were removed from the game.');
           useAppStore.getState().clearSession();
           es.close();
-          router.dismissAll();
+          if (router.canDismiss()) router.dismissAll();
           router.replace('/');
           return;
         }
