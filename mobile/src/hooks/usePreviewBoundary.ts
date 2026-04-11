@@ -23,6 +23,9 @@ export function usePreviewBoundary(): {
 } {
   const gameId = useAppStore((s) => s.gameId);
   const previewQuestion = useGameplayStore((s) => s.previewQuestion);
+  const activeQuestion = useGameplayStore((s) =>
+    s.status === 'connected' ? s.state.active_question : null,
+  );
   const selfLocation = useGameplayStore((s) => s.selfLocation);
 
   const questionType = previewQuestion?.question_type ?? null;
@@ -35,6 +38,7 @@ export function usePreviewBoundary(): {
   const enabled =
     gameId !== null &&
     previewQuestion !== null &&
+    !activeQuestion &&
     selfLocation !== null &&
     questionType !== 'thermometer' &&
     lat !== null &&
