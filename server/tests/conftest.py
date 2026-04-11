@@ -362,6 +362,7 @@ def create_question(session: Session, game_id: uuid.UUID, **overrides: Any) -> Q
                 question_id=q.id,
                 category=FeatureCategory.museum,
                 poi_ids=[],
+                poi_names=[],
             )
         )
         session.flush()

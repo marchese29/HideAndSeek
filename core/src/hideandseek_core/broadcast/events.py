@@ -149,6 +149,11 @@ class PlayerLocationEvent(GameplayEventSchema):
     coordinates: GeoJSONPoint
     timestamp: datetime
 
+    # Enrichment fields — populated for hider location events only.
+    candidate_stations: list[uuid.UUID] | None = None
+    not_in_zone: list[uuid.UUID] | None = None
+    computed_answer: str | None = None
+
 
 class QuestionAskedEvent(GameplayEventSchema):
     """A seeker asked a question — both channels."""

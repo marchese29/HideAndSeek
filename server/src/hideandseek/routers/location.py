@@ -11,9 +11,16 @@ from hideandseek.schemas.response import LocationHistoryEntry
 from hideandseek_core.broadcast.emit import emit_gameplay
 from hideandseek_core.broadcast.events import PlayerLocationEvent
 from hideandseek_core.db import session_dependency
+from hideandseek_core.logic.answer import preview_answer
+from hideandseek_core.logic.station import (
+    compute_candidate_station_ids,
+    compute_hider_centroid,
+    compute_not_in_zone,
+)
 from hideandseek_core.queries.location import create_location_update, get_location_history
+from hideandseek_core.queries.questions import get_active_question
 from hideandseek_models.game import Game, Player
-from hideandseek_models.types import PlayerRole
+from hideandseek_models.types import PlayerRole, QuestionStatus, StationElectionStatus
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['location'], dependencies=[Depends(session_dependency)]
@@ -48,6 +55,23 @@ def report_location(
         timestamp=body.timestamp,
     )
 
+    # Compute enrichment fields for hider location events.
+    # The just-flushed LocationUpdate is visible in the same session.
+    candidate_stations = None
+    not_in_zone = None
+    computed_answer = None
+
+    if player.role == PlayerRole.hider:
+        if game.station_election_status == StationElectionStatus.pending:
+            candidate_stations = compute_candidate_station_ids(game)
+        elif game.hider_station_id is not None:
+            not_in_zone = compute_not_in_zone(game)
+            active_q = get_active_question(game)
+            if active_q is not None and active_q.status == QuestionStatus.answerable:
+                hider_loc = compute_hider_centroid(game)
+                if hider_loc is not None:
+                    computed_answer = preview_answer(active_q, hider_loc, game)
+
     emit_gameplay(
         PlayerLocationEvent(
             game_id=game.id,
@@ -57,6 +81,9 @@ def report_location(
             role=player.role,
             coordinates=body.coordinates,
             timestamp=body.timestamp,
+            candidate_stations=candidate_stations,
+            not_in_zone=not_in_zone,
+            computed_answer=computed_answer,
         )
     )
 

@@ -24,6 +24,12 @@ from hideandseek.schemas.response import (
     StopResponse,
 )
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
+from hideandseek_core.logic.answer import preview_answer
+from hideandseek_core.logic.station import (
+    compute_candidate_station_ids,
+    compute_hider_centroid,
+    compute_not_in_zone,
+)
 from hideandseek_core.queries.location import get_all_player_locations
 from hideandseek_core.queries.questions import (
     get_active_question,
@@ -34,7 +40,7 @@ from hideandseek_core.queries.questions import (
 from hideandseek_core.queries.routes import get_gameplay_routes
 from hideandseek_core.queries.stops import get_playable_stops
 from hideandseek_models.game import Game, Player
-from hideandseek_models.types import PlayerRole, QuestionStatus
+from hideandseek_models.types import PlayerRole, QuestionStatus, StationElectionStatus
 
 _TERMINAL_STATUSES = {QuestionStatus.answered, QuestionStatus.vetoed, QuestionStatus.abandoned}
 
@@ -146,6 +152,20 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
             )
         )
 
+    # Compute enrichment fields (same logic as location handler).
+    candidate_stations = None
+    not_in_zone = None
+    computed_answer = None
+
+    if game.station_election_status == StationElectionStatus.pending:
+        candidate_stations = compute_candidate_station_ids(game)
+    elif game.hider_station_id is not None:
+        not_in_zone = compute_not_in_zone(game)
+        if active_q is not None and active_q.status == QuestionStatus.answerable:
+            hider_loc = compute_hider_centroid(game)
+            if hider_loc is not None:
+                computed_answer = preview_answer(active_q, hider_loc, game)
+
     return HiderGameStateResponse(
         game_id=game.id,
         phase=game.status,
@@ -159,6 +179,9 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         hider_station_id=game.hider_station_id,
         active_question=hider_active,
         question_history=history,
+        candidate_stations=candidate_stations,
+        not_in_zone=not_in_zone,
+        computed_answer=computed_answer,
     )
 
 

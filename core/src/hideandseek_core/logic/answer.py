@@ -24,7 +24,7 @@ from hideandseek_core.queries.features import (
 from hideandseek_core.queries.questions import get_latest_total_exclusion
 from hideandseek_models.game import Game
 from hideandseek_models.question import Question
-from hideandseek_models.types import QuestionStatus
+from hideandseek_models.types import QuestionStatus, QuestionType
 
 
 def _accumulate_exclusion(game: Game, exclusion: BaseGeometry | None) -> BaseGeometry | None:
@@ -257,3 +257,85 @@ def abandon_question(question: Question) -> None:
 def schedule_veto(question: Question) -> None:
     """Schedule a veto to fire when the auto-answer timer expires."""
     question.scheduled_veto = True
+
+
+# ── Answer previews (read-only) ───────────────────────────────────────
+
+
+def preview_radar(question: Question, hider_location: Point, game: Game) -> str:
+    """Preview radar answer: 'yes' if hider within radius, 'no' otherwise."""
+    assert question.radar_params is not None
+    radius_m = to_meters(question.radar_params.radius, game.game_map.convention)
+    dist = distance(question.seeker_location_start, hider_location)
+    return 'yes' if dist <= radius_m else 'no'
+
+
+def preview_thermometer(question: Question, hider_location: Point) -> str:
+    """Preview thermometer answer: 'closer' if nearer to end, 'farther' otherwise."""
+    assert question.seeker_location_end is not None
+    dist_start = distance(question.seeker_location_start, hider_location)
+    dist_end = distance(question.seeker_location_end, hider_location)
+    return 'closer' if dist_end < dist_start else 'farther'
+
+
+def preview_matching(question: Question, hider_location: Point, game: Game) -> str:
+    """Preview matching answer: 'yes'/'no'/'null' based on feature resolution."""
+    params = question.feature_params
+    assert params is not None
+    hider_feature, _ = resolve_matching_feature(
+        category=params.category,
+        location=hider_location,
+        game_map=game.game_map,
+        feature_class=params.feature_class,
+    )
+    if hider_feature is None:
+        return 'null'
+    return 'yes' if params.seeker_feature_id == hider_feature.stable_id else 'no'
+
+
+def preview_measuring(question: Question, hider_location: Point, game: Game) -> str:
+    """Preview measuring answer: 'closer'/'farther' based on distance comparison."""
+    params = question.feature_params
+    assert params is not None
+    convention = game.game_map.convention
+    _, hider_dist = resolve_measuring_feature(
+        category=params.category,
+        location=hider_location,
+        game_map=game.game_map,
+        feature_class=params.feature_class,
+    )
+    hider_dist_conv = from_meters(hider_dist, convention)
+    return 'closer' if params.seeker_distance < hider_dist_conv else 'farther'
+
+
+def preview_tentacles(question: Question, hider_location: Point, game: Game) -> str:
+    """Preview tentacles answer: nearest POI stable_id on hit, 'miss' if outside."""
+    params = question.tentacle_params
+    assert params is not None
+    convention = game.game_map.convention
+    distance_m = to_meters(resolve_tentacle_distance(game.game_map, params.category), convention)
+
+    if not params.poi_ids:
+        return 'miss'
+
+    dist = distance(question.seeker_location_start, hider_location)
+    if dist > distance_m:
+        return 'miss'
+
+    features = get_features_by_stable_ids_nearest(game, params.poi_ids, hider_location)
+    return features[0].stable_id
+
+
+def preview_answer(question: Question, hider_location: Point, game: Game) -> str:
+    """Dispatch to the appropriate preview function based on question type."""
+    match question.question_type:
+        case QuestionType.radar:
+            return preview_radar(question, hider_location, game)
+        case QuestionType.thermometer:
+            return preview_thermometer(question, hider_location)
+        case QuestionType.matching:
+            return preview_matching(question, hider_location, game)
+        case QuestionType.measuring:
+            return preview_measuring(question, hider_location, game)
+        case QuestionType.tentacles:
+            return preview_tentacles(question, hider_location, game)

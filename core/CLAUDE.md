@@ -48,6 +48,19 @@ src/hideandseek_core/
 - `lobby_channel(game_id)`, `hider_channel(game_id)`, `seeker_channel(game_id)` — channel name helpers (used by server's subscribe module)
 - `emit_gameplay(event)` — pattern-matches on gameplay event type, calls `.model_dump(mode='json')` for serialization, publishes to the appropriate Redis channels
 
+**Enriched `PlayerLocationEvent`**: Hider location events carry three optional enrichment fields (`candidate_stations`, `not_in_zone`, `computed_answer`), all `None` for seeker events. Populated by the server's location handler and game state builder using core computation functions.
+
+## Logic — Station Enrichment
+
+`logic/station.py` provides station-related computation for both election mechanics and location event enrichment:
+- `compute_candidate_station_ids(game)` — stop IDs where ALL hiders are within hiding zone radius. Pre-election only. Reuses `get_stops_within_radius_of_all()`.
+- `compute_not_in_zone(game)` — player IDs of hiders outside the hiding zone. Post-election only. Uses geodesic distance (pure math via `geo.distance()`).
+- `compute_hider_centroid(game)` — centroid of hiders with recent locations (used as representative hider location for answer previews).
+
+## Logic — Answer Previews
+
+`logic/answer.py` provides both mutating answer functions (`answer_radar`, `answer_thermometer`, etc.) and read-only preview variants (`preview_radar`, `preview_thermometer`, `preview_matching`, `preview_measuring`, `preview_tentacles`). Preview functions compute the same answer string without persisting exclusion zones or mutating the question. `preview_answer(question, hider_location, game)` dispatches to the appropriate preview function by question type.
+
 ## Conventions
 
 - Same style as server: single quotes, `from __future__ import annotations`, ruff + pyright.

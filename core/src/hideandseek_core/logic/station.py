@@ -7,6 +7,7 @@ from datetime import timedelta
 
 from shapely.geometry import MultiPoint, Point
 
+from hideandseek_core.geo import distance as geo_distance
 from hideandseek_core.logic.endgame import effective_hiding_zone_radius_m
 from hideandseek_core.queries.location import get_latest_location_for_player
 from hideandseek_core.queries.stops import (
@@ -33,6 +34,17 @@ def _get_hider_locations(game: Game) -> list[Point]:
         if latest:
             locations.append(latest.coordinates)
     return locations
+
+
+def _get_hider_locations_by_player(game: Game) -> list[tuple[uuid.UUID, Point]]:
+    """Fetch latest location for each hider, paired with player ID."""
+    hiders = [p for p in game.players if p.role == PlayerRole.hider]
+    result = []
+    for hider in hiders:
+        latest = get_latest_location_for_player(hider, game)
+        if latest:
+            result.append((hider.id, latest.coordinates))
+    return result
 
 
 def validate_station_election(game: Game, station_id: uuid.UUID) -> Stop:
@@ -137,3 +149,35 @@ def compute_hider_centroid(game: Game) -> Point | None:
 
     fresh = [loc.coordinates for loc in locations if loc.timestamp >= cutoff]
     return MultiPoint(fresh).centroid
+
+
+def compute_candidate_station_ids(game: Game) -> list[uuid.UUID]:
+    """Stop IDs where ALL hiders are within hiding_zone_radius.
+
+    For use during hiding phase with pending election status.
+    Returns empty list if no candidates (hiders too spread out).
+    """
+    radius_m = effective_hiding_zone_radius_m(game)
+    hider_locations = _get_hider_locations(game)
+    if not hider_locations:
+        return []
+    candidates = get_stops_within_radius_of_all(game, hider_locations, radius_m)
+    return [s.id for s in candidates]
+
+
+def compute_not_in_zone(game: Game) -> list[uuid.UUID]:
+    """Player IDs of hiders whose latest location is outside the hiding zone.
+
+    For use after station election. Empty list means all hiders are in zone.
+    Uses geodesic distance (pure math, no DB round-trip per hider).
+    """
+    stop = game.hider_station
+    if stop is None:
+        return []
+    radius_m = effective_hiding_zone_radius_m(game)
+    hider_entries = _get_hider_locations_by_player(game)
+    return [
+        player_id
+        for player_id, loc in hider_entries
+        if geo_distance(stop.coordinates, loc) > radius_m
+    ]

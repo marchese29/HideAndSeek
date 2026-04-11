@@ -671,6 +671,20 @@ class HiderGameStateResponse(SSEExposed, BaseModel):
     )
     question_history: list[HiderQuestionHistoryEntry] = Field(description='All resolved questions.')
 
+    # Enrichment fields — same semantics as on PlayerLocationEvent, computed at snapshot time.
+    candidate_stations: list[uuid.UUID] | None = Field(
+        default=None,
+        description='Stop IDs where all hiders are within hiding zone radius (pre-election only).',
+    )
+    not_in_zone: list[uuid.UUID] | None = Field(
+        default=None,
+        description='Player IDs of hiders outside the hiding zone (post-election only).',
+    )
+    computed_answer: str | None = Field(
+        default=None,
+        description='Hypothetical answer if question were answered now.',
+    )
+
 
 class SeekerGameStateResponse(SSEExposed, BaseModel):
     """Dynamic seeker state snapshot — delivered as initial SSE event on connect."""
