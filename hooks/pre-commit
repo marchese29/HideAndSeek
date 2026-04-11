@@ -9,7 +9,7 @@ if command -v bd >/dev/null 2>&1; then
     bd hooks run pre-commit "$@" || exit 1
 fi
 
-CACHE_DIR=".git/hooks-cache"
+CACHE_DIR="$(git rev-parse --git-dir)/hooks-cache"
 
 # Run a command only if staged files under one or more paths have changed
 # since the last successful run of that step.

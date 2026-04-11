@@ -64,7 +64,9 @@ class FeatureQuestionParams(Base):
 class TentacleQuestionParams(Base):
     """Parameters for a tentacles question (one-to-one with Question).
 
-    Seeker fields (category, poi_ids) are set at ask time.
+    Seeker fields (category, poi_ids, poi_names) are set at ask time.
+    poi_names is denormalized (parallel to poi_ids) so event/param builders
+    can resolve names without DB queries.
     Answer fields (hit, hider_feature_id) are populated at answer time.
     """
 
@@ -73,6 +75,7 @@ class TentacleQuestionParams(Base):
     question_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('question.id'), primary_key=True)
     category: Mapped[FeatureCategory]
     poi_ids: Mapped[list] = mapped_column(JSON)
+    poi_names: Mapped[list] = mapped_column(JSON)
     hit: Mapped[bool | None] = mapped_column(default=None)
     hider_feature_id: Mapped[str | None] = mapped_column(default=None)
 

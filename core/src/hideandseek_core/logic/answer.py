@@ -1,20 +1,26 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
+from shapely import Point
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from hideandseek_core.conventions import from_meters, to_meters
+from hideandseek_core.conventions import from_meters, resolve_tentacle_distance, to_meters
 from hideandseek_core.exclusion import (
     exclude_matching,
     exclude_measuring,
     exclude_radar,
+    exclude_tentacles,
     exclude_thermometer,
 )
 from hideandseek_core.geo import distance
 from hideandseek_core.logic.resolution import resolve_matching_feature, resolve_measuring_feature
-from hideandseek_core.queries.features import get_features_by_category
+from hideandseek_core.queries.features import (
+    get_features_by_category,
+    get_features_by_stable_ids_nearest,
+)
 from hideandseek_core.queries.questions import get_latest_total_exclusion
 from hideandseek_models.game import Game
 from hideandseek_models.question import Question
@@ -170,6 +176,66 @@ def answer_measuring(question: Question, game: Game) -> None:
     )
 
     question.answer = answer
+    question.exclusion = exclusion
+    question.total_exclusion = _accumulate_exclusion(game, exclusion)
+    question.answered_at = datetime.now(UTC)
+    question.status = QuestionStatus.answered
+
+
+def answer_tentacles(question: Question, game: Game) -> None:
+    """Compute tentacles answer, exclusion zone, and persist.
+
+    Two-phase resolution:
+    1. Distance check — is hider within the tentacle distance of the seeker?
+       Miss if not (or if no POIs were in circle at ask time).
+    2. Nearest POI — among the in-circle POIs, which is hider nearest to?
+       Hit: answer is the nearest POI's stable_id, exclusion via Voronoi.
+    """
+    params = question.tentacle_params
+    assert params is not None
+    assert question.hider_location is not None
+    boundary = game.game_map.boundary
+    convention = game.game_map.convention
+
+    distance_m = to_meters(resolve_tentacle_distance(game.game_map, params.category), convention)
+
+    # Empty POI set: guaranteed miss
+    if not params.poi_ids:
+        params.hit = False
+        exclusion = exclude_radar(boundary, question.seeker_location_start, distance_m, hit=False)
+        question.answer = 'miss'
+        question.exclusion = exclusion
+        question.total_exclusion = _accumulate_exclusion(game, exclusion)
+        question.answered_at = datetime.now(UTC)
+        question.status = QuestionStatus.answered
+        return
+
+    # Phase 1: distance check
+    dist = distance(question.seeker_location_start, question.hider_location)
+    if dist > distance_m:
+        # Miss — hider outside the distance circle
+        params.hit = False
+        exclusion = exclude_radar(boundary, question.seeker_location_start, distance_m, hit=False)
+        question.answer = 'miss'
+        question.exclusion = exclusion
+        question.total_exclusion = _accumulate_exclusion(game, exclusion)
+        question.answered_at = datetime.now(UTC)
+        question.status = QuestionStatus.answered
+        return
+
+    # Phase 2: hit — find nearest POI (ordered by DB)
+    features = get_features_by_stable_ids_nearest(game, params.poi_ids, question.hider_location)
+    nearest = features[0]
+
+    params.hit = True
+    params.hider_feature_id = nearest.stable_id
+
+    other_pois = [cast(Point, f.shape) for f in features[1:]]
+    exclusion = exclude_tentacles(
+        boundary, question.seeker_location_start, distance_m, cast(Point, nearest.shape), other_pois
+    )
+
+    question.answer = nearest.stable_id
     question.exclusion = exclusion
     question.total_exclusion = _accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)

@@ -19,6 +19,7 @@ from hideandseek_core.logic.answer import (
     answer_matching,
     answer_measuring,
     answer_radar,
+    answer_tentacles,
     answer_thermometer,
     veto_immediate,
 )
@@ -200,6 +201,8 @@ def auto_answer_question(question_id: str) -> None:
             answer_matching(question, game)
         elif question.question_type == QuestionType.measuring:
             answer_measuring(question, game)
+        elif question.question_type == QuestionType.tentacles:
+            answer_tentacles(question, game)
         else:
             logger.error('auto_answer_unknown_type', question_type=question.question_type)
             return

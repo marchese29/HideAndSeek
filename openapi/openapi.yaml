@@ -901,6 +901,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/tentacles:
+    post:
+      tags:
+      - questions
+      summary: Ask Tentacles Question
+      description: Ask a tentacles question about a POI category.
+      operationId: ask_tentacles_question_games__game_id__questions_tentacles_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskQuestionRequest'
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/questions/preview:
     get:
       tags:
@@ -1753,12 +1796,19 @@ components:
           type: array
           title: Measuring Slots
           description: Measuring question slots.
+        tentacles_slots:
+          items:
+            $ref: '#/components/schemas/SlotResponse'
+          type: array
+          title: Tentacles Slots
+          description: Tentacles question slots.
       type: object
       required:
       - radar_slots
       - thermometer_slots
       - matching_slots
       - measuring_slots
+      - tentacles_slots
       title: InventoryResponse
       description: "Question inventory \u2014 all slots grouped by question type."
     JoinGameRequest:
@@ -2393,6 +2443,14 @@ components:
           - type: 'null'
           description: Resolved feature info. Present for matching and measuring question
             types.
+        tentacle_pois:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/TentaclePOIPreviewResponse'
+            type: array
+          - type: 'null'
+          title: Tentacle Pois
+          description: In-circle POIs for a tentacles question preview.
       type: object
       required:
       - boundary
@@ -2405,6 +2463,7 @@ components:
       - thermometer
       - matching
       - measuring
+      - tentacles
       title: QuestionType
     RemovePlayerRequest:
       properties:
@@ -2535,6 +2594,26 @@ components:
       - coordinates
       title: StopResponse
       description: A transit stop on the effective game map.
+    TentaclePOIPreviewResponse:
+      properties:
+        feature_id:
+          type: string
+          title: Feature Id
+          description: Stable identifier of the POI.
+        name:
+          type: string
+          title: Name
+          description: Human-readable name.
+        location:
+          $ref: '#/components/schemas/Point'
+          description: GeoJSON Point location of the POI.
+      type: object
+      required:
+      - feature_id
+      - name
+      - location
+      title: TentaclePOIPreviewResponse
+      description: A POI in a tentacles question preview.
     ValidationError:
       properties:
         loc:
@@ -2561,17 +2640,6 @@ components:
       - msg
       - type
       title: ValidationError
-    GameHostChangedEvent:
-      description: "Host transferred during active gameplay \u2014 both channels."
-      properties:
-        new_host_player_id:
-          format: uuid
-          title: New Host Player Id
-          type: string
-      required:
-      - new_host_player_id
-      title: GameHostChangedEvent
-      type: object
     QuestionStatus:
       enum:
       - asked
@@ -2834,6 +2902,42 @@ components:
       - radius
       title: RadarEventParams
       type: object
+    TentacleEventParams:
+      description: "Tentacles question parameters \u2014 category, distance, and in-circle\
+        \ POIs."
+      properties:
+        type:
+          const: tentacles
+          default: tentacles
+          title: Type
+          type: string
+        category:
+          description: POI category (e.g. museum, hospital).
+          title: Category
+          type: string
+        distance:
+          description: Tentacle distance in convention units.
+          title: Distance
+          type: number
+        poi_ids:
+          description: Stable IDs of POIs within the distance circle.
+          items:
+            type: string
+          title: Poi Ids
+          type: array
+        poi_names:
+          description: Human-readable names, matching poi_ids order.
+          items:
+            type: string
+          title: Poi Names
+          type: array
+      required:
+      - category
+      - distance
+      - poi_ids
+      - poi_names
+      title: TentacleEventParams
+      type: object
     ThermometerEventParams:
       description: Thermometer question parameters.
       properties:
@@ -2872,12 +2976,14 @@ components:
             mapping:
               feature: '#/components/schemas/FeatureEventParams'
               radar: '#/components/schemas/RadarEventParams'
+              tentacles: '#/components/schemas/TentacleEventParams'
               thermometer: '#/components/schemas/ThermometerEventParams'
             propertyName: type
           oneOf:
           - $ref: '#/components/schemas/RadarEventParams'
           - $ref: '#/components/schemas/ThermometerEventParams'
           - $ref: '#/components/schemas/FeatureEventParams'
+          - $ref: '#/components/schemas/TentacleEventParams'
           title: Parameters
         seeker_location_start:
           $ref: '#/components/schemas/Point'
@@ -3006,6 +3112,17 @@ components:
       required:
       - player_id
       title: GamePlayerLeftEvent
+      type: object
+    GameHostChangedEvent:
+      description: "Host transferred during active gameplay \u2014 both channels."
+      properties:
+        new_host_player_id:
+          format: uuid
+          title: New Host Player Id
+          type: string
+      required:
+      - new_host_player_id
+      title: GameHostChangedEvent
       type: object
     GameDissolvedEvent:
       description: "Game dissolved during active gameplay \u2014 both channels."
@@ -3194,6 +3311,7 @@ components:
           - $ref: '#/components/schemas/RadarParamsResponse'
           - $ref: '#/components/schemas/ThermometerParamsResponse'
           - $ref: '#/components/schemas/FeatureParamsResponse'
+          - $ref: '#/components/schemas/TentacleParamsResponse'
           description: Type-specific question parameters.
           title: Parameters
         seeker_location_start:
@@ -3277,6 +3395,50 @@ components:
       required:
       - radius
       title: RadarParamsResponse
+      type: object
+    TentacleParamsResponse:
+      description: Parameters for a tentacles question.
+      properties:
+        type:
+          const: tentacles
+          default: tentacles
+          title: Type
+          type: string
+        category:
+          description: POI category.
+          title: Category
+          type: string
+        poi_ids:
+          description: Stable IDs of POIs within the distance circle.
+          items:
+            type: string
+          title: Poi Ids
+          type: array
+        poi_names:
+          description: Human-readable names, matching poi_ids order.
+          items:
+            type: string
+          title: Poi Names
+          type: array
+        hit:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: null
+          description: True if hider was in range (populated at answer time).
+          title: Hit
+        hider_feature_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Stable ID of the nearest POI on hit (populated at answer time).
+          title: Hider Feature Id
+      required:
+      - category
+      - poi_ids
+      - poi_names
+      title: TentacleParamsResponse
       type: object
     ThermometerParamsResponse:
       description: Parameters for a thermometer question.

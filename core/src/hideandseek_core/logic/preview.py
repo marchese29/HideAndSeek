@@ -7,22 +7,33 @@ Convention conversion boundary lives here (same as ask.py / answer.py).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
-from hideandseek_core.conventions import from_meters, to_meters
+from hideandseek_core.conventions import from_meters, resolve_tentacle_distance, to_meters
 from hideandseek_core.exclusion import (
     boundary_matching,
     boundary_measuring,
     boundary_radar,
+    boundary_tentacles,
     boundary_thermometer,
 )
 from hideandseek_core.logic.resolution import resolve_matching_feature, resolve_measuring_feature
-from hideandseek_core.queries.features import get_features_by_category
+from hideandseek_core.queries.features import get_features_by_category, get_features_within_distance
 from hideandseek_models.game import Game
 from hideandseek_models.inventory import InventorySlot
 from hideandseek_models.types import DistanceConvention, QuestionType
+
+
+@dataclass(frozen=True, slots=True)
+class TentaclePOIPreview:
+    """A POI in a tentacles preview — feature info + location."""
+
+    feature_id: str
+    name: str
+    location: Point
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +44,7 @@ class PreviewResult:
     feature_id: str | None = None
     feature_name: str | None = None
     feature_distance: float | None = None  # convention units
+    tentacle_pois: list[TentaclePOIPreview] | None = None
 
 
 def preview_question(
@@ -62,6 +74,9 @@ def preview_question(
         return PreviewResult(
             boundary=boundary_thermometer(boundary_geom, location, seeker_location_end)
         )
+
+    if question_type == QuestionType.tentacles:
+        return _preview_tentacles(game, slot, location, boundary_geom, convention)
 
     if question_type == QuestionType.matching:
         return _preview_matching(game, slot, location, boundary_geom, convention)
@@ -133,4 +148,37 @@ def _preview_measuring(
         feature_id=seeker_feature.stable_id,
         feature_name=seeker_feature.name,
         feature_distance=from_meters(seeker_dist, convention),
+    )
+
+
+def _preview_tentacles(
+    game: Game,
+    slot: InventorySlot,
+    location: Point,
+    boundary_geom: BaseGeometry,
+    convention: DistanceConvention,
+) -> PreviewResult:
+    """Preview for a tentacles question — distance circle + Voronoi edges + POI list.
+
+    Raises ValueError if any feature has non-Point geometry.
+    """
+    assert slot.category is not None
+
+    distance_m = to_meters(resolve_tentacle_distance(game.game_map, slot.category), convention)
+    features = get_features_within_distance(game, slot.category, location, distance_m)
+
+    for f in features:
+        if not isinstance(f.shape, Point):
+            raise ValueError(
+                f'Feature {f.stable_id} has {f.shape.geom_type} geometry; '
+                f'tentacles requires Point geometry only.'
+            )
+
+    pois = [cast(Point, f.shape) for f in features]
+    return PreviewResult(
+        boundary=boundary_tentacles(boundary_geom, location, distance_m, pois),
+        tentacle_pois=[
+            TentaclePOIPreview(feature_id=f.stable_id, name=f.name, location=cast(Point, f.shape))
+            for f in features
+        ],
     )

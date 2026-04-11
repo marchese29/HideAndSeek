@@ -138,3 +138,26 @@ def get_features_by_stable_ids(
         )
     )
     return list(session.scalars(stmt).all())
+
+
+def get_features_by_stable_ids_nearest(
+    game: Game,
+    stable_ids: list[str],
+    location: Point,
+) -> list[MapFeature]:
+    """Fetch MapFeatures by stable_ids, ordered nearest-first to a location.
+
+    Uses ST_Distance for ordering so the first element is the nearest feature.
+    """
+    session = get_session()
+    point_wkb = from_shape(location, srid=4326)
+    stmt = (
+        select(MapFeature)
+        .join(GameMapFeature)
+        .where(
+            GameMapFeature.game_map_id == game.map_id,
+            MapFeature.stable_id.in_(stable_ids),
+        )
+        .order_by(func.ST_Distance(MapFeature.shape, point_wkb))
+    )
+    return list(session.scalars(stmt).all())

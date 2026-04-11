@@ -12,6 +12,7 @@ from hideandseek_models.game import Game, Player
 from hideandseek_models.question import Question
 from hideandseek_models.types import (
     DistanceConvention,
+    FeatureCategory,
     GameStatus,
     PlayerRole,
     QuestionStatus,
@@ -907,6 +908,226 @@ def test_tentacles_inventory_slots_created(client: TestClient, session: Session)
     assert slots[1]['distance'] == 2000
 
 
+# ── Tentacles helpers ────────────────────────────────────────────────────────
+
+
+def _setup_tentacles_game(client: TestClient, session: Session) -> tuple[Game, Player, Player, int]:
+    """Create a seeking game with tentacles config and two POIs within the circle.
+
+    Map boundary is (0,0)→(1,1). Museum POIs at (0.3, 0.3) and (0.7, 0.7).
+    Tentacle distance is 200000m (~200km), large enough to cover the map.
+    Seeker at (0.5, 0.5), hider at (0.31, 0.31) — near museum_a.
+    Returns (game, hider, seeker, tentacles_slot_index).
+    """
+    gm = create_game_map(
+        session,
+        tentacle_categories=[{'category': 'museum', 'distance': 200000}],
+    )
+    museum_a = create_map_feature(
+        session,
+        name='Museum A',
+        stable_id='museum_a',
+        category=FeatureCategory.museum,
+        shape=Point(0.3, 0.3),
+    )
+    museum_b = create_map_feature(
+        session,
+        name='Museum B',
+        stable_id='museum_b',
+        category=FeatureCategory.museum,
+        shape=Point(0.7, 0.7),
+    )
+    create_game_map_feature(session, gm.id, museum_a.id)
+    create_game_map_feature(session, gm.id, museum_b.id)
+
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.id, 0.5, 0.5)
+    _report_location(client, game.id, hider.id, 0.31, 0.31)
+
+    inv = client.get(f'/games/{game.id}/inventory', headers=_headers(seeker.id)).json()
+    slot_idx = inv['tentacles_slots'][0]['slot_index']
+    return game, hider, seeker, slot_idx
+
+
+# ── POST /questions/tentacles ────────────────────────────────────────────────
+
+
+def test_ask_tentacles_creates_question(client: TestClient, session: Session):
+    """Asking a tentacles question creates a question with correct params."""
+    game, hider, seeker, slot_idx = _setup_tentacles_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/tentacles',
+        json={'location': _point(0.5, 0.5), 'slot_index': slot_idx},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 204
+
+    q = _get_latest_question(game.id)
+    assert q.question_type == QuestionType.tentacles
+    assert q.status == QuestionStatus.answerable
+    assert q.tentacle_params is not None
+    assert set(q.tentacle_params.poi_ids) == {'museum_a', 'museum_b'}
+
+
+def test_answer_tentacles_hit(client: TestClient, session: Session):
+    """Hider near museum_a → answer is 'museum_a', hit=True."""
+    game, hider, seeker, slot_idx = _setup_tentacles_game(client, session)
+    q_id = _ask_question(
+        client,
+        game.id,
+        seeker.id,
+        question_type='tentacles',
+        slot_index=slot_idx,
+        lng=0.5,
+        lat=0.5,
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+
+    q = _get_question_by_id(q_id)
+    assert q.answer == 'museum_a'
+    assert q.tentacle_params is not None
+    assert q.tentacle_params.hit is True
+    assert q.tentacle_params.hider_feature_id == 'museum_a'
+    assert q.exclusion is not None
+    assert q.total_exclusion is not None
+
+
+def test_answer_tentacles_miss(client: TestClient, session: Session):
+    """Hider far away → answer is 'miss', hit=False."""
+    # Use a small tentacle distance so hider is outside the circle
+    gm = create_game_map(
+        session,
+        tentacle_categories=[{'category': 'museum', 'distance': 100}],
+    )
+    museum = create_map_feature(
+        session,
+        name='Museum',
+        stable_id='museum_far',
+        category=FeatureCategory.museum,
+        shape=Point(0.5, 0.5),
+    )
+    create_game_map_feature(session, gm.id, museum.id)
+
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.id, 0.5, 0.5)
+    _report_location(client, game.id, hider.id, 0.9, 0.9)
+
+    inv = client.get(f'/games/{game.id}/inventory', headers=_headers(seeker.id)).json()
+    slot_idx = inv['tentacles_slots'][0]['slot_index']
+
+    q_id = _ask_question(
+        client,
+        game.id,
+        seeker.id,
+        question_type='tentacles',
+        slot_index=slot_idx,
+        lng=0.5,
+        lat=0.5,
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+
+    q = _get_question_by_id(q_id)
+    assert q.answer == 'miss'
+    assert q.tentacle_params is not None
+    assert q.tentacle_params.hit is False
+    assert q.exclusion is not None
+
+
+def test_answer_tentacles_empty_pois_is_miss(client: TestClient, session: Session):
+    """Zero POIs in circle → guaranteed miss."""
+    # Tentacle category configured but no features on the map for it
+    gm = create_game_map(
+        session,
+        tentacle_categories=[{'category': 'museum', 'distance': 200000}],
+    )
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    hider = create_player(session, game.id, name='Hider', role=PlayerRole.hider)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.id, 0.5, 0.5)
+    _report_location(client, game.id, hider.id, 0.5, 0.5)
+
+    inv = client.get(f'/games/{game.id}/inventory', headers=_headers(seeker.id)).json()
+    slot_idx = inv['tentacles_slots'][0]['slot_index']
+
+    q_id = _ask_question(
+        client,
+        game.id,
+        seeker.id,
+        question_type='tentacles',
+        slot_index=slot_idx,
+        lng=0.5,
+        lat=0.5,
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/answer',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+
+    q = _get_question_by_id(q_id)
+    assert q.answer == 'miss'
+    assert q.tentacle_params is not None
+    assert q.tentacle_params.hit is False
+    assert q.tentacle_params.poi_ids == []
+
+
+def test_veto_tentacles(client: TestClient, session: Session):
+    """Hider can veto a tentacles question."""
+    game, hider, seeker, slot_idx = _setup_tentacles_game(client, session)
+    q_id = _ask_question(
+        client,
+        game.id,
+        seeker.id,
+        question_type='tentacles',
+        slot_index=slot_idx,
+        lng=0.5,
+        lat=0.5,
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/veto',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+    assert _get_question_by_id(q_id).status == QuestionStatus.vetoed
+
+
+def test_abandon_tentacles(client: TestClient, session: Session):
+    """Seeker can abandon a tentacles question."""
+    game, hider, seeker, slot_idx = _setup_tentacles_game(client, session)
+    q_id = _ask_question(
+        client,
+        game.id,
+        seeker.id,
+        question_type='tentacles',
+        slot_index=slot_idx,
+        lng=0.5,
+        lat=0.5,
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{q_id}/abandon',
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 204
+    assert _get_question_by_id(q_id).status == QuestionStatus.abandoned
+
+
 # ── POST /games/{game_id}/questions/{question_id}/abandon ─────────────────────
 
 
@@ -1139,6 +1360,74 @@ def test_preview_measuring(client: TestClient, session: Session):
     data = resp.json()
     assert data['boundary'] is not None
     assert data['feature_preview'] is not None
+
+
+def test_preview_tentacles(client: TestClient, session: Session):
+    """Tentacles preview returns boundary + tentacle_pois."""
+    gm = create_game_map(
+        session,
+        tentacle_categories=[{'category': 'museum', 'distance': 200000}],
+    )
+    feat_a = create_map_feature(
+        session,
+        name='Museum A',
+        stable_id='mus_a',
+        category=FeatureCategory.museum,
+        shape=Point(0.3, 0.3),
+    )
+    feat_b = create_map_feature(
+        session,
+        name='Museum B',
+        stable_id='mus_b',
+        category=FeatureCategory.museum,
+        shape=Point(0.7, 0.7),
+    )
+    create_game_map_feature(session, gm.id, feat_a.id)
+    create_game_map_feature(session, gm.id, feat_b.id)
+
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.id, 0.5, 0.5)
+
+    inv = client.get(f'/games/{game.id}/inventory', headers=_headers(seeker.id)).json()
+    slot_idx = inv['tentacles_slots'][0]['slot_index']
+
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={'question_type': 'tentacles', 'slot_index': slot_idx, 'lat': 0.5, 'lng': 0.5},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['boundary'] is not None
+    assert data['feature_preview'] is None
+    assert data['tentacle_pois'] is not None
+    assert len(data['tentacle_pois']) == 2
+    poi_ids = {p['feature_id'] for p in data['tentacle_pois']}
+    assert poi_ids == {'mus_a', 'mus_b'}
+
+
+def test_preview_tentacles_empty(client: TestClient, session: Session):
+    """Tentacles preview with no POIs in range returns empty tentacle_pois."""
+    gm = create_game_map(
+        session,
+        tentacle_categories=[{'category': 'museum', 'distance': 1}],
+    )
+    game = create_game(session, map_id=gm.id, status=GameStatus.seeking)
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    _report_location(client, game.id, seeker.id, 0.5, 0.5)
+
+    inv = client.get(f'/games/{game.id}/inventory', headers=_headers(seeker.id)).json()
+    slot_idx = inv['tentacles_slots'][0]['slot_index']
+
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={'question_type': 'tentacles', 'slot_index': slot_idx, 'lat': 0.5, 'lng': 0.5},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['tentacle_pois'] == []
 
 
 def test_preview_either_role(client: TestClient, session: Session):

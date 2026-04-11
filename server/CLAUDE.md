@@ -202,6 +202,24 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
 # → answer: "closer" (hider nearer to end) or "farther" (hider nearer to start)
 ```
 
+### Tentacles question
+
+```bash
+# Ask (seeker). Tentacles slots come from tentacle_categories on the map config.
+# Each slot has a category (e.g. museum) — distance is resolved from map config.
+curl -s -X POST localhost:8000/games/<game_id>/questions/tentacles \
+  -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
+  -d '{"location": {"type": "Point", "coordinates": [<lon>, <lat>]}, "slot_index": <N>}'
+# → status: "answerable", schedules auto-answer timer
+# → Server finds POIs of the slot's category within the configured distance
+
+# Answer (hider)
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
+# → answer: "miss" (hider outside circle or no POIs) or "<poi_stable_id>" (nearest POI on hit)
+# → On hit, exclusion is Voronoi-based (excludes cells of non-answered POIs within the circle)
+```
+
 ### Question preview
 
 ```bash
@@ -218,6 +236,11 @@ curl -s "localhost:8000/games/<game_id>/questions/preview?question_type=thermome
 curl -s "localhost:8000/games/<game_id>/questions/preview?question_type=matching&slot_index=0&lat=47.6&lng=-122.3" \
   -H "X-Player-Id: $PLAYER_ID" -H "X-Player-Secret: $SECRET"
 # → { "boundary": { ... }, "feature_preview": { "feature_id": "...", "name": "...", "distance": 1234.5 } }
+
+# Preview tentacles (returns boundary circle + Voronoi edges + POI list)
+curl -s "localhost:8000/games/<game_id>/questions/preview?question_type=tentacles&slot_index=0&lat=47.6&lng=-122.3" \
+  -H "X-Player-Id: $PLAYER_ID" -H "X-Player-Secret: $SECRET"
+# → { "boundary": { ... }, "feature_preview": null, "tentacle_pois": [{ "feature_id": "...", "name": "...", "location": { ... } }] }
 ```
 
 ### Checking results
@@ -310,7 +333,7 @@ Business logic, queries, DB infra, geo math, push, and redis live in the `hidean
   - **SSE type auto-sync**: Gameplay event schemas and game state snapshot schemas are injected into the OpenAPI spec by `scripts/generate_openapi.py` via `GameplayEventSchema.registered_schemas()` and `SSEExposed.registered_schemas()`. The existing `openapi-typescript` pipeline (`openapi.yaml → schema.d.ts`) then generates TypeScript types. `mobile/src/types/gameplay.ts` provides short aliases (e.g. `PlayerLocationDelta` → `S[‘PlayerLocationEvent’]`). Adding a new event class is sufficient — it auto-registers and appears in the spec on next regen.
   - **`SSEExposed` mixin** (`hideandseek.schemas.response`): marks `HiderGameStateResponse` and `SeekerGameStateResponse` for OpenAPI injection (they aren’t on REST routes). Sub-types (`GamePlayer`, `HiderActiveQuestion`, etc.) are pulled in automatically via `$defs` hoisting.
   - **Enriched question events**: Fields are placed on the event where they become *known*. `QuestionAskedEvent` carries ask-time fields: `parameters` (typed `QuestionEventParams` discriminated union), `seeker_location_start`, `asked_at`, `ask_count`, `sequence`. `QuestionAnswerableEvent` carries `seeker_location_end` (thermometer lock-in). Answered events carry only the answer-time delta. History entries in game state snapshots carry **both** ask-time and answer-time fields (enriched to replace the removed question GET endpoints). `HiderQuestionHistoryEntry` includes `parameters`, `seeker_location_start/end`, `sequence`, `ask_count`, `asked_at` plus answer-time hider data. `SeekerQuestionHistoryEntry` includes `sequence`, `ask_count`, `asked_by`, `asked_at` plus exclusion geometry.
-  - **Question parameter models** (`hideandseek_core.broadcast.events`): `RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams` — standalone frozen Pydantic `BaseModel` subclasses with `Literal` type discriminators (`type: Literal[‘radar’] = ‘radar’`). `build_event_params(question)` factory constructs the appropriate variant from the Question ORM model’s param relationships. Serialized automatically via `.model_dump(mode=’json’)` in `emit_gameplay()`.
+  - **Question parameter models** (`hideandseek_core.broadcast.events`): `RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`, `TentacleEventParams` — standalone frozen Pydantic `BaseModel` subclasses with `Literal` type discriminators (`type: Literal[‘radar’] = ‘radar’`). `build_event_params(question)` factory constructs the appropriate variant from the Question ORM model’s param relationships. `TentacleEventParams` reads `poi_names` from the model (denormalized at ask time — no DB queries in event builders). Serialized automatically via `.model_dump(mode=’json’)` in `emit_gameplay()`.
   - **Mutation endpoints return 204**: `POST /questions/*` (ask, lock-in, answer, veto, abandon) and `POST /hider-station` return 204 with no body. State updates flow to clients exclusively through SSE events. Push notifications remain as supplementary wake-up alerts.
   - **`publish_sse(channel, ...)`** (`hideandseek_core.broadcast.emit`): low-level Redis publish shared by both `emit_gameplay` (core) and `emit` (server lobby). Channel helpers: `lobby_channel()`, `hider_channel()`, `seeker_channel()`.
   - **`Question.slot_index`** — stored at ask time from `InventorySlot.slot_index`. Used in gameplay state question schemas.

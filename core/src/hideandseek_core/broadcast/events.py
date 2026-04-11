@@ -18,6 +18,7 @@ from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
 from pydantic import BaseModel, ConfigDict, Field
 from shapely.geometry import mapping
 
+from hideandseek_core.conventions import resolve_tentacle_distance
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_models.types import (
     PlayerColor,
@@ -66,7 +67,21 @@ class FeatureEventParams(BaseModel):
     seeker_distance: float
 
 
-QuestionEventParams = RadarEventParams | ThermometerEventParams | FeatureEventParams
+class TentacleEventParams(BaseModel):
+    """Tentacles question parameters — category, distance, and in-circle POIs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal['tentacles'] = 'tentacles'
+    category: str = Field(description='POI category (e.g. museum, hospital).')
+    distance: float = Field(description='Tentacle distance in convention units.')
+    poi_ids: list[str] = Field(description='Stable IDs of POIs within the distance circle.')
+    poi_names: list[str] = Field(description='Human-readable names, matching poi_ids order.')
+
+
+QuestionEventParams = (
+    RadarEventParams | ThermometerEventParams | FeatureEventParams | TentacleEventParams
+)
 
 
 def build_event_params(question: Question) -> QuestionEventParams:
@@ -79,6 +94,15 @@ def build_event_params(question: Question) -> QuestionEventParams:
         tp = question.thermometer_params
         assert tp is not None
         return ThermometerEventParams(min_travel=tp.min_travel)
+    elif question.question_type == QuestionType.tentacles:
+        tp = question.tentacle_params
+        assert tp is not None
+        return TentacleEventParams(
+            category=str(tp.category),
+            distance=resolve_tentacle_distance(question.game.game_map, tp.category),
+            poi_ids=list(tp.poi_ids),
+            poi_names=list(tp.poi_names),
+        )
     else:
         fp = question.feature_params
         assert fp is not None
@@ -213,6 +237,24 @@ class HiderQuestionAnsweredEvent(GameplayEventSchema):
     def from_question(question: Question) -> HiderQuestionAnsweredEvent:
         assert question.answer is not None
         fp = question.feature_params
+        tp = question.tentacle_params
+
+        hider_feature_id: str | None = None
+        hider_feature_name: str | None = None
+        hider_distance: float | None = None
+
+        if fp:
+            hider_feature_id = fp.hider_feature_id
+            hider_feature_name = fp.hider_feature_name
+            hider_distance = fp.hider_distance
+        elif tp and tp.hider_feature_id:
+            hider_feature_id = tp.hider_feature_id
+            try:
+                idx = list(tp.poi_ids).index(tp.hider_feature_id)
+                hider_feature_name = list(tp.poi_names)[idx]
+            except (ValueError, IndexError):
+                pass
+
         return HiderQuestionAnsweredEvent(
             game_id=question.game_id,
             question_id=question.id,
@@ -223,9 +265,9 @@ class HiderQuestionAnsweredEvent(GameplayEventSchema):
             asked_by=question.asked_by,
             answered_at=question.answered_at,
             hider_location=point_or_none(question.hider_location),
-            hider_feature_id=fp.hider_feature_id if fp else None,
-            hider_feature_name=fp.hider_feature_name if fp else None,
-            hider_distance=fp.hider_distance if fp else None,
+            hider_feature_id=hider_feature_id,
+            hider_feature_name=hider_feature_name,
+            hider_distance=hider_distance,
         )
 
 

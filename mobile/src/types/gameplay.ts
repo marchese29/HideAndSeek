@@ -48,18 +48,25 @@ export type GameDissolvedDelta = S['GameDissolvedEvent'];
 export type RadarEventParams = S['RadarEventParams'];
 export type ThermometerEventParams = S['ThermometerEventParams'];
 export type FeatureEventParams = S['FeatureEventParams'];
-export type QuestionEventParams = RadarEventParams | ThermometerEventParams | FeatureEventParams;
+export type TentacleEventParams = S['TentacleEventParams'];
+export type QuestionEventParams =
+  | RadarEventParams
+  | ThermometerEventParams
+  | FeatureEventParams
+  | TentacleEventParams;
 
 // ── Question Parameters (history entries) ───────────────────────────────────
 
 export type RadarParamsResponse = S['RadarParamsResponse'];
 export type ThermometerParamsResponse = S['ThermometerParamsResponse'];
 export type FeatureParamsResponse = S['FeatureParamsResponse'];
+export type TentacleParamsResponse = S['TentacleParamsResponse'];
 export type FeatureResolution = S['FeatureResolution'];
 export type QuestionParamsResponse =
   | RadarParamsResponse
   | ThermometerParamsResponse
-  | FeatureParamsResponse;
+  | FeatureParamsResponse
+  | TentacleParamsResponse;
 
 // ── Active Questions ─────────────────────────────────────────────────────────
 
@@ -90,6 +97,10 @@ export type InventorySlotResponse = S['InventorySlotResponse'];
 
 export type HiderGameState = S['HiderGameStateResponse'];
 export type SeekerGameState = S['SeekerGameStateResponse'];
+
+// ── Question Preview ────────────────────────────────────────────────────────
+
+export type TentaclePOIPreviewResponse = S['TentaclePOIPreviewResponse'];
 
 // ── Question Preview (mobile-only UI state) ─────────────────────────────────
 

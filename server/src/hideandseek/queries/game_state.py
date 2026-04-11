@@ -85,29 +85,49 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
             ),
         )
 
-    history = [
-        HiderQuestionHistoryEntry(
-            question_id=q.id,
-            sequence=q.sequence,
-            question_type=q.question_type,
-            status=q.status,
-            ask_count=q.ask_count,
-            asked_by=q.asked_by,
-            asked_at=q.asked_at,
-            slot_index=q.slot_index,
-            parameters=build_question_params(q),
-            seeker_location_start=GeoJSONPoint(**mapping(q.seeker_location_start)),
-            seeker_location_end=point_or_none(q.seeker_location_end),
-            answer=q.answer,
-            answered_at=q.answered_at,
-            hider_location=point_or_none(q.hider_location),
-            hider_feature_id=q.feature_params.hider_feature_id if q.feature_params else None,
-            hider_feature_name=q.feature_params.hider_feature_name if q.feature_params else None,
-            hider_distance=q.feature_params.hider_distance if q.feature_params else None,
+    history = []
+    for q in all_questions:
+        if q.status not in _TERMINAL_STATUSES:
+            continue
+        fp = q.feature_params
+        tp = q.tentacle_params
+        if fp:
+            hider_fid = fp.hider_feature_id
+            hider_fname = fp.hider_feature_name
+            hider_dist = fp.hider_distance
+        elif tp and tp.hider_feature_id:
+            hider_fid = tp.hider_feature_id
+            try:
+                idx = list(tp.poi_ids).index(tp.hider_feature_id)
+                hider_fname = list(tp.poi_names)[idx]
+            except (ValueError, IndexError):
+                hider_fname = None
+            hider_dist = None
+        else:
+            hider_fid = None
+            hider_fname = None
+            hider_dist = None
+        history.append(
+            HiderQuestionHistoryEntry(
+                question_id=q.id,
+                sequence=q.sequence,
+                question_type=q.question_type,
+                status=q.status,
+                ask_count=q.ask_count,
+                asked_by=q.asked_by,
+                asked_at=q.asked_at,
+                slot_index=q.slot_index,
+                parameters=build_question_params(q),
+                seeker_location_start=GeoJSONPoint(**mapping(q.seeker_location_start)),
+                seeker_location_end=point_or_none(q.seeker_location_end),
+                answer=q.answer,
+                answered_at=q.answered_at,
+                hider_location=point_or_none(q.hider_location),
+                hider_feature_id=hider_fid,
+                hider_feature_name=hider_fname,
+                hider_distance=hider_dist,
+            )
         )
-        for q in all_questions
-        if q.status in _TERMINAL_STATUSES
-    ]
 
     return HiderGameStateResponse(
         game_id=game.id,

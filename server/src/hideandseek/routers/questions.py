@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from geojson_pydantic import Point as GeoJSONPoint
 from shapely.geometry import Point as ShapelyPoint
+from shapely.geometry import mapping
 
 from hideandseek.dependencies import (
     get_game,
@@ -18,6 +19,7 @@ from hideandseek.schemas.request import AskQuestionRequest
 from hideandseek.schemas.response import (
     FeaturePreviewResponse,
     PreviewQuestionResponse,
+    TentaclePOIPreviewResponse,
 )
 from hideandseek.validators import (
     validate_abandon_request,
@@ -42,6 +44,7 @@ from hideandseek_core.logic.answer import (
     answer_matching,
     answer_measuring,
     answer_radar,
+    answer_tentacles,
     answer_thermometer,
     schedule_veto,
     veto_immediate,
@@ -50,6 +53,7 @@ from hideandseek_core.logic.ask import (
     ask_matching,
     ask_measuring,
     ask_radar,
+    ask_tentacles,
     ask_thermometer,
     lock_in_thermometer,
 )
@@ -255,6 +259,49 @@ def ask_measuring_question(
     )
 
 
+@router.post('/questions/tentacles', status_code=204)
+def ask_tentacles_question(
+    body: AskQuestionRequest,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_seeker_in_game),
+) -> None:
+    """Ask a tentacles question about a POI category."""
+    _validate_can_ask(game)
+    seeker_location = _record_seeker_location(body.location, player, game)
+
+    slot = validate_slot_request(
+        body.slot_index, body.custom_distance, game, QuestionType.tentacles
+    )
+
+    try:
+        question = ask_tentacles(game, player, seeker_location, slot)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    _schedule_auto_answer(game, question.id)
+
+    tp = question.tentacle_params
+    assert tp is not None
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.question_asked,
+        role_filter='hider',
+        alert=(
+            f'A tentacles question about {tp.category} has been asked. '
+            f'Your answer timer is running.'
+        ),
+        question_id=str(question.id),
+        question_type=QuestionType.tentacles,
+        question_status=QuestionStatus.answerable,
+    )
+
+    emit_gameplay(
+        QuestionAskedEvent.from_question(
+            question, base_question_delay_min=game.base_question_delay_min
+        )
+    )
+
+
 # ── Preview ─────────────────────────────────────────────────────────────
 
 
@@ -314,7 +361,22 @@ def preview_question_endpoint(
             distance=result.feature_distance or 0.0,
         )
 
-    return PreviewQuestionResponse(boundary=boundary_geojson, feature_preview=feature_preview)
+    tentacle_pois = None
+    if result.tentacle_pois is not None:
+        tentacle_pois = [
+            TentaclePOIPreviewResponse(
+                feature_id=p.feature_id,
+                name=p.name,
+                location=GeoJSONPoint(**mapping(p.location)),
+            )
+            for p in result.tentacle_pois
+        ]
+
+    return PreviewQuestionResponse(
+        boundary=boundary_geojson,
+        feature_preview=feature_preview,
+        tentacle_pois=tentacle_pois,
+    )
 
 
 # ── Lock-in and answer ───────────────────────────────────────────────────
@@ -378,6 +440,8 @@ def answer_question(
         answer_matching(question, game)
     elif question.question_type == QuestionType.measuring:
         answer_measuring(question, game)
+    elif question.question_type == QuestionType.tentacles:
+        answer_tentacles(question, game)
     else:
         raise HTTPException(
             status_code=422, detail=f'Unsupported question type: {question.question_type}'

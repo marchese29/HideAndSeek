@@ -428,6 +428,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/questions/tentacles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Tentacles Question
+         * @description Ask a tentacles question about a POI category.
+         */
+        post: operations["ask_tentacles_question_games__game_id__questions_tentacles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/questions/preview": {
         parameters: {
             query?: never;
@@ -894,6 +914,11 @@ export interface components {
              * @description Measuring question slots.
              */
             measuring_slots: components["schemas"]["SlotResponse"][];
+            /**
+             * Tentacles Slots
+             * @description Tentacles question slots.
+             */
+            tentacles_slots: components["schemas"]["SlotResponse"][];
         };
         /**
          * JoinGameRequest
@@ -1319,12 +1344,17 @@ export interface components {
             boundary: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
             /** @description Resolved feature info. Present for matching and measuring question types. */
             feature_preview?: components["schemas"]["FeaturePreviewResponse"] | null;
+            /**
+             * Tentacle Pois
+             * @description In-circle POIs for a tentacles question preview.
+             */
+            tentacle_pois?: components["schemas"]["TentaclePOIPreviewResponse"][] | null;
         };
         /**
          * QuestionType
          * @enum {string}
          */
-        QuestionType: "radar" | "thermometer" | "matching" | "measuring";
+        QuestionType: "radar" | "thermometer" | "matching" | "measuring" | "tentacles";
         /**
          * RemovePlayerRequest
          * @description Body for DELETE /games/{game_id}/players/{player_id}.
@@ -1433,6 +1463,24 @@ export interface components {
             /** @description GeoJSON Point. */
             coordinates: components["schemas"]["Point"];
         };
+        /**
+         * TentaclePOIPreviewResponse
+         * @description A POI in a tentacles question preview.
+         */
+        TentaclePOIPreviewResponse: {
+            /**
+             * Feature Id
+             * @description Stable identifier of the POI.
+             */
+            feature_id: string;
+            /**
+             * Name
+             * @description Human-readable name.
+             */
+            name: string;
+            /** @description GeoJSON Point location of the POI. */
+            location: components["schemas"]["Point"];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1445,17 +1493,6 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
-        };
-        /**
-         * GameHostChangedEvent
-         * @description Host transferred during active gameplay — both channels.
-         */
-        GameHostChangedEvent: {
-            /**
-             * New Host Player Id
-             * Format: uuid
-             */
-            new_host_player_id: string;
         };
         /**
          * QuestionStatus
@@ -1602,6 +1639,37 @@ export interface components {
             radius: number;
         };
         /**
+         * TentacleEventParams
+         * @description Tentacles question parameters — category, distance, and in-circle POIs.
+         */
+        TentacleEventParams: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tentacles";
+            /**
+             * Category
+             * @description POI category (e.g. museum, hospital).
+             */
+            category: string;
+            /**
+             * Distance
+             * @description Tentacle distance in convention units.
+             */
+            distance: number;
+            /**
+             * Poi Ids
+             * @description Stable IDs of POIs within the distance circle.
+             */
+            poi_ids: string[];
+            /**
+             * Poi Names
+             * @description Human-readable names, matching poi_ids order.
+             */
+            poi_names: string[];
+        };
+        /**
          * ThermometerEventParams
          * @description Thermometer question parameters.
          */
@@ -1634,7 +1702,7 @@ export interface components {
             /** Slot Index */
             slot_index: number;
             /** Parameters */
-            parameters: components["schemas"]["RadarEventParams"] | components["schemas"]["ThermometerEventParams"] | components["schemas"]["FeatureEventParams"];
+            parameters: components["schemas"]["RadarEventParams"] | components["schemas"]["ThermometerEventParams"] | components["schemas"]["FeatureEventParams"] | components["schemas"]["TentacleEventParams"];
             seeker_location_start: components["schemas"]["Point"];
             /**
              * Asked At
@@ -1716,6 +1784,17 @@ export interface components {
              * Format: uuid
              */
             player_id: string;
+        };
+        /**
+         * GameHostChangedEvent
+         * @description Host transferred during active gameplay — both channels.
+         */
+        GameHostChangedEvent: {
+            /**
+             * New Host Player Id
+             * Format: uuid
+             */
+            new_host_player_id: string;
         };
         /**
          * GameDissolvedEvent
@@ -1884,7 +1963,7 @@ export interface components {
              * Parameters
              * @description Type-specific question parameters.
              */
-            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"];
+            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"] | components["schemas"]["TentacleParamsResponse"];
             /** @description GeoJSON Point — seeker position when asked. */
             seeker_location_start: components["schemas"]["Point"];
             /**
@@ -1944,6 +2023,45 @@ export interface components {
              * @description Radar radius in convention units.
              */
             radius: number;
+        };
+        /**
+         * TentacleParamsResponse
+         * @description Parameters for a tentacles question.
+         */
+        TentacleParamsResponse: {
+            /**
+             * Type
+             * @default tentacles
+             * @constant
+             */
+            type: "tentacles";
+            /**
+             * Category
+             * @description POI category.
+             */
+            category: string;
+            /**
+             * Poi Ids
+             * @description Stable IDs of POIs within the distance circle.
+             */
+            poi_ids: string[];
+            /**
+             * Poi Names
+             * @description Human-readable names, matching poi_ids order.
+             */
+            poi_names: string[];
+            /**
+             * Hit
+             * @description True if hider was in range (populated at answer time).
+             * @default null
+             */
+            hit: boolean | null;
+            /**
+             * Hider Feature Id
+             * @description Stable ID of the nearest POI on hit (populated at answer time).
+             * @default null
+             */
+            hider_feature_id: string | null;
         };
         /**
          * ThermometerParamsResponse
@@ -3027,6 +3145,42 @@ export interface operations {
         };
     };
     ask_measuring_question_games__game_id__questions_measuring_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_tentacles_question_games__game_id__questions_tentacles_post: {
         parameters: {
             query?: never;
             header: {

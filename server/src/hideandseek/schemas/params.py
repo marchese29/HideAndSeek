@@ -49,7 +49,24 @@ class FeatureParamsResponse(BaseModel):
     )
 
 
-QuestionParamsResponse = RadarParamsResponse | ThermometerParamsResponse | FeatureParamsResponse
+class TentacleParamsResponse(BaseModel):
+    """Parameters for a tentacles question."""
+
+    type: Literal['tentacles'] = 'tentacles'
+    category: str = Field(description='POI category.')
+    poi_ids: list[str] = Field(description='Stable IDs of POIs within the distance circle.')
+    poi_names: list[str] = Field(description='Human-readable names, matching poi_ids order.')
+    hit: bool | None = Field(
+        default=None, description='True if hider was in range (populated at answer time).'
+    )
+    hider_feature_id: str | None = Field(
+        default=None, description='Stable ID of the nearest POI on hit (populated at answer time).'
+    )
+
+
+QuestionParamsResponse = (
+    RadarParamsResponse | ThermometerParamsResponse | FeatureParamsResponse | TentacleParamsResponse
+)
 
 
 def build_question_params(question: QuestionModel) -> QuestionParamsResponse:
@@ -62,6 +79,16 @@ def build_question_params(question: QuestionModel) -> QuestionParamsResponse:
         tp = question.thermometer_params
         assert tp is not None
         return ThermometerParamsResponse(min_travel=tp.min_travel)
+    elif question.question_type == QuestionType.tentacles:
+        tp = question.tentacle_params
+        assert tp is not None
+        return TentacleParamsResponse(
+            category=str(tp.category),
+            poi_ids=list(tp.poi_ids),
+            poi_names=list(tp.poi_names),
+            hit=tp.hit,
+            hider_feature_id=tp.hider_feature_id,
+        )
     else:
         fp = question.feature_params
         assert fp is not None

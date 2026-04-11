@@ -373,6 +373,14 @@ class FeaturePreviewResponse(BaseModel):
     distance: float = Field(description='Distance in convention units from the query location.')
 
 
+class TentaclePOIPreviewResponse(BaseModel):
+    """A POI in a tentacles question preview."""
+
+    feature_id: str = Field(description='Stable identifier of the POI.')
+    name: str = Field(description='Human-readable name.')
+    location: GeoJSONPoint = Field(description='GeoJSON Point location of the POI.')
+
+
 class PreviewQuestionResponse(BaseModel):
     """Boundary geometry and optional feature info for a question preview."""
 
@@ -382,6 +390,10 @@ class PreviewQuestionResponse(BaseModel):
     feature_preview: FeaturePreviewResponse | None = Field(
         default=None,
         description='Resolved feature info. Present for matching and measuring question types.',
+    )
+    tentacle_pois: list[TentaclePOIPreviewResponse] | None = Field(
+        default=None,
+        description='In-circle POIs for a tentacles question preview.',
     )
 
 
