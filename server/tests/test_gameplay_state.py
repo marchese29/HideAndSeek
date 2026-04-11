@@ -8,6 +8,7 @@ from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
 from hideandseek.queries.game_state import (
+    build_game_info,
     build_hider_game_state,
     build_seeker_game_state,
 )
@@ -74,22 +75,11 @@ class TestBuildHiderGameState:
 
         assert state.game_id == game.id
         assert state.phase == GameStatus.hiding
-        assert state.hiding_time_min == game.hiding_time_min
         assert state.hiding_started_at == game.hiding_started_at
         assert state.seeking_started_at is None
-        assert state.base_question_delay_min == game.base_question_delay_min
-        assert state.distance_convention == game.game_map.convention
         assert state.self_player_id == hider.id
         assert state.station_election_status == StationElectionStatus.pending
         assert state.hider_station_id is None
-
-    def test_boundary_and_districts(self, session: Session) -> None:
-        game, hider, _seeker, _ds = _create_active_game(session)
-        state = build_hider_game_state(game, hider)
-
-        assert state.boundary is not None
-        assert state.boundary.type == 'MultiPolygon'
-        assert isinstance(state.districts, list)
 
     def test_players_with_locations(self, session: Session) -> None:
         game, hider, seeker, _ds = _create_active_game(session)
@@ -117,16 +107,6 @@ class TestBuildHiderGameState:
         hider_entry = next(h for h in state.hiders if h.id == hider.id)
         assert hider_entry.coordinates is None
         assert hider_entry.timestamp is None
-
-    def test_stops_populated(self, session: Session) -> None:
-        game, hider, _seeker, ds = _create_active_game(session)
-
-        # Create a stop inside the boundary (0,0 to 1,1)
-        create_stop(session, ds.id, coordinates=Point(0.5, 0.5), name='Central Station')
-
-        state = build_hider_game_state(game, hider)
-        assert len(state.stops) == 1
-        assert state.stops[0].name == 'Central Station'
 
     def test_no_active_question(self, session: Session) -> None:
         game, hider, _seeker, _ds = _create_active_game(session)
@@ -222,6 +202,45 @@ class TestBuildHiderGameState:
         state = build_hider_game_state(game, hider)
         assert len(state.question_history) == 1
         assert state.active_question is not None
+
+
+# ── Static Game Info Tests ──────────────────────────────────────────────────
+
+
+class TestBuildGameInfo:
+    """Tests for build_game_info static snapshot assembly."""
+
+    def test_static_fields(self, session: Session) -> None:
+        game, _hider, _seeker, _ds = _create_active_game(session)
+        info = build_game_info(game)
+
+        assert info.game_id == game.id
+        assert info.hiding_time_min == game.hiding_time_min
+        assert info.base_question_delay_min == game.base_question_delay_min
+        assert info.distance_convention == game.game_map.convention
+        assert info.boundary is not None
+        assert info.boundary.type == 'MultiPolygon'
+        assert isinstance(info.districts, list)
+
+    def test_stops_populated(self, session: Session) -> None:
+        game, _hider, _seeker, ds = _create_active_game(session)
+        create_stop(session, ds.id, coordinates=Point(0.5, 0.5), name='Central Station')
+
+        info = build_game_info(game)
+        assert len(info.stops) == 1
+        assert info.stops[0].name == 'Central Station'
+
+    def test_json_serializable(self, session: Session) -> None:
+        game, _hider, _seeker, ds = _create_active_game(session)
+        create_stop(session, ds.id, coordinates=Point(0.5, 0.5))
+
+        info = build_game_info(game)
+        data = info.model_dump(mode='json')
+        assert isinstance(data, dict)
+        assert data['game_id'] == str(game.id)
+        assert 'boundary' in data
+        assert 'stops' in data
+        assert 'routes' in data
 
 
 # ── Seeker Snapshot Tests ───────────────────────────────────────────────────

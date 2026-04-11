@@ -23,6 +23,7 @@ from hideandseek.dependencies import (
     get_player_in_game,
     get_seeker_in_game,
 )
+from hideandseek.queries.game_state import build_game_info
 from hideandseek.schemas.request import (
     CreateGameRequest,
     ElectStationRequest,
@@ -32,6 +33,7 @@ from hideandseek.schemas.request import (
 )
 from hideandseek.schemas.response import (
     EffectiveMapResponse,
+    GameInfoResponse,
     GameResponse,
     HidingZoneResponse,
     InventoryResponse,
@@ -186,6 +188,15 @@ def get_session_info(
 ) -> SessionResponse:
     """Validate stored session credentials. Returns player info and game status."""
     return SessionResponse(player=PlayerResponse.from_model(player), game_status=game.status)
+
+
+@router.get('/{game_id}/info', response_model=GameInfoResponse)
+def get_game_info(
+    game: Game = Depends(get_game),
+    _player: Player = Depends(get_player_in_game),
+) -> GameInfoResponse:
+    """Static game info — map geometry, transit data, timing config. Fetched once on game entry."""
+    return build_game_info(game)
 
 
 @router.get('/{game_id}/inventory', response_model=InventoryResponse)

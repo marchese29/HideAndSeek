@@ -7,6 +7,7 @@ import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
 import { QuestionBanner } from '@/components/question-banner';
 import { UtilityBelt } from '@/components/utility-belt';
+import { useGameInfo } from '@/hooks/useGameInfo';
 import { useGameplayEvents } from '@/hooks/useGameplayEvents';
 import { useLocationTracking } from '@/hooks/useLocationTracking';
 import { useGameplayStore } from '@/stores/gameplayStore';
@@ -15,6 +16,7 @@ export default function GameplayScreen() {
   const { game_id } = useLocalSearchParams<{ game_id: string }>();
   const { connected } = useGameplayEvents(game_id);
   const { permissionDenied } = useLocationTracking(game_id);
+  const { gameInfo } = useGameInfo(game_id);
   const status = useGameplayStore((s) => s.status);
   const role = useGameplayStore((s) => s.role);
   const state = useGameplayStore((s) => s.state);
@@ -25,23 +27,25 @@ export default function GameplayScreen() {
     return () => sub.remove();
   }, []);
 
+  const ready = status === 'connected' && role && state && gameInfo;
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {status === 'connecting' || !role || !state ? (
+      {!ready ? (
         <View style={styles.loading}>
           <ActivityIndicator size="large" color="#7F8C8D" />
         </View>
       ) : (
-        <GameMap role={role} state={state} />
+        <GameMap role={role} state={state} gameInfo={gameInfo} />
       )}
 
       {permissionDenied && <LocationDeniedBanner />}
 
       {/* Banner + belt wrapper: banner overlays above the belt */}
-      {role && state && (
+      {ready && (
         <View style={styles.beltWrapper}>
           <QuestionBanner role={role} gameId={game_id} connected={connected} />
-          <UtilityBelt role={role} state={state} connected={connected} />
+          <UtilityBelt role={role} state={state} gameInfo={gameInfo} connected={connected} />
         </View>
       )}
     </SafeAreaView>

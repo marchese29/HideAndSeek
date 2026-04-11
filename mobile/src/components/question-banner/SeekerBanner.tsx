@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import { abandonQuestion, lockInThermometer } from '@/api/questions';
+import { useGameInfo } from '@/hooks/useGameInfo';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
@@ -75,9 +76,8 @@ export const SeekerBanner = memo(function SeekerBanner({
   const inventory = useGameplayStore((s) =>
     s.status === 'connected' && s.role === 'seeker' ? s.state.inventory : EMPTY_INVENTORY,
   );
-  const convention = useGameplayStore((s) =>
-    s.status === 'connected' ? s.state.distance_convention : 'imperial',
-  );
+  const { gameInfo } = useGameInfo(gameId);
+  const convention = gameInfo?.distance_convention ?? 'imperial';
   const selfLocation = useGameplayStore((s) => s.selfLocation);
   const { tentaclePois } = usePreviewBoundary();
 

@@ -93,6 +93,10 @@ export type RouteResponse = S['RouteResponse'];
 
 export type InventorySlotResponse = S['InventorySlotResponse'];
 
+// ── Static Game Info ────────────────────────────────────────────────────────
+
+export type GameInfo = S['GameInfoResponse'];
+
 // ── Game State Snapshots ─────────────────────────────────────────────────────
 
 export type HiderGameState = S['HiderGameStateResponse'];

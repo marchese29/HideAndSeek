@@ -1,4 +1,4 @@
-"""Build gameplay state snapshots for SSE endpoints."""
+"""Build static game info and dynamic gameplay state snapshots."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from shapely.geometry import mapping
 
 from hideandseek.schemas.params import build_question_params
 from hideandseek.schemas.response import (
+    GameInfoResponse,
     GamePlayer,
     HiderActiveQuestion,
     HiderGameStateResponse,
@@ -45,12 +46,28 @@ def _compute_deadline(answerable_at: datetime | None, delay_min: int) -> datetim
     return answerable_at + timedelta(minutes=delay_min)
 
 
-def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse:
-    """Assemble the full hider state snapshot from DB."""
+def build_game_info(game: Game) -> GameInfoResponse:
+    """Assemble the static game info response — map geometry, transit, timing."""
     game_map = game.game_map
-    locations = get_all_player_locations(game)
     stops = get_playable_stops(game)
     routes = get_gameplay_routes(game)
+    return GameInfoResponse(
+        game_id=game.id,
+        distance_convention=game_map.convention,
+        boundary=GeoJSONMultiPolygon(**mapping(game_map.boundary)),
+        districts=game_map.districts,
+        stops=[StopResponse.from_model(s) for s in stops],
+        routes=[
+            RouteResponse.from_gameplay_route(r.route, r.clipped_shape, r.stop_ids) for r in routes
+        ],
+        hiding_time_min=game.hiding_time_min,
+        base_question_delay_min=game.base_question_delay_min,
+    )
+
+
+def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse:
+    """Assemble the dynamic hider state snapshot from DB."""
+    locations = get_all_player_locations(game)
     active_q = get_active_question(game)
     all_questions = list_questions(game)
 
@@ -132,17 +149,8 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
     return HiderGameStateResponse(
         game_id=game.id,
         phase=game.status,
-        hiding_time_min=game.hiding_time_min,
         hiding_started_at=game.hiding_started_at,
         seeking_started_at=game.seeking_started_at,
-        base_question_delay_min=game.base_question_delay_min,
-        distance_convention=game_map.convention,
-        boundary=GeoJSONMultiPolygon(**mapping(game_map.boundary)),
-        districts=game_map.districts,
-        stops=[StopResponse.from_model(s) for s in stops],
-        routes=[
-            RouteResponse.from_gameplay_route(r.route, r.clipped_shape, r.stop_ids) for r in routes
-        ],
         self_player_id=player.id,
         host_player_id=game.host_player_id,
         hiders=hiders,
@@ -155,11 +163,8 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
 
 
 def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateResponse:
-    """Assemble the full seeker state snapshot from DB."""
-    game_map = game.game_map
+    """Assemble the dynamic seeker state snapshot from DB."""
     locations = get_all_player_locations(game)
-    stops = get_playable_stops(game)
-    routes = get_gameplay_routes(game)
     active_q = get_active_question(game)
     all_questions = list_questions(game)
     total_exclusion = get_latest_total_exclusion(game)
@@ -237,17 +242,8 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
     return SeekerGameStateResponse(
         game_id=game.id,
         phase=game.status,
-        hiding_time_min=game.hiding_time_min,
         hiding_started_at=game.hiding_started_at,
         seeking_started_at=game.seeking_started_at,
-        base_question_delay_min=game.base_question_delay_min,
-        distance_convention=game_map.convention,
-        boundary=GeoJSONMultiPolygon(**mapping(game_map.boundary)),
-        districts=game_map.districts,
-        stops=[StopResponse.from_model(s) for s in stops],
-        routes=[
-            RouteResponse.from_gameplay_route(r.route, r.clipped_shape, r.stop_ids) for r in routes
-        ],
         self_player_id=player.id,
         host_player_id=game.host_player_id,
         hiders=hiders,

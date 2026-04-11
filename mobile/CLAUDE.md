@@ -45,6 +45,7 @@ src/
     colors.ts                  # PlayerColor → hex mapping
   hooks/
     useCountdownTimer.ts       # Countdown timer to an ISO deadline (question deadline display)
+    useGameInfo.ts             # Static game info (TanStack Query, fetched once, staleTime=Infinity)
     useGameplayEvents.ts       # Gameplay SSE (role-aware endpoint, hydrates GameplayStore)
     useGameTimer.ts            # 1s-tick timer: countdown (hiding) / elapsed (seeking)
     useLocationTracking.ts     # Foreground GPS tracking + POST /location + optimistic self update
@@ -117,8 +118,8 @@ Copy `.env.example` to `.env` and fill in values.
 ## State Management
 
 - **Zustand — AppStore** (`src/store.ts`) — session context. `gameId`, `playerId`, `playerSecret`, `role` (all null initially; credentials set on create/join, role set on game start, all cleared on leave/kick). Also holds transient `pushToken` + `pushProvider` (not persisted to AsyncStorage — re-fetched each launch). Credentials are per-game and server-minted — returned in `JoinGameResponse`. Does NOT hold game data.
-- **Zustand — GameplayStore** (`src/stores/gameplayStore.ts`) — gameplay state hydrated from SSE. Not persisted — rebuilt from the SSE snapshot on every connection. Discriminated union: `{ status: 'connecting' }` or `{ status: 'connected', role, state }`. The `hydrate()` action replaces state from a `game_state` SSE event; `reset()` reverts to connecting. State includes `host_player_id` for leave/host-transfer UI. Used by `useGameplayEvents` hook.
-- **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (lobby game state, maps). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for lobby game state. Gameplay state uses the GameplayStore instead (SSE deltas mutate nested state that doesn't fit the query cache model).
+- **Zustand — GameplayStore** (`src/stores/gameplayStore.ts`) — **dynamic** gameplay state hydrated from SSE. Not persisted — rebuilt from the SSE snapshot on every connection. Discriminated union: `{ status: 'connecting' }` or `{ status: 'connected', role, state }`. The `hydrate()` action replaces state from a `game_state` SSE event; `reset()` reverts to connecting. State includes `host_player_id` for leave/host-transfer UI. Does NOT include static map data (boundary, stops, routes, timing) — that's in TanStack Query via `useGameInfo`. Used by `useGameplayEvents` hook.
+- **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (lobby game state, maps, static game info). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for lobby game state and static game info (`useGameInfo` hook, `staleTime: Infinity`). Dynamic gameplay state uses the GameplayStore instead (SSE deltas mutate nested state that doesn't fit the query cache model).
 - `X-Player-Id` and `X-Player-Secret` headers are injected at runtime via `api.use()` middleware in `client.ts` (only when credentials exist). For endpoints where the OpenAPI spec declares these as required header parameters, also pass `header: authHeader()` in the `params` object to satisfy TypeScript types. Import `authHeader` from `@/api/auth`. `POST /games` and `POST /games/join` do not require auth headers (they mint fresh credentials).
 - API base URL is platform-aware: `localhost:8000` for iOS simulator, `10.0.2.2:8000` for Android emulator. Override via `EXPO_PUBLIC_API_BASE_URL`.
 
@@ -188,7 +189,7 @@ Both hooks:
 
 ## SSE Delta Events
 
-- **`game_state`**: Full snapshot on connect — `hydrate()` replaces entire `GameplayStore` state.
+- **`game_state`**: Dynamic-only snapshot on connect — `hydrate()` replaces entire `GameplayStore` state. Static data (boundary, stops, routes, timing, convention) is NOT in this event — it's fetched once via `GET /games/{id}/info` and cached by `useGameInfo`.
 - **`player_location`**: Real-time position delta — `updatePlayerLocation()` patches a single player's coordinates in the `hiders`/`seekers` arrays without replacing the full state. For seeker state, only `seekers` is patched (hiders are `RosterPlayer[]` with no coordinates).
 - **`phase_changed`**: Hiding-to-seeking transition — `applyPhaseChanged()` patches `phase`, `seeking_started_at`, and (hider only) `station_election_status` + `hider_station_id`.
 - **`question_asked`**: New question — `setActiveQuestion()` constructs the role-appropriate active question from the delta. `question_deadline` comes from the server (authoritative). Clears `previewQuestion`. Seeker store also persists `parameters` and `seeker_location_start` for thermometer lock-in distance validation (absent after SSE reconnection — gracefully falls back to enabled).

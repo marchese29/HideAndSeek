@@ -9,7 +9,7 @@ import { TentaclePOIOverlay } from '@/components/TentaclePOIOverlay';
 import { TransitRoute } from '@/components/TransitRoute';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { GamePlayer, HiderGameState, SeekerGameState } from '@/types/gameplay';
+import type { GameInfo, GamePlayer, HiderGameState, SeekerGameState } from '@/types/gameplay';
 import { regionFromBoundary } from '@/utils/geo';
 
 const STALE_THRESHOLD_MS = 60_000;
@@ -25,6 +25,7 @@ function isTimestampStale(timestamp: string | null): boolean {
 interface GameMapProps {
   role: 'hider' | 'seeker';
   state: HiderGameState | SeekerGameState;
+  gameInfo: GameInfo;
 }
 
 interface PlayerEntry {
@@ -33,8 +34,8 @@ interface PlayerEntry {
   isHider: boolean;
 }
 
-export function GameMap({ role, state }: GameMapProps) {
-  const initialRegion = useMemo(() => regionFromBoundary(state.boundary), [state.boundary]);
+export function GameMap({ role, state, gameInfo }: GameMapProps) {
+  const initialRegion = useMemo(() => regionFromBoundary(gameInfo.boundary), [gameInfo.boundary]);
   const selfLocation = useGameplayStore((s) => s.selfLocation);
   const {
     boundary: previewBoundary,
@@ -108,9 +109,9 @@ export function GameMap({ role, state }: GameMapProps) {
 
   return (
     <MapView style={{ flex: 1 }} initialRegion={initialRegion} onPress={() => {}}>
-      <BoundaryOverlay boundary={state.boundary} />
-      {state.routes.map((route) => (
-        <TransitRoute key={route.id} route={route} stops={state.stops} />
+      <BoundaryOverlay boundary={gameInfo.boundary} />
+      {gameInfo.routes.map((route) => (
+        <TransitRoute key={route.id} route={route} stops={gameInfo.stops} />
       ))}
       {players.map(({ player, isSelf, isHider, isStale, index, stackCount }) => (
         <PlayerPin

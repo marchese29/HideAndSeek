@@ -623,6 +623,19 @@ class InventorySlotResponse(BaseModel):
     ask_count: int = Field(description='Number of times this slot has been used.')
 
 
+class GameInfoResponse(BaseModel):
+    """Static game info — map geometry, transit data, timing config. Never changes mid-game."""
+
+    game_id: uuid.UUID
+    distance_convention: str = Field(description='metric or imperial.')
+    boundary: GeoJSONMultiPolygon = Field(description='Game map boundary.')
+    districts: list = Field(description='District boundaries.')
+    stops: list[StopResponse] = Field(description='All playable stops.')
+    routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
+    hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
+    base_question_delay_min: int = Field(description='Auto-answer timer duration in minutes.')
+
+
 class SSEExposed:
     """Mixin marking a Pydantic schema for OpenAPI injection (SSE-only, not on REST routes)."""
 
@@ -639,19 +652,12 @@ class SSEExposed:
 
 
 class HiderGameStateResponse(SSEExposed, BaseModel):
-    """Full hider state snapshot — delivered as initial SSE event."""
+    """Dynamic hider state snapshot — delivered as initial SSE event on connect."""
 
     game_id: uuid.UUID
     phase: str = Field(description='Current phase: hiding or seeking.')
-    hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
     hiding_started_at: datetime | None
     seeking_started_at: datetime | None
-    base_question_delay_min: int = Field(description='Auto-answer timer duration in minutes.')
-    distance_convention: str = Field(description='metric or imperial.')
-    boundary: GeoJSONMultiPolygon = Field(description='Game map boundary.')
-    districts: list = Field(description='District boundaries.')
-    stops: list[StopResponse] = Field(description='All playable stops.')
-    routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
     self_player_id: uuid.UUID = Field(description="Caller's player ID.")
     host_player_id: uuid.UUID = Field(description="Player ID of the game's host.")
     hiders: list[GamePlayer] = Field(description='All hiders with last known positions.')
@@ -667,19 +673,12 @@ class HiderGameStateResponse(SSEExposed, BaseModel):
 
 
 class SeekerGameStateResponse(SSEExposed, BaseModel):
-    """Full seeker state snapshot — delivered as initial SSE event."""
+    """Dynamic seeker state snapshot — delivered as initial SSE event on connect."""
 
     game_id: uuid.UUID
     phase: str = Field(description='Current phase: hiding or seeking.')
-    hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
     hiding_started_at: datetime | None
     seeking_started_at: datetime | None
-    base_question_delay_min: int = Field(description='Auto-answer timer duration in minutes.')
-    distance_convention: str = Field(description='metric or imperial.')
-    boundary: GeoJSONMultiPolygon = Field(description='Game map boundary.')
-    districts: list = Field(description='District boundaries.')
-    stops: list[StopResponse] = Field(description='All playable stops.')
-    routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
     self_player_id: uuid.UUID = Field(description="Caller's player ID.")
     host_player_id: uuid.UUID = Field(description="Player ID of the game's host.")
     hiders: list[RosterPlayer] = Field(description='Hiders — identity only, no location.')

@@ -124,6 +124,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Game Info
+         * @description Static game info — map geometry, transit data, timing config. Fetched once on game entry.
+         */
+        get: operations["get_game_info_games__game_id__info_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/inventory": {
         parameters: {
             query?: never;
@@ -776,6 +796,49 @@ export interface components {
              * @description Distance in convention units from the query location.
              */
             distance: number;
+        };
+        /**
+         * GameInfoResponse
+         * @description Static game info — map geometry, transit data, timing config. Never changes mid-game.
+         */
+        GameInfoResponse: {
+            /**
+             * Game Id
+             * Format: uuid
+             */
+            game_id: string;
+            /**
+             * Distance Convention
+             * @description metric or imperial.
+             */
+            distance_convention: string;
+            /** @description Game map boundary. */
+            boundary: components["schemas"]["MultiPolygon"];
+            /**
+             * Districts
+             * @description District boundaries.
+             */
+            districts: unknown[];
+            /**
+             * Stops
+             * @description All playable stops.
+             */
+            stops: components["schemas"]["StopResponse"][];
+            /**
+             * Routes
+             * @description Transit routes with shapes and stop IDs.
+             */
+            routes: components["schemas"]["RouteResponse"][];
+            /**
+             * Hiding Time Min
+             * @description Hiding phase duration in minutes.
+             */
+            hiding_time_min: number;
+            /**
+             * Base Question Delay Min
+             * @description Auto-answer timer duration in minutes.
+             */
+            base_question_delay_min: number;
         };
         /**
          * GameResponse
@@ -2082,7 +2145,7 @@ export interface components {
         };
         /**
          * HiderGameStateResponse
-         * @description Full hider state snapshot — delivered as initial SSE event.
+         * @description Dynamic hider state snapshot — delivered as initial SSE event on connect.
          */
         HiderGameStateResponse: {
             /**
@@ -2095,42 +2158,10 @@ export interface components {
              * @description Current phase: hiding or seeking.
              */
             phase: string;
-            /**
-             * Hiding Time Min
-             * @description Hiding phase duration in minutes.
-             */
-            hiding_time_min: number;
             /** Hiding Started At */
             hiding_started_at: string | null;
             /** Seeking Started At */
             seeking_started_at: string | null;
-            /**
-             * Base Question Delay Min
-             * @description Auto-answer timer duration in minutes.
-             */
-            base_question_delay_min: number;
-            /**
-             * Distance Convention
-             * @description metric or imperial.
-             */
-            distance_convention: string;
-            /** @description Game map boundary. */
-            boundary: components["schemas"]["MultiPolygon"];
-            /**
-             * Districts
-             * @description District boundaries.
-             */
-            districts: unknown[];
-            /**
-             * Stops
-             * @description All playable stops.
-             */
-            stops: components["schemas"]["StopResponse"][];
-            /**
-             * Routes
-             * @description Transit routes with shapes and stop IDs.
-             */
-            routes: components["schemas"]["RouteResponse"][];
             /**
              * Self Player Id
              * Format: uuid
@@ -2317,7 +2348,7 @@ export interface components {
         };
         /**
          * SeekerGameStateResponse
-         * @description Full seeker state snapshot — delivered as initial SSE event.
+         * @description Dynamic seeker state snapshot — delivered as initial SSE event on connect.
          */
         SeekerGameStateResponse: {
             /**
@@ -2330,42 +2361,10 @@ export interface components {
              * @description Current phase: hiding or seeking.
              */
             phase: string;
-            /**
-             * Hiding Time Min
-             * @description Hiding phase duration in minutes.
-             */
-            hiding_time_min: number;
             /** Hiding Started At */
             hiding_started_at: string | null;
             /** Seeking Started At */
             seeking_started_at: string | null;
-            /**
-             * Base Question Delay Min
-             * @description Auto-answer timer duration in minutes.
-             */
-            base_question_delay_min: number;
-            /**
-             * Distance Convention
-             * @description metric or imperial.
-             */
-            distance_convention: string;
-            /** @description Game map boundary. */
-            boundary: components["schemas"]["MultiPolygon"];
-            /**
-             * Districts
-             * @description District boundaries.
-             */
-            districts: unknown[];
-            /**
-             * Stops
-             * @description All playable stops.
-             */
-            stops: components["schemas"]["StopResponse"][];
-            /**
-             * Routes
-             * @description Transit routes with shapes and stop IDs.
-             */
-            routes: components["schemas"]["RouteResponse"][];
             /**
              * Self Player Id
              * Format: uuid
@@ -2602,6 +2601,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_game_info_games__game_id__info_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameInfoResponse"];
                 };
             };
             /** @description Validation Error */

@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useQuestionSelection } from '@/hooks/useQuestionSelection';
-import type { HiderGameState, SeekerGameState } from '@/types/gameplay';
+import type { GameInfo, HiderGameState, SeekerGameState } from '@/types/gameplay';
 
 import { BeltActions } from './BeltActions';
 import { CustomDistanceInput } from './CustomDistanceInput';
@@ -14,10 +14,16 @@ import { StateAction } from './StateAction';
 interface UtilityBeltProps {
   role: 'hider' | 'seeker';
   state: HiderGameState | SeekerGameState;
+  gameInfo: GameInfo;
   connected: boolean;
 }
 
-export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }: UtilityBeltProps) {
+export const UtilityBelt = memo(function UtilityBelt({
+  role,
+  state,
+  gameInfo,
+  connected,
+}: UtilityBeltProps) {
   const stationElectionStatus =
     role === 'hider' ? (state as HiderGameState).station_election_status : undefined;
   const disabled = !connected;
@@ -61,7 +67,7 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
         <GameTimer
           phase={state.phase}
           hidingStartedAt={state.hiding_started_at}
-          hidingTimeMin={state.hiding_time_min}
+          hidingTimeMin={gameInfo.hiding_time_min}
           seekingStartedAt={state.seeking_started_at}
           connected={connected}
         />
@@ -80,7 +86,7 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
         {isSeekerSeeking && selection.state.step === 'param' && (
           <ParamPicker
             slots={selection.slotsForType}
-            convention={seekerState!.distance_convention}
+            convention={gameInfo.distance_convention}
             questionType={selection.state.questionType}
             selectedSlotIndex={selection.selectedSlotIndex}
             onSelectSlot={selection.selectSlot}
@@ -96,7 +102,7 @@ export const UtilityBelt = memo(function UtilityBelt({ role, state, connected }:
                 selection.state.step === 'custom' ? selection.state.questionType : '',
               )
             }
-            convention={seekerState!.distance_convention}
+            convention={gameInfo.distance_convention}
           />
         )}
       </View>

@@ -202,6 +202,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/info:
+    get:
+      tags:
+      - games
+      summary: Get Game Info
+      description: "Static game info \u2014 map geometry, transit data, timing config.\
+        \ Fetched once on game entry."
+      operationId: get_game_info_games__game_id__info_get
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameInfoResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/inventory:
     get:
       tags:
@@ -1588,6 +1630,57 @@ components:
       title: FeaturePreviewResponse
       description: Preview of the nearest/containing feature for a matching or measuring
         question.
+    GameInfoResponse:
+      properties:
+        game_id:
+          type: string
+          format: uuid
+          title: Game Id
+        distance_convention:
+          type: string
+          title: Distance Convention
+          description: metric or imperial.
+        boundary:
+          $ref: '#/components/schemas/MultiPolygon'
+          description: Game map boundary.
+        districts:
+          items: {}
+          type: array
+          title: Districts
+          description: District boundaries.
+        stops:
+          items:
+            $ref: '#/components/schemas/StopResponse'
+          type: array
+          title: Stops
+          description: All playable stops.
+        routes:
+          items:
+            $ref: '#/components/schemas/RouteResponse'
+          type: array
+          title: Routes
+          description: Transit routes with shapes and stop IDs.
+        hiding_time_min:
+          type: integer
+          title: Hiding Time Min
+          description: Hiding phase duration in minutes.
+        base_question_delay_min:
+          type: integer
+          title: Base Question Delay Min
+          description: Auto-answer timer duration in minutes.
+      type: object
+      required:
+      - game_id
+      - distance_convention
+      - boundary
+      - districts
+      - stops
+      - routes
+      - hiding_time_min
+      - base_question_delay_min
+      title: GameInfoResponse
+      description: "Static game info \u2014 map geometry, transit data, timing config.\
+        \ Never changes mid-game."
     GameResponse:
       properties:
         id:
@@ -3457,7 +3550,8 @@ components:
       title: ThermometerParamsResponse
       type: object
     HiderGameStateResponse:
-      description: "Full hider state snapshot \u2014 delivered as initial SSE event."
+      description: "Dynamic hider state snapshot \u2014 delivered as initial SSE event\
+        \ on connect."
       properties:
         game_id:
           format: uuid
@@ -3467,10 +3561,6 @@ components:
           description: 'Current phase: hiding or seeking.'
           title: Phase
           type: string
-        hiding_time_min:
-          description: Hiding phase duration in minutes.
-          title: Hiding Time Min
-          type: integer
         hiding_started_at:
           anyOf:
           - format: date-time
@@ -3483,34 +3573,6 @@ components:
             type: string
           - type: 'null'
           title: Seeking Started At
-        base_question_delay_min:
-          description: Auto-answer timer duration in minutes.
-          title: Base Question Delay Min
-          type: integer
-        distance_convention:
-          description: metric or imperial.
-          title: Distance Convention
-          type: string
-        boundary:
-          $ref: '#/components/schemas/MultiPolygon'
-          description: Game map boundary.
-        districts:
-          description: District boundaries.
-          items: {}
-          title: Districts
-          type: array
-        stops:
-          description: All playable stops.
-          items:
-            $ref: '#/components/schemas/StopResponse'
-          title: Stops
-          type: array
-        routes:
-          description: Transit routes with shapes and stop IDs.
-          items:
-            $ref: '#/components/schemas/RouteResponse'
-          title: Routes
-          type: array
         self_player_id:
           description: Caller's player ID.
           format: uuid
@@ -3558,15 +3620,8 @@ components:
       required:
       - game_id
       - phase
-      - hiding_time_min
       - hiding_started_at
       - seeking_started_at
-      - base_question_delay_min
-      - distance_convention
-      - boundary
-      - districts
-      - stops
-      - routes
       - self_player_id
       - host_player_id
       - hiders
@@ -3785,7 +3840,8 @@ components:
       title: SeekerQuestionHistoryEntry
       type: object
     SeekerGameStateResponse:
-      description: "Full seeker state snapshot \u2014 delivered as initial SSE event."
+      description: "Dynamic seeker state snapshot \u2014 delivered as initial SSE\
+        \ event on connect."
       properties:
         game_id:
           format: uuid
@@ -3795,10 +3851,6 @@ components:
           description: 'Current phase: hiding or seeking.'
           title: Phase
           type: string
-        hiding_time_min:
-          description: Hiding phase duration in minutes.
-          title: Hiding Time Min
-          type: integer
         hiding_started_at:
           anyOf:
           - format: date-time
@@ -3811,34 +3863,6 @@ components:
             type: string
           - type: 'null'
           title: Seeking Started At
-        base_question_delay_min:
-          description: Auto-answer timer duration in minutes.
-          title: Base Question Delay Min
-          type: integer
-        distance_convention:
-          description: metric or imperial.
-          title: Distance Convention
-          type: string
-        boundary:
-          $ref: '#/components/schemas/MultiPolygon'
-          description: Game map boundary.
-        districts:
-          description: District boundaries.
-          items: {}
-          title: Districts
-          type: array
-        stops:
-          description: All playable stops.
-          items:
-            $ref: '#/components/schemas/StopResponse'
-          title: Stops
-          type: array
-        routes:
-          description: Transit routes with shapes and stop IDs.
-          items:
-            $ref: '#/components/schemas/RouteResponse'
-          title: Routes
-          type: array
         self_player_id:
           description: Caller's player ID.
           format: uuid
@@ -3906,15 +3930,8 @@ components:
       required:
       - game_id
       - phase
-      - hiding_time_min
       - hiding_started_at
       - seeking_started_at
-      - base_question_delay_min
-      - distance_convention
-      - boundary
-      - districts
-      - stops
-      - routes
       - self_player_id
       - host_player_id
       - hiders
