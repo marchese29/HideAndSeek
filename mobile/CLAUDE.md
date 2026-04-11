@@ -40,7 +40,7 @@ src/
   stores/
     gameplayStore.ts           # Zustand store for gameplay state (SSE-driven, not persisted)
   types/
-    gameplay.ts                # Gameplay type aliases (re-exports from auto-generated schema.d.ts)
+    gameplay.ts                # Gameplay type aliases — unions derived from schema via indexed access, auto-update with server changes
   constants/
     colors.ts                  # PlayerColor → hex mapping
   hooks/

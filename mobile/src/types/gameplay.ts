@@ -6,6 +6,10 @@
  * `components['schemas']['Point']` accessor.  The generated schema in
  * `@/api/schema.d.ts` is the single source of truth.
  *
+ * Union types (QuestionEventParams, GeoJSONGeometry) are derived from schema
+ * types via indexed access — they auto-update when the server adds new
+ * question types or geometry variants.
+ *
  * `PreviewQuestion` is mobile-only (UI state, no server counterpart).
  */
 
@@ -21,8 +25,8 @@ export type GeoJSONLineString = S['LineString'];
 export type GeoJSONMultiLineString = S['MultiLineString'];
 export type GeoJSONMultiPolygon = S['MultiPolygon'];
 
-/** Flexible GeoJSON geometry (Polygon, MultiPolygon, etc.) */
-export type GeoJSONGeometry = Record<string, unknown>;
+/** GeoJSON geometry union — derived from the schema's GeometryCollection members. */
+export type GeoJSONGeometry = S['GeometryCollection']['geometries'][number];
 
 // ── Players ──────────────────────────────────────────────────────────────────
 
@@ -45,28 +49,9 @@ export type GameDissolvedDelta = S['GameDissolvedEvent'];
 
 // ── Question Event Parameters ───────────────────────────────────────────────
 
-export type RadarEventParams = S['RadarEventParams'];
+/** Discriminated union of all question parameter types — derived from QuestionAskedEvent.parameters. */
+export type QuestionEventParams = S['QuestionAskedEvent']['parameters'];
 export type ThermometerEventParams = S['ThermometerEventParams'];
-export type FeatureEventParams = S['FeatureEventParams'];
-export type TentacleEventParams = S['TentacleEventParams'];
-export type QuestionEventParams =
-  | RadarEventParams
-  | ThermometerEventParams
-  | FeatureEventParams
-  | TentacleEventParams;
-
-// ── Question Parameters (history entries) ───────────────────────────────────
-
-export type RadarParamsResponse = S['RadarParamsResponse'];
-export type ThermometerParamsResponse = S['ThermometerParamsResponse'];
-export type FeatureParamsResponse = S['FeatureParamsResponse'];
-export type TentacleParamsResponse = S['TentacleParamsResponse'];
-export type FeatureResolution = S['FeatureResolution'];
-export type QuestionParamsResponse =
-  | RadarParamsResponse
-  | ThermometerParamsResponse
-  | FeatureParamsResponse
-  | TentacleParamsResponse;
 
 // ── Active Questions ─────────────────────────────────────────────────────────
 
