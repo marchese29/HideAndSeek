@@ -31,7 +31,9 @@ from hideandseek_models.types import (
 from tests.conftest import (
     create_game,
     create_game_map,
+    create_game_map_feature,
     create_location_update,
+    create_map_feature,
     create_player,
     create_question,
     create_stop,
@@ -241,6 +243,43 @@ class TestBuildGameInfo:
         assert 'boundary' in data
         assert 'stops' in data
         assert 'routes' in data
+
+    def test_features_empty_by_default(self, session: Session) -> None:
+        game, _hider, _seeker, _ds = _create_active_game(session)
+        info = build_game_info(game)
+        assert info.features == []
+
+    def test_features_populated(self, session: Session) -> None:
+        game, _hider, _seeker, _ds = _create_active_game(session)
+        feat = create_map_feature(
+            session,
+            category=FeatureCategory.hospital,
+            name='Test Hospital',
+            shape=Point(0.5, 0.5),
+        )
+        create_game_map_feature(session, game.map_id, feat.id)
+
+        info = build_game_info(game)
+        assert len(info.features) == 1
+        f = info.features[0]
+        assert f.stable_id == feat.stable_id
+        assert f.name == 'Test Hospital'
+        assert f.category == 'hospital'
+        assert f.feature_class is None
+        assert f.location.type == 'Point'
+
+    def test_features_multiple_categories(self, session: Session) -> None:
+        game, _hider, _seeker, _ds = _create_active_game(session)
+        feat_h = create_map_feature(session, category=FeatureCategory.hospital, name='Hospital A')
+        feat_p = create_map_feature(session, category=FeatureCategory.park, name='Park B')
+        create_game_map_feature(session, game.map_id, feat_h.id)
+        create_game_map_feature(session, game.map_id, feat_p.id)
+
+        info = build_game_info(game)
+        assert len(info.features) == 2
+        categories = [f.category for f in info.features]
+        assert 'hospital' in categories
+        assert 'park' in categories
 
 
 # ── Seeker Snapshot Tests ───────────────────────────────────────────────────

@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from hideandseek_models.game_map import GameMap as GameMapModel
     from hideandseek_models.inventory import InventorySlot as InventorySlotModel
     from hideandseek_models.location import LocationUpdate as LocationUpdateModel
+    from hideandseek_models.map_feature import MapFeature as MapFeatureModel
     from hideandseek_models.transit import Route as RouteModel
     from hideandseek_models.transit import Stop as StopModel
 
@@ -623,6 +624,28 @@ class InventorySlotResponse(BaseModel):
     ask_count: int = Field(description='Number of times this slot has been used.')
 
 
+class MapFeatureResponse(BaseModel):
+    """A map feature (POI) on the game map."""
+
+    stable_id: str = Field(description='Stable identifier of the feature.')
+    name: str = Field(description='Human-readable name.')
+    category: str = Field(description='Feature category (e.g. hospital, park, museum).')
+    feature_class: int | None = Field(
+        default=None, description='Feature class tier. Classed categories only.'
+    )
+    location: GeoJSONPoint = Field(description='GeoJSON Point — centroid of the feature shape.')
+
+    @staticmethod
+    def from_model(feature: MapFeatureModel) -> MapFeatureResponse:
+        return MapFeatureResponse(
+            stable_id=feature.stable_id,
+            name=feature.name,
+            category=feature.category,
+            feature_class=feature.feature_class,
+            location=GeoJSONPoint(**mapping(feature.shape.centroid)),
+        )
+
+
 class GameInfoResponse(BaseModel):
     """Static game info — map geometry, transit data, timing config. Never changes mid-game."""
 
@@ -632,6 +655,9 @@ class GameInfoResponse(BaseModel):
     districts: list = Field(description='District boundaries.')
     stops: list[StopResponse] = Field(description='All playable stops.')
     routes: list[RouteResponse] = Field(description='Transit routes with shapes and stop IDs.')
+    features: list[MapFeatureResponse] = Field(
+        description='All map features (POIs) on the game map.'
+    )
     hiding_time_min: int = Field(description='Hiding phase duration in minutes.')
     base_question_delay_min: int = Field(description='Auto-answer timer duration in minutes.')
 

@@ -16,6 +16,7 @@ from hideandseek.schemas.response import (
     HiderGameStateResponse,
     HiderQuestionHistoryEntry,
     InventorySlotResponse,
+    MapFeatureResponse,
     RosterPlayer,
     RouteResponse,
     SeekerActiveQuestion,
@@ -30,6 +31,7 @@ from hideandseek_core.logic.station import (
     compute_hider_centroid,
     compute_not_in_zone,
 )
+from hideandseek_core.queries.features import get_all_map_features
 from hideandseek_core.queries.location import get_all_player_locations
 from hideandseek_core.queries.questions import (
     get_active_question,
@@ -57,6 +59,7 @@ def build_game_info(game: Game) -> GameInfoResponse:
     game_map = game.game_map
     stops = get_playable_stops(game)
     routes = get_gameplay_routes(game)
+    features = get_all_map_features(game)
     return GameInfoResponse(
         game_id=game.id,
         distance_convention=game_map.convention,
@@ -66,6 +69,7 @@ def build_game_info(game: Game) -> GameInfoResponse:
         routes=[
             RouteResponse.from_gameplay_route(r.route, r.clipped_shape, r.stop_ids) for r in routes
         ],
+        features=[MapFeatureResponse.from_model(f) for f in features],
         hiding_time_min=game.hiding_time_min,
         base_question_delay_min=game.base_question_delay_min,
     )

@@ -161,3 +161,15 @@ def get_features_by_stable_ids_nearest(
         .order_by(func.ST_Distance(MapFeature.shape, point_wkb))
     )
     return list(session.scalars(stmt).all())
+
+
+def get_all_map_features(game: Game) -> Sequence[MapFeature]:
+    """Return all features linked to a game's map, ordered by category then name."""
+    session = get_session()
+    stmt = (
+        select(MapFeature)
+        .join(GameMapFeature)
+        .where(GameMapFeature.game_map_id == game.map_id)
+        .order_by(MapFeature.category, MapFeature.name)
+    )
+    return session.scalars(stmt).all()
