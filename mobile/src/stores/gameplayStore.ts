@@ -41,6 +41,7 @@ interface GameplayActions {
   setPreviewQuestion: (preview: PreviewQuestion | null) => void;
   updateCandidateStations: (candidates: string[] | null) => void;
   updateNotInZone: (notInZone: string[] | null) => void;
+  updateComputedAnswer: (answer: string | null) => void;
   applyStationElection: (delta: StationElectionDelta) => void;
   removePlayer: (playerId: string) => void;
   setHostPlayerId: (hostPlayerId: string) => void;
@@ -226,10 +227,12 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           asked_by: delta.asked_by,
           slot_index: delta.slot_index,
           question_deadline: delta.question_deadline,
+          parameters: delta.parameters,
+          seeker_location_start: delta.seeker_location_start,
         };
         return {
           ...prev,
-          state: { ...prev.state, active_question: activeQuestion },
+          state: { ...prev.state, active_question: activeQuestion, computed_answer: null },
           previewQuestion: null,
         };
       }
@@ -266,6 +269,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           ...prev.state.active_question,
           status: delta.status,
           question_deadline: delta.question_deadline,
+          seeker_location_end: delta.seeker_location_end,
         };
         return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
       }
@@ -283,7 +287,11 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
     set((prev) => {
       if (prev.status !== 'connected') return prev;
       if (prev.role === 'hider') {
-        return { ...prev, state: { ...prev.state, active_question: null }, previewQuestion: null };
+        return {
+          ...prev,
+          state: { ...prev.state, active_question: null, computed_answer: null },
+          previewQuestion: null,
+        };
       }
       return { ...prev, state: { ...prev.state, active_question: null }, previewQuestion: null };
     });
@@ -301,7 +309,12 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           : state.question_history;
         return {
           ...prev,
-          state: { ...state, active_question: null, question_history: history },
+          state: {
+            ...state,
+            active_question: null,
+            question_history: history,
+            computed_answer: null,
+          },
         };
       }
 
@@ -367,6 +380,14 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
       if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
       if (candidatesEqual(prev.state.not_in_zone, notInZone)) return prev;
       return { ...prev, state: { ...prev.state, not_in_zone: notInZone } };
+    });
+  },
+
+  updateComputedAnswer: (answer) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
+      if (prev.state.computed_answer === answer) return prev;
+      return { ...prev, state: { ...prev.state, computed_answer: answer } };
     });
   },
 

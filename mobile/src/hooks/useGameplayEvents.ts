@@ -120,6 +120,9 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           if (data.not_in_zone !== undefined) {
             store.updateNotInZone(data.not_in_zone);
           }
+          if (data.computed_answer !== undefined) {
+            store.updateComputedAnswer(data.computed_answer);
+          }
         }
       });
 

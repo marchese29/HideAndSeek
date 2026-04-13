@@ -4,15 +4,41 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { answerQuestion, vetoQuestion } from '@/api/questions';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
-import type { GamePlayer, HiderActiveQuestion } from '@/types/gameplay';
+import { useGameInfo } from '@/hooks/useGameInfo';
+import type { HiderActiveQuestion } from '@/types/gameplay';
 
 import { BannerCountdown } from './BannerCountdown';
 
+/** Well-known computed_answer values → human-readable labels. */
+const ANSWER_LABELS: Record<string, string> = {
+  yes: 'Yes',
+  no: 'No',
+  closer: 'Closer',
+  farther: 'Farther',
+  miss: 'Miss',
+};
+
+/**
+ * Format a raw computed_answer value for display.
+ * Well-known values get a static label; tentacle POI stable_ids are resolved
+ * via the features lookup map (falls back to title-cased slug).
+ */
+function formatAnswerLabel(answer: string, featureNames: Map<string, string>): string {
+  if (answer in ANSWER_LABELS) return ANSWER_LABELS[answer];
+  const name = featureNames.get(answer);
+  if (name) return name;
+  // Fallback: title-case the slug (e.g. "swedish-ballard" → "Swedish Ballard")
+  return answer
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 interface HiderBannerProps {
   activeQuestion: HiderActiveQuestion;
+  computedAnswer: string | null;
   disabled: boolean;
   gameId: string;
-  seekers: GamePlayer[];
 }
 
 const URGENCY_GREEN = '#2ECC71';
@@ -32,6 +58,7 @@ const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.gl
   thermometer: 'thermometer',
   matching: 'map-marker-multiple',
   measuring: 'ruler',
+  tentacles: 'asterisk',
 };
 
 function questionTypeIcon(questionType: string): keyof typeof MaterialCommunityIcons.glyphMap {
@@ -40,19 +67,33 @@ function questionTypeIcon(questionType: string): keyof typeof MaterialCommunityI
 
 export const HiderBanner = memo(function HiderBanner({
   activeQuestion,
+  computedAnswer,
   disabled,
   gameId,
-  seekers,
 }: HiderBannerProps) {
   const [actionInProgress, setActionInProgress] = useState(false);
   const isDisabled = disabled || actionInProgress;
 
-  const seekerName = useMemo(() => {
-    const seeker = seekers.find((s) => s.id === activeQuestion.asked_by);
-    return seeker?.name ?? 'Seeker';
-  }, [seekers, activeQuestion.asked_by]);
+  const { gameInfo } = useGameInfo(gameId);
 
   const remaining = useCountdownTimer(activeQuestion.question_deadline);
+
+  // Build stable_id → name lookup for tentacle POI answers
+  const featureNames = useMemo(() => {
+    const map = new Map<string, string>();
+    if (gameInfo?.features) {
+      for (const f of gameInfo.features) {
+        map.set(f.stable_id, f.name);
+      }
+    }
+    return map;
+  }, [gameInfo?.features]);
+
+  // Resolve computed answer to a display label (null or 'null' → no answer yet)
+  const answerLabel = useMemo(() => {
+    if (!computedAnswer || computedAnswer === 'null') return null;
+    return formatAnswerLabel(computedAnswer, featureNames);
+  }, [computedAnswer, featureNames]);
 
   const onAnswer = useCallback(() => {
     Alert.alert('Answer Question', 'Answer from your current location?', [
@@ -109,7 +150,7 @@ export const HiderBanner = memo(function HiderBanner({
       <View style={[styles.container, { backgroundColor: WAITING_GRAY }]}>
         <MaterialCommunityIcons name="thermometer" size={20} color="#fff" />
         <Text style={styles.label} numberOfLines={1}>
-          Thermometer from {seekerName} — waiting for lock-in
+          Waiting for lock-in{answerLabel ? ` (${answerLabel})` : ''}
         </Text>
       </View>
     );
@@ -117,6 +158,7 @@ export const HiderBanner = memo(function HiderBanner({
 
   // Answerable: urgency-colored background with action buttons
   const bgColor = urgencyColor(remaining);
+  const answerDisabled = isDisabled || !answerLabel;
 
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
@@ -125,21 +167,20 @@ export const HiderBanner = memo(function HiderBanner({
         size={20}
         color="#fff"
       />
-      <Text style={styles.label} numberOfLines={1}>
-        {activeQuestion.question_type} from {seekerName}
-      </Text>
       <BannerCountdown deadlineIso={activeQuestion.question_deadline} />
       <Pressable
         style={({ pressed }) => [
           styles.button,
           styles.answerButton,
-          isDisabled && styles.disabled,
-          pressed && !isDisabled && styles.answerPressed,
+          answerDisabled && styles.disabled,
+          pressed && !answerDisabled && styles.answerPressed,
         ]}
-        disabled={isDisabled}
+        disabled={answerDisabled}
         onPress={onAnswer}
       >
-        <Text style={styles.buttonText}>Answer</Text>
+        <Text style={styles.buttonText} numberOfLines={1}>
+          {answerLabel ?? 'Answer'}
+        </Text>
       </Pressable>
       <Pressable
         style={({ pressed }) => [
@@ -166,7 +207,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    flex: 1,
+    flexShrink: 1,
     color: '#fff',
     fontSize: 14,
   },
@@ -177,6 +218,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   answerButton: {
+    flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderColor: 'rgba(255, 255, 255, 0.4)',
   },
@@ -195,6 +237,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '600',
+    textAlign: 'center',
   },
   disabled: {
     opacity: 0.5,

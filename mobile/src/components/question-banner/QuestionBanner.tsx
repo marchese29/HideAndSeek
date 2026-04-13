@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { GamePlayer, HiderActiveQuestion } from '@/types/gameplay';
+import type { HiderActiveQuestion } from '@/types/gameplay';
 
 import { HiderBanner } from './HiderBanner';
 import { SeekerBanner } from './SeekerBanner';
@@ -21,10 +21,10 @@ export const QuestionBanner = memo(function QuestionBanner({
   const activeQuestion = useGameplayStore((s) =>
     s.status === 'connected' ? s.state.active_question : null,
   );
-  const previewQuestion = useGameplayStore((s) => s.previewQuestion);
-  const seekers = useGameplayStore((s) =>
-    s.status === 'connected' ? s.state.seekers : EMPTY_PLAYERS,
+  const computedAnswer = useGameplayStore((s) =>
+    s.status === 'connected' && s.role === 'hider' ? s.state.computed_answer : null,
   );
+  const previewQuestion = useGameplayStore((s) => s.previewQuestion);
 
   const visible = activeQuestion !== null || previewQuestion !== null;
 
@@ -34,9 +34,9 @@ export const QuestionBanner = memo(function QuestionBanner({
     liveContent = (
       <HiderBanner
         activeQuestion={activeQuestion as HiderActiveQuestion}
+        computedAnswer={computedAnswer}
         disabled={!connected}
         gameId={gameId}
-        seekers={seekers}
       />
     );
   } else if (role === 'seeker') {
@@ -94,8 +94,6 @@ export const QuestionBanner = memo(function QuestionBanner({
     </Animated.View>
   );
 });
-
-const EMPTY_PLAYERS: GamePlayer[] = [];
 
 const styles = StyleSheet.create({
   wrapper: {

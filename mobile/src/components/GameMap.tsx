@@ -10,6 +10,7 @@ import { PreviewBoundaryOverlay } from '@/components/PreviewBoundaryOverlay';
 import { TentaclePOIOverlay } from '@/components/TentaclePOIOverlay';
 import { TransitRoute } from '@/components/TransitRoute';
 import { useActiveQuestionBoundary } from '@/hooks/useActiveQuestionBoundary';
+import { useHiderQuestionBoundary } from '@/hooks/useHiderQuestionBoundary';
 import { useHidingZone } from '@/hooks/useHidingZone';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
@@ -67,6 +68,7 @@ export function GameMap({
   } = usePreviewBoundary();
   const { boundary: activeBoundary, questionType: activeQuestionType } =
     useActiveQuestionBoundary();
+  const { boundary: hiderBoundary, questionType: hiderBoundaryType } = useHiderQuestionBoundary();
 
   // Elected station ID (post-election, permanent)
   const hiderStationId = role === 'hider' ? (state as HiderGameState).hider_station_id : null;
@@ -202,6 +204,13 @@ export function GameMap({
       )}
       {role === 'seeker' && tentaclePois && tentaclePois.length > 0 && (
         <TentaclePOIOverlay pois={tentaclePois} />
+      )}
+      {role === 'hider' && (
+        <PreviewBoundaryOverlay
+          boundary={hiderBoundary}
+          questionType={hiderBoundaryType}
+          variant="active"
+        />
       )}
     </MapView>
   );
