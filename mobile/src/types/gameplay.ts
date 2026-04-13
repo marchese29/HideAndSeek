@@ -57,7 +57,15 @@ export type ThermometerEventParams = S['ThermometerEventParams'];
 
 // ── Active Questions ─────────────────────────────────────────────────────────
 
-export type HiderActiveQuestion = S['HiderActiveQuestion'];
+/** Server schema extended with mobile-only fields populated from question_asked / question_answerable deltas. */
+export type HiderActiveQuestion = S['HiderActiveQuestion'] & {
+  /** Present from question_asked delta. Absent after SSE reconnection. */
+  parameters?: QuestionEventParams;
+  /** Present from question_asked delta. Absent after SSE reconnection. */
+  seeker_location_start?: GeoJSONPoint;
+  /** Present from question_answerable delta (thermometer only). Absent after SSE reconnection. */
+  seeker_location_end?: GeoJSONPoint;
+};
 /** Server schema extended with mobile-only fields populated from question_asked delta. */
 export type SeekerActiveQuestion = S['SeekerActiveQuestion'] & {
   /** Present from question_asked delta for thermometer questions. Absent after SSE reconnection. */
