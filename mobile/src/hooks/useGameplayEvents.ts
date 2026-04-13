@@ -114,6 +114,9 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           if (data.candidate_stations !== undefined) {
             store.updateCandidateStations(data.candidate_stations);
           }
+          if (data.not_in_zone !== undefined) {
+            store.updateNotInZone(data.not_in_zone);
+          }
         }
       });
 

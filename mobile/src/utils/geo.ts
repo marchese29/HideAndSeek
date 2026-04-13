@@ -76,6 +76,37 @@ export function metersToConvention(meters: number, convention: string): number {
   return convention === 'metric' ? meters / 1000 : meters / 1609.344;
 }
 
+/** Compute a Region that fits a Polygon or MultiPolygon with 10% padding. */
+export function regionFromPolygon(geometry: GeoJSONPolygon | GeoJSONMultiPolygon): Region {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+
+  const outerRings =
+    geometry.type === 'MultiPolygon'
+      ? geometry.coordinates.map((p) => p[0])
+      : [geometry.coordinates[0]];
+
+  for (const ring of outerRings) {
+    for (const pair of ring) {
+      const lon = pair[0];
+      const lat = pair[1];
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+    }
+  }
+
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLon + maxLon) / 2,
+    latitudeDelta: (maxLat - minLat) * 1.1,
+    longitudeDelta: (maxLon - minLon) * 1.1,
+  };
+}
+
 /** Compute an initialRegion that fits the boundary with 10% padding. */
 export function regionFromBoundary(multi: GeoJSONMultiPolygon): Region {
   let minLat = Infinity;

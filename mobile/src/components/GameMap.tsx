@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import MapView from 'react-native-maps';
 
 import { BoundaryOverlay } from '@/components/BoundaryOverlay';
@@ -13,8 +13,15 @@ import { useActiveQuestionBoundary } from '@/hooks/useActiveQuestionBoundary';
 import { useHidingZone } from '@/hooks/useHidingZone';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { GameInfo, GamePlayer, HiderGameState, SeekerGameState } from '@/types/gameplay';
-import { regionFromBoundary } from '@/utils/geo';
+import type {
+  GameInfo,
+  GamePlayer,
+  GeoJSONMultiPolygon,
+  GeoJSONPolygon,
+  HiderGameState,
+  SeekerGameState,
+} from '@/types/gameplay';
+import { regionFromBoundary, regionFromPolygon } from '@/utils/geo';
 
 const STALE_THRESHOLD_MS = 60_000;
 const STALE_CHECK_INTERVAL_MS = 10_000;
@@ -49,6 +56,8 @@ export function GameMap({
   onCandidateStopPress,
   onMapPress,
 }: GameMapProps) {
+  const mapRef = useRef<MapView>(null);
+  const hasAnimatedToZone = useRef(false);
   const initialRegion = useMemo(() => regionFromBoundary(gameInfo.boundary), [gameInfo.boundary]);
   const selfLocation = useGameplayStore((s) => s.selfLocation);
   const {
@@ -59,8 +68,11 @@ export function GameMap({
   const { boundary: activeBoundary, questionType: activeQuestionType } =
     useActiveQuestionBoundary();
 
-  // Hiding zone preview for the highlighted candidate stop
-  const { hidingZone } = useHidingZone(highlightedStopId ?? null);
+  // Elected station ID (post-election, permanent)
+  const hiderStationId = role === 'hider' ? (state as HiderGameState).hider_station_id : null;
+
+  // Hiding zone: preview (pre-election highlight) or permanent (post-election)
+  const { hidingZone } = useHidingZone(highlightedStopId ?? hiderStationId);
 
   // Candidate stations from hider state
   const candidateStations = role === 'hider' ? (state as HiderGameState).candidate_stations : null;
@@ -77,6 +89,15 @@ export function GameMap({
     const interval = setInterval(() => setStaleTick((t) => t + 1), STALE_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
+
+  // Animate camera to hiding zone centroid once after election
+  useEffect(() => {
+    if (!hiderStationId || !hidingZone || hasAnimatedToZone.current) return;
+    if (hidingZone.type !== 'Polygon' && hidingZone.type !== 'MultiPolygon') return;
+    hasAnimatedToZone.current = true;
+    const region = regionFromPolygon(hidingZone as unknown as GeoJSONPolygon | GeoJSONMultiPolygon);
+    mapRef.current?.animateToRegion(region, 1000);
+  }, [hiderStationId, hidingZone]);
 
   const hiders = useMemo(
     () => (role === 'hider' ? (state as HiderGameState).hiders : []),
@@ -136,7 +157,7 @@ export function GameMap({
   }, [state.seekers, state.self_player_id, hiders, selfLocation, staleTick]);
 
   return (
-    <MapView style={{ flex: 1 }} initialRegion={initialRegion} onPress={onMapPress}>
+    <MapView ref={mapRef} style={{ flex: 1 }} initialRegion={initialRegion} onPress={onMapPress}>
       <BoundaryOverlay boundary={gameInfo.boundary} />
       {gameInfo.routes.map((route) => (
         <TransitRoute

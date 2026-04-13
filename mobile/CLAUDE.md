@@ -64,11 +64,12 @@ src/
     BoundaryOverlay.tsx        # Game boundary MultiPolygon (outline-only stroke, one <Polygon> per part)
     CandidateStopOverlay.tsx   # Candidate stop markers (blue dots, green when highlighted, zIndex 500, hider hiding phase)
     ExclusionOverlay.tsx       # Exclusion zone polygon overlay (translucent red, seeker seeking phase only, zIndex 2000)
-    HidingZoneOverlay.tsx      # Hiding zone polygon preview (translucent blue fill, zIndex 450, shown for highlighted candidate)
+    HidingZoneOverlay.tsx      # Hiding zone polygon overlay (translucent blue fill, zIndex 450, preview during selection + permanent post-election)
     PreviewBoundaryOverlay.tsx # Question preview boundary polyline (solid, type-colored, seeker only, zIndex 1500)
     StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
     TransitRoute.tsx           # Transit route polyline + white stop dots (hides candidates via hiddenStopIds)
     PlayerPin.tsx              # Player map pin (animated — colored circle + initial + self ring + hider badge + stack count)
+    DepartureWarningBanner.tsx # Red warning banner when hiders leave the hiding zone (driven by not_in_zone field)
     LocationDeniedBanner.tsx   # Warning banner when location permission denied
     ConnectionDot.tsx          # SSE connection status dot (green/red) — used in lobby
     question-banner/           # Question Banner (active question state for both roles)
@@ -191,11 +192,12 @@ Both hooks:
 - **Foreground tracking**: `useLocationTracking` hook polls `Location.getCurrentPositionAsync()` on a manual 10s `setInterval`. Uses polling instead of `watchPositionAsync` because iOS ignores `timeInterval` — a stationary player would stop reporting entirely. Stops on unmount. Re-checks permission on foreground resume (user may toggle in Settings). Seekers skip GPS/POST during the hiding phase (reads phase from `GameplayStore` each tick) — polling resumes automatically when phase transitions to seeking.
 - **Server-confirmed self-location**: Each GPS fix is POSTed to the server; `selfLocation` in `GameplayStore` is only updated on successful response (not optimistic). This means the self pin correctly goes gray if the server is unreachable. `GameMap` prefers `selfLocation` over SSE data for the self player. `hydrate()` clears `selfLocation` once the SSE snapshot's timestamp catches up.
 - **Permission denied**: `LocationDeniedBanner` renders between map and utility belt when location access is refused. Links to device Settings via `Linking.openSettings()`.
+- **Departure warning**: `DepartureWarningBanner` renders absolutely positioned at the bottom of the map area (overlays the map, does not affect flex layout). Shown when `not_in_zone` is non-empty (hider role only, post-election). Red background (`#E74C3C`), resolves player IDs to names from hiders array. Auto-dismisses when all hiders return to zone.
 
 ## SSE Delta Events
 
 - **`game_state`**: Dynamic-only snapshot on connect — `hydrate()` replaces entire `GameplayStore` state. Static data (boundary, stops, routes, timing, convention) is NOT in this event — it's fetched once via `GET /games/{id}/info` and cached by `useGameInfo`.
-- **`player_location`**: Real-time position delta — `updatePlayerLocation()` patches a single player's coordinates in the `hiders`/`seekers` arrays without replacing the full state. For seeker state, only `seekers` is patched (hiders are `RosterPlayer[]` with no coordinates). Hider location events also carry `candidate_stations` — dispatched via `updateCandidateStations()` with shallow array comparison to avoid unnecessary re-renders.
+- **`player_location`**: Real-time position delta — `updatePlayerLocation()` patches a single player's coordinates in the `hiders`/`seekers` arrays without replacing the full state. For seeker state, only `seekers` is patched (hiders are `RosterPlayer[]` with no coordinates). Hider location events also carry `candidate_stations` (dispatched via `updateCandidateStations()`) and `not_in_zone` (dispatched via `updateNotInZone()`), both with shallow array comparison to avoid unnecessary re-renders.
 - **`station_election`**: Station elected — `applyStationElection()` patches `station_election_status` and `hider_station_id`, nullifies `candidate_stations` when elected/auto_assigned.
 - **`phase_changed`**: Hiding-to-seeking transition — `applyPhaseChanged()` patches `phase`, `seeking_started_at`, and (hider only) `station_election_status` + `hider_station_id`.
 - **`question_asked`**: New question — `setActiveQuestion()` constructs the role-appropriate active question from the delta. `question_deadline` comes from the server (authoritative). Clears `previewQuestion`. Seeker store also persists `parameters` and `seeker_location_start` for thermometer lock-in distance validation (absent after SSE reconnection — gracefully falls back to enabled).
@@ -211,7 +213,7 @@ Both hooks:
 
 - **Candidate stops**: Server sends `candidate_stations` (stop UUIDs where all hiders are within hiding zone radius) via `game_state` snapshot and `player_location` SSE events. Stored inline on `HiderGameState`.
 - **Map overlay**: `CandidateStopOverlay` renders candidate stops as blue dot markers (`zIndex=500`). Highlighted stop turns green. `TransitRoute` hides its white dots for candidate stops via `hiddenStopIds` to avoid Apple Maps z-index conflicts.
-- **Zone preview**: `HidingZoneOverlay` renders the hiding zone polygon (translucent blue, `zIndex=450`) for the highlighted candidate. Fetched via `useHidingZone` hook (`GET /hiding-zone?station_id=`, cached with `staleTime=Infinity`).
+- **Zone overlay**: `HidingZoneOverlay` renders the hiding zone polygon (translucent blue, `zIndex=450`). Pre-election: shown for the highlighted candidate stop. Post-election: shown permanently for the elected station (`hider_station_id` fallback in `GameMap`). Camera animates to zone centroid once on election. Fetched via `useHidingZone` hook (`GET /hiding-zone?station_id=`, cached with `staleTime=Infinity`).
 - **Selection flow**: Tap a candidate dot on the map → dot highlights green, zone appears, belt center shows stop name. Tap "Set Stop" → native `Alert.alert` confirmation (warns selection is permanent). Confirm → `POST /hider-station`. Tap map background → clears selection.
 - **Single candidate**: Auto-highlighted via `useEffect` in `UtilityBelt` — zone and name appear immediately, one tap to confirm.
 - **Ambiguous resolution**: When `station_election_status` transitions to `ambiguous` (hiding timer expired with multiple candidates), candidates remain available and the same selection flow applies.

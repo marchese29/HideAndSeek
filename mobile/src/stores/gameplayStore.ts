@@ -40,6 +40,7 @@ interface GameplayActions {
   applyPhaseChanged: (delta: PhaseChangedDelta) => void;
   setPreviewQuestion: (preview: PreviewQuestion | null) => void;
   updateCandidateStations: (candidates: string[] | null) => void;
+  updateNotInZone: (notInZone: string[] | null) => void;
   applyStationElection: (delta: StationElectionDelta) => void;
   removePlayer: (playerId: string) => void;
   setHostPlayerId: (hostPlayerId: string) => void;
@@ -357,6 +358,14 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
       if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
       if (candidatesEqual(prev.state.candidate_stations, candidates)) return prev;
       return { ...prev, state: { ...prev.state, candidate_stations: candidates } };
+    });
+  },
+
+  updateNotInZone: (notInZone) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
+      if (candidatesEqual(prev.state.not_in_zone, notInZone)) return prev;
+      return { ...prev, state: { ...prev.state, not_in_zone: notInZone } };
     });
   },
 

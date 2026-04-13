@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DepartureWarningBanner } from '@/components/DepartureWarningBanner';
 import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
 import { QuestionBanner } from '@/components/question-banner';
@@ -11,6 +12,7 @@ import { useGameInfo } from '@/hooks/useGameInfo';
 import { useGameplayEvents } from '@/hooks/useGameplayEvents';
 import { useLocationTracking } from '@/hooks/useLocationTracking';
 import { useGameplayStore } from '@/stores/gameplayStore';
+import type { GamePlayer } from '@/types/gameplay';
 
 export default function GameplayScreen() {
   const { game_id } = useLocalSearchParams<{ game_id: string }>();
@@ -20,6 +22,14 @@ export default function GameplayScreen() {
   const status = useGameplayStore((s) => s.status);
   const role = useGameplayStore((s) => s.role);
   const state = useGameplayStore((s) => s.state);
+
+  // Departure warning: hider zone violations
+  const notInZone = useGameplayStore((s) =>
+    s.status === 'connected' && s.role === 'hider' ? s.state.not_in_zone : null,
+  );
+  const hiders = useGameplayStore((s) =>
+    s.status === 'connected' && s.role === 'hider' ? s.state.hiders : EMPTY_HIDERS,
+  );
 
   // Highlighted candidate stop — bridges UtilityBelt and GameMap
   const [highlightedStopId, setHighlightedStopId] = useState<string | null>(null);
@@ -61,20 +71,25 @@ export default function GameplayScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {!ready ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color="#7F8C8D" />
-        </View>
-      ) : (
-        <GameMap
-          role={role}
-          state={state}
-          gameInfo={gameInfo}
-          highlightedStopId={highlightedStopId}
-          onCandidateStopPress={handleCandidateStopPress}
-          onMapPress={handleMapPress}
-        />
-      )}
+      <View style={styles.mapArea}>
+        {!ready ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" color="#7F8C8D" />
+          </View>
+        ) : (
+          <GameMap
+            role={role}
+            state={state}
+            gameInfo={gameInfo}
+            highlightedStopId={highlightedStopId}
+            onCandidateStopPress={handleCandidateStopPress}
+            onMapPress={handleMapPress}
+          />
+        )}
+        {notInZone && notInZone.length > 0 && (
+          <DepartureWarningBanner notInZone={notInZone} hiders={hiders} />
+        )}
+      </View>
 
       {permissionDenied && <LocationDeniedBanner />}
 
@@ -97,10 +112,15 @@ export default function GameplayScreen() {
   );
 }
 
+const EMPTY_HIDERS: GamePlayer[] = [];
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#2C3E50',
+  },
+  mapArea: {
+    flex: 1,
   },
   loading: {
     flex: 1,
