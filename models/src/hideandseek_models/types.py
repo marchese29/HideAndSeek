@@ -219,6 +219,7 @@ class GameplayEventType(StrEnum):
     player_left = 'player_left'
     host_changed = 'host_changed'
     game_dissolved = 'game_dissolved'
+    hiding_zone_expanded = 'hiding_zone_expanded'
 
 
 class TokenProvider(StrEnum):
@@ -239,6 +240,7 @@ class PushEventType(StrEnum):
     question_vetoed = 'question_vetoed'
     question_abandoned = 'question_abandoned'
     station_auto_resolved = 'station_auto_resolved'
+    hiding_zone_expanded = 'hiding_zone_expanded'
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

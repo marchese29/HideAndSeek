@@ -36,6 +36,7 @@ src/
     client.ts                  # openapi-fetch wrapper + X-Player-Id + X-Player-Secret middleware
     queryClient.ts             # TanStack Query client instance
     questions.ts               # Question API calls (answer, veto, abandon, lock-in). Ask uses api.POST directly.
+    powers.ts                  # Power-up API calls (expand hiding zone)
   store.ts                     # Zustand store (session + push token state)
   stores/
     gameplayStore.ts           # Zustand store for gameplay state (SSE-driven, not persisted)
@@ -82,7 +83,7 @@ src/
       index.ts                 # Barrel export
       UtilityBelt.tsx          # Container — three-section row, wires question selection + stop selection
       CandidateStatus.tsx      # Belt center status text for hiders (stop name / "Tap a stop" / "No stops in range")
-      StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker, "Set Stop" for hider)
+      StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker, "Set Stop" for hider, "Powers" for hider seeking)
       GameTimer.tsx            # Live timer with connection-colored background
       BeltActions.tsx          # Info + leave icon buttons (context-aware: host-kick / last-of-role / host-transfer / normal)
       QuestionTypeBar.tsx      # Question type buttons (radar/thermo/match/measure/tentacles), filtered by inventory
@@ -207,6 +208,7 @@ Both hooks:
 - **`player_left`**: Player removed — `removePlayer()` filters player from `hiders`/`seekers` arrays. If the removed `player_id` matches the current player (kicked by host), shows alert, clears session, and navigates home.
 - **`host_changed`**: Host transferred — `setHostPlayerId()` updates `host_player_id` on state.
 - **`game_dissolved`**: Game ended (last hider/seeker left) — shows alert, clears session, navigates home.
+- **`hiding_zone_expanded`**: Hider expanded the hiding zone — sets `hiding_zone_expanded = true` on state, invalidates `['hiding-zone']` TanStack Query cache (forces re-fetch of larger polygon), shows alert to seekers.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 
 ## Stop Selection (Hider Hiding Phase)

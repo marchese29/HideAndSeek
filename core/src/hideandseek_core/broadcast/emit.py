@@ -13,6 +13,7 @@ from hideandseek_core.broadcast.events import (
     GamePlayerLeftEvent,
     GameplayEvent,
     HiderQuestionAnsweredEvent,
+    HidingZoneExpandedEvent,
     PhaseChangedEvent,
     PlayerLocationEvent,
     QuestionAbandonedEvent,
@@ -149,3 +150,7 @@ def emit_gameplay(event: GameplayEvent) -> None:
         case GameDissolvedEvent():
             data = event.model_dump(mode='json')
             _both_channels(event.game_id, GameplayEventType.game_dissolved, data)
+
+        case HidingZoneExpandedEvent():
+            data = event.model_dump(mode='json')
+            _both_channels(event.game_id, GameplayEventType.hiding_zone_expanded, data)

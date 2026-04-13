@@ -186,6 +186,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         candidate_stations=candidate_stations,
         not_in_zone=not_in_zone,
         computed_answer=computed_answer,
+        hiding_zone_expanded=game.hiding_zone_expanded,
     )
 
 
@@ -279,4 +280,5 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
         question_history=history,
         total_exclusion=geom_or_none(total_exclusion),
         inventory=inventory,
+        hiding_zone_expanded=game.hiding_zone_expanded,
     )

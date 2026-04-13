@@ -710,6 +710,9 @@ class HiderGameStateResponse(SSEExposed, BaseModel):
         default=None,
         description='Hypothetical answer if question were answered now.',
     )
+    hiding_zone_expanded: bool = Field(
+        default=False, description='Whether the hiding zone has been expanded.'
+    )
 
 
 class SeekerGameStateResponse(SSEExposed, BaseModel):
@@ -734,4 +737,7 @@ class SeekerGameStateResponse(SSEExposed, BaseModel):
     )
     inventory: list[InventorySlotResponse] = Field(
         description='All inventory slots with current ask counts.'
+    )
+    hiding_zone_expanded: bool = Field(
+        default=False, description='Whether the hiding zone has been expanded.'
     )

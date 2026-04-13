@@ -42,7 +42,7 @@ function resolveAction(
     if (role === 'seeker') {
       return { icon: 'chat-question-outline', label: 'Questions', pressable: true };
     }
-    return { icon: 'toolbox-outline', label: 'Toolbox', pressable: true };
+    return { icon: 'arm-flex-outline', label: 'Powers', pressable: true };
   }
 
   // Fallback for unknown phases

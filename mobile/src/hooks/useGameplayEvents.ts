@@ -4,12 +4,14 @@ import { Alert, AppState } from 'react-native';
 import EventSource, { type EventSourceEvent } from 'react-native-sse';
 
 import { API_BASE_URL } from '@/api/client';
+import { queryClient } from '@/api/queryClient';
 import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
   GameDissolvedDelta,
   HiderGameState,
   HiderQuestionAnsweredDelta,
+  HidingZoneExpandedDelta,
   HostChangedDelta,
   PhaseChangedDelta,
   PlayerLeftDelta,
@@ -35,7 +37,8 @@ type GameplayEventType =
   | 'question_abandoned'
   | 'player_left'
   | 'host_changed'
-  | 'game_dissolved';
+  | 'game_dissolved'
+  | 'hiding_zone_expanded';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
@@ -201,6 +204,17 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           es.close();
           if (router.canDismiss()) router.dismissAll();
           router.replace('/');
+        }
+      });
+
+      es.addEventListener('hiding_zone_expanded', (event) => {
+        const data = parseData<HidingZoneExpandedDelta>(event);
+        if (data) {
+          useGameplayStore.getState().applyHidingZoneExpanded();
+          void queryClient.invalidateQueries({ queryKey: ['hiding-zone'] });
+          if (role === 'seeker') {
+            Alert.alert('Hiding Zone Expanded', 'The hider has expanded the hiding zone!');
+          }
         }
       });
     }

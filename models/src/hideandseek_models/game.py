@@ -46,6 +46,7 @@ class Game(Base):
     excluded_stop_ids: Mapped[list] = mapped_column(sa.JSON, default=list)
     excluded_route_ids: Mapped[list] = mapped_column(sa.JSON, default=list)
     hiding_zone_radius_override: Mapped[float | None] = mapped_column(default=None)
+    hiding_zone_expanded: Mapped[bool] = mapped_column(default=False)
 
     game_map: Mapped[GameMap] = relationship(back_populates='games')
     hider_station: Mapped[Stop | None] = relationship()
