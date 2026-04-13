@@ -44,6 +44,7 @@ interface GameplayActions {
   applyStationElection: (delta: StationElectionDelta) => void;
   removePlayer: (playerId: string) => void;
   setHostPlayerId: (hostPlayerId: string) => void;
+  applyHidingZoneExpanded: () => void;
 }
 
 type GameplayStore = GameplayData & {
@@ -415,6 +416,16 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         return { ...prev, state: { ...prev.state, host_player_id: hostPlayerId } };
       }
       return { ...prev, state: { ...prev.state, host_player_id: hostPlayerId } };
+    });
+  },
+
+  applyHidingZoneExpanded: () => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+      if (prev.role === 'hider') {
+        return { ...prev, state: { ...prev.state, hiding_zone_expanded: true } };
+      }
+      return { ...prev, state: { ...prev.state, hiding_zone_expanded: true } };
     });
   },
 }));

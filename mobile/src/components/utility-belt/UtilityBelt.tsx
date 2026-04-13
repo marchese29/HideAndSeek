@@ -3,6 +3,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 
 import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
+import { expandHidingZone } from '@/api/powers';
 import { useQuestionSelection } from '@/hooks/useQuestionSelection';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, HiderGameState, SeekerGameState } from '@/types/gameplay';
@@ -40,7 +41,9 @@ export const UtilityBelt = memo(function UtilityBelt({
   const disabled = !connected;
 
   const isSeekerSeeking = role === 'seeker' && state.phase === 'seeking';
+  const isHiderSeeking = role === 'hider' && state.phase === 'seeking';
   const seekerState = isSeekerSeeking ? (state as SeekerGameState) : null;
+  const hiderState = isHiderSeeking ? (state as HiderGameState) : null;
 
   const hasActiveQuestion =
     seekerState?.active_question !== null && seekerState?.active_question !== undefined;
@@ -116,6 +119,27 @@ export const UtilityBelt = memo(function UtilityBelt({
     );
   }, [highlightedStopId, highlightedStopName, gameId]);
 
+  const handlePowers = useCallback(() => {
+    if (hiderState?.hiding_zone_expanded) {
+      Alert.alert('Powers', 'You have already expanded the hiding zone.');
+      return;
+    }
+    Alert.alert('Powers', 'Double the hiding zone radius?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Expand',
+        onPress: () => {
+          void (async () => {
+            const success = await expandHidingZone(gameId);
+            if (!success) {
+              Alert.alert('Expand Failed', 'Unable to expand the hiding zone.');
+            }
+          })();
+        },
+      },
+    ]);
+  }, [gameId, hiderState?.hiding_zone_expanded]);
+
   // "Set Stop" is pressable only when a candidate is highlighted
   const canSetStop = isHiderHiding && highlightedStopId !== null;
 
@@ -130,7 +154,15 @@ export const UtilityBelt = memo(function UtilityBelt({
             stationElectionStatus={stationElectionStatus}
             hasActiveQuestion={isSeekerSeeking && hasActiveQuestion}
             disabled={disabled || (isHiderHiding && !canSetStop)}
-            onPress={isSeekerSeeking ? selection.toggle : canSetStop ? handleSetStop : undefined}
+            onPress={
+              isSeekerSeeking
+                ? selection.toggle
+                : isHiderSeeking
+                  ? handlePowers
+                  : canSetStop
+                    ? handleSetStop
+                    : undefined
+            }
             active={isSeekerSeeking && selection.isOpen}
           />
         </View>

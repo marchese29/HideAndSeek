@@ -22,6 +22,7 @@ def effective_hiding_zone_radius_m(game: Game) -> float:
     """Compute effective hiding zone radius in meters for a game.
 
     Fallback chain: game-level override → map-level override → code-level default.
+    Then doubled if the hider has played the expand powerup.
     """
     gm = game.game_map
     radius_conv = (
@@ -29,7 +30,8 @@ def effective_hiding_zone_radius_m(game: Game) -> float:
         or gm.hiding_zone_radius
         or get_default_hiding_zone_radius(gm.convention, game.size)
     )
-    return to_meters(radius_conv, gm.convention)
+    base_m = to_meters(radius_conv, gm.convention)
+    return base_m * 2 if game.hiding_zone_expanded else base_m
 
 
 def get_endgame_exclusions(

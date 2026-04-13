@@ -914,3 +914,74 @@ def test_remove_player_active_deletes_location_history(client: TestClient, sessi
     ).all()
     assert len(remaining) == 1
     assert remaining[0].player_id == seeker2.id
+
+
+# ── Expand hiding zone ──────────────────────────────────────────────────
+
+
+def test_expand_hiding_zone_success(client: TestClient, session: Session):
+    """Hider can expand the hiding zone during seeking phase."""
+    game = create_game(session, status=GameStatus.seeking)
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    session.flush()
+
+    resp = client.post(
+        f'/games/{game.id}/expand-hiding-zone',
+        headers=_headers(host.id),
+    )
+    assert resp.status_code == 204
+    session.refresh(game)
+    assert game.hiding_zone_expanded is True
+
+
+def test_expand_hiding_zone_seeker_forbidden(client: TestClient, session: Session):
+    """Seekers cannot expand the hiding zone."""
+    game = create_game(session, status=GameStatus.seeking)
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    seeker = create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    session.flush()
+
+    resp = client.post(
+        f'/games/{game.id}/expand-hiding-zone',
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 403
+
+
+def test_expand_hiding_zone_wrong_phase(client: TestClient, session: Session):
+    """Expanding is only allowed during seeking phase."""
+    game = create_game(session, status=GameStatus.hiding)
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    session.flush()
+
+    resp = client.post(
+        f'/games/{game.id}/expand-hiding-zone',
+        headers=_headers(host.id),
+    )
+    assert resp.status_code == 409
+
+
+def test_expand_hiding_zone_already_expanded(client: TestClient, session: Session):
+    """Cannot expand twice."""
+    game = create_game(session, status=GameStatus.seeking)
+    host = _get_host(session, game)
+    host.role = PlayerRole.hider
+    create_player(session, game.id, name='Seeker', role=PlayerRole.seeker)
+    session.flush()
+
+    resp1 = client.post(
+        f'/games/{game.id}/expand-hiding-zone',
+        headers=_headers(host.id),
+    )
+    assert resp1.status_code == 204
+
+    resp2 = client.post(
+        f'/games/{game.id}/expand-hiding-zone',
+        headers=_headers(host.id),
+    )
+    assert resp2.status_code == 409

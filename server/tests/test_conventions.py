@@ -180,6 +180,18 @@ def test_effective_radius_uses_game_size_not_map_size(session: Session):
     assert result == 1000
 
 
+def test_effective_radius_doubled_when_expanded(session: Session):
+    """Hiding zone expansion doubles the effective radius."""
+    gm = create_game_map(session)  # metric medium → 500m default
+    game = create_game(session, map_id=gm.id)
+    base = effective_hiding_zone_radius_m(game)
+    assert base == 500
+
+    game.hiding_zone_expanded = True
+    expanded = effective_hiding_zone_radius_m(game)
+    assert expanded == 1000
+
+
 # ── resolve_tentacle_distance ──────────────────────────────────────────
 
 

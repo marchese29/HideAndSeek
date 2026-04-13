@@ -48,9 +48,14 @@ from hideandseek_core.broadcast.events import (
     GameDissolvedEvent,
     GameHostChangedEvent,
     GamePlayerLeftEvent,
+    HidingZoneExpandedEvent,
     StationElectionEvent,
 )
-from hideandseek_core.conventions import resolve_base_question_delay_min, resolve_hiding_time_min
+from hideandseek_core.conventions import (
+    from_meters,
+    resolve_base_question_delay_min,
+    resolve_hiding_time_min,
+)
 from hideandseek_core.db import session_dependency
 from hideandseek_core.logic.endgame import (
     compute_hiding_zone_for_station,
@@ -467,3 +472,35 @@ def list_candidate_stations(
 
     stops = get_candidate_stations(game, offset, limit)
     return [StopResponse.from_model(s) for s in stops]
+
+
+@router.post('/{game_id}/expand-hiding-zone', status_code=204)
+def expand_hiding_zone(
+    game: Game = Depends(get_game),
+    _player: Player = Depends(get_hider_in_game),
+) -> None:
+    """Expand the hiding zone radius. Hider-only, seeking phase only, one-time use."""
+    if not game.status.is_seeking:
+        raise HTTPException(
+            status_code=409, detail='Hiding zone can only be expanded during the seeking phase.'
+        )
+    if game.hiding_zone_expanded:
+        raise HTTPException(status_code=409, detail='Hiding zone has already been expanded.')
+
+    game.hiding_zone_expanded = True
+
+    new_radius_m = effective_hiding_zone_radius_m(game)
+    new_radius_conv = from_meters(new_radius_m, game.game_map.convention)
+
+    emit_gameplay(
+        HidingZoneExpandedEvent(
+            game_id=game.id,
+            effective_radius=new_radius_conv,
+        )
+    )
+
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.hiding_zone_expanded,
+        alert='The hider has expanded the hiding zone!',
+    )

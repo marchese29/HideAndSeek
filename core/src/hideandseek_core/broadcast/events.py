@@ -378,6 +378,14 @@ class GameDissolvedEvent(GameplayEventSchema):
     reason: str
 
 
+class HidingZoneExpandedEvent(GameplayEventSchema):
+    """Hiding zone expanded by the hider — both channels."""
+
+    effective_radius: float = Field(
+        description='New effective hiding zone radius in convention units.'
+    )
+
+
 GameplayEvent = (
     PlayerLocationEvent
     | QuestionAskedEvent
@@ -391,4 +399,5 @@ GameplayEvent = (
     | GamePlayerLeftEvent
     | GameHostChangedEvent
     | GameDissolvedEvent
+    | HidingZoneExpandedEvent
 )
