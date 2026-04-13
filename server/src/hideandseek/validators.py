@@ -81,6 +81,23 @@ def validate_answer_request(
     return question, latest.coordinates
 
 
+# ── Randomize validation ──────────────────────────────────────────────
+
+
+def validate_randomize_request(question_id: uuid.UUID, game: Game, player: Player) -> Question:
+    """Validate a randomize request. Returns the question."""
+    if player.role != 'hider':
+        raise HTTPException(status_code=403, detail='Only the hider can randomize questions.')
+
+    question = get_question(question_id)
+    if not question or question.game != game:
+        raise HTTPException(status_code=404, detail='Question not found.')
+    if question.status != QuestionStatus.answerable:
+        raise HTTPException(status_code=409, detail='Question is not answerable.')
+
+    return question
+
+
 # ── Abandon validation ────────────────────────────────────────────────
 
 

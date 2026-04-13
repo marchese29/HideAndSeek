@@ -596,6 +596,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/questions/{question_id}/randomize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Randomize Question Endpoint
+         * @description Hider randomizes a question — terminates the original and creates a replacement.
+         *
+         *     The server picks a random slot of the same question type with ask_count == 0.
+         *     The original question is marked as randomized and its slot's ask_count is restored.
+         *     A standard QuestionAskedEvent is emitted for the replacement.
+         */
+        post: operations["randomize_question_endpoint_games__game_id__questions__question_id__randomize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/endgame-exclusions": {
         parameters: {
             query?: never;
@@ -1637,7 +1661,7 @@ export interface components {
          * QuestionStatus
          * @enum {string}
          */
-        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned";
+        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned" | "randomized";
         /**
          * RadarEventParams
          * @description Radar question parameters.
@@ -3541,6 +3565,39 @@ export interface operations {
         };
     };
     abandon_question_endpoint_games__game_id__questions__question_id__abandon_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                question_id: string;
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    randomize_question_endpoint_games__game_id__questions__question_id__randomize_post: {
         parameters: {
             query?: never;
             header: {

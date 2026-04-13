@@ -57,6 +57,10 @@ src/hideandseek_core/
 - `compute_not_in_zone(game)` — player IDs of hiders outside the hiding zone. Post-election only. Uses geodesic distance (pure math via `geo.distance()`).
 - `compute_hider_centroid(game)` — centroid of hiders with recent locations (used as representative hider location for answer previews).
 
+## Logic — Randomize Powerup
+
+`logic/ask.py` provides `randomize_question(question, game)` — hider terminates an answerable question and the server picks a random replacement slot (same question type, `ask_count == 0`). Restores the original slot's `ask_count`, dispatches to the appropriate `ask_<type>()` function for the replacement. Thermometer replacements start in `in_progress` (seeker must travel + lock in again); all others start `answerable`. The caller (router) handles timer revocation/scheduling and event emission. No new event type — emits a standard `QuestionAskedEvent` for the replacement.
+
 ## Logic — Answer Previews
 
 `logic/answer.py` provides both mutating answer functions (`answer_radar`, `answer_thermometer`, etc.) and read-only preview variants (`preview_radar`, `preview_thermometer`, `preview_matching`, `preview_measuring`, `preview_tentacles`). Preview functions compute the same answer string without persisting exclusion zones or mutating the question. `preview_answer(question, hider_location, game)` dispatches to the appropriate preview function by question type.
