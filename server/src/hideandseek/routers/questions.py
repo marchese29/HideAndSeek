@@ -25,6 +25,7 @@ from hideandseek.validators import (
     validate_abandon_request,
     validate_answer_request,
     validate_lock_in_request,
+    validate_randomize_request,
     validate_slot_request,
 )
 from hideandseek_core.broadcast.emit import emit_gameplay
@@ -56,10 +57,11 @@ from hideandseek_core.logic.ask import (
     ask_tentacles,
     ask_thermometer,
     lock_in_thermometer,
+    randomize_question,
 )
 from hideandseek_core.logic.preview import preview_question
 from hideandseek_core.queries.location import create_location_update
-from hideandseek_core.queries.questions import has_unanswered_question
+from hideandseek_core.queries.questions import get_eligible_randomize_slots, has_unanswered_question
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import (
     PushEventType,
@@ -535,3 +537,54 @@ def abandon_question_endpoint(
     )
 
     emit_gameplay(QuestionAbandonedEvent.from_question(question))
+
+
+# ── Randomize ──────────────────────────────────────────────────────────
+
+
+@router.post(
+    '/questions/{question_id}/randomize',
+    status_code=204,
+)
+def randomize_question_endpoint(
+    question_id: uuid.UUID,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> None:
+    """Hider randomizes a question — terminates the original and creates a replacement.
+
+    The server picks a random slot of the same question type with ask_count == 0.
+    The original question is marked as randomized and its slot's ask_count is restored.
+    A standard QuestionAskedEvent is emitted for the replacement.
+    """
+    question = validate_randomize_request(question_id, game, player)
+
+    eligible = get_eligible_randomize_slots(game, question.question_type)
+    if not eligible:
+        raise HTTPException(status_code=409, detail='No eligible replacement slots available.')
+
+    # Revoke auto-answer timer on the original question
+    if not celery_app.conf.task_always_eager:
+        celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
+
+    replacement = randomize_question(question, game)
+
+    # Schedule auto-answer timer for non-thermometer replacements
+    # (thermometer waits for lock-in before scheduling)
+    if replacement.question_type != QuestionType.thermometer:
+        _schedule_auto_answer(game, replacement.id)
+
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.question_randomized,
+        role_filter='seeker',
+        alert='The hider used a randomize!',
+        question_id=str(replacement.id),
+        question_type=replacement.question_type,
+    )
+
+    emit_gameplay(
+        QuestionAskedEvent.from_question(
+            replacement, base_question_delay_min=game.base_question_delay_min
+        )
+    )

@@ -36,6 +36,7 @@ def has_unanswered_question(game: Game) -> bool:
                         QuestionStatus.answered,
                         QuestionStatus.vetoed,
                         QuestionStatus.abandoned,
+                        QuestionStatus.randomized,
                     ]
                 ),
             )
@@ -76,6 +77,7 @@ def get_active_question(game: Game) -> Question | None:
                     QuestionStatus.answered,
                     QuestionStatus.vetoed,
                     QuestionStatus.abandoned,
+                    QuestionStatus.randomized,
                 ]
             ),
         )
@@ -136,6 +138,20 @@ def get_inventory_slots(game: Game) -> Sequence[InventorySlot]:
         select(InventorySlot)
         .where(InventorySlot.game == game)
         .order_by(InventorySlot.question_type, InventorySlot.slot_index)
+    ).all()
+
+
+def get_eligible_randomize_slots(
+    game: Game, question_type: QuestionType
+) -> Sequence[InventorySlot]:
+    """Return slots of the given type with ask_count == 0 (eligible for randomize)."""
+    session = get_session()
+    return session.scalars(
+        select(InventorySlot).where(
+            InventorySlot.game == game,
+            InventorySlot.question_type == question_type,
+            InventorySlot.ask_count == 0,
+        )
     ).all()
 
 

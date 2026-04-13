@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from hideandseek_core.db import get_session
 from hideandseek_models.game import Game, Player
+from hideandseek_models.inventory import InventorySlot
 from hideandseek_models.question import Question
 from hideandseek_models.types import (
     DistanceConvention,
@@ -1472,3 +1473,163 @@ def test_preview_no_side_effects(client: TestClient, session: Session):
 
     q_count_after = session_db.scalar(count_stmt)
     assert q_count_before == q_count_after
+
+
+# ── Randomize tests ──────────────────────────────────────────────────────────
+
+
+def test_randomize_radar_question(client: TestClient, session: Session):
+    """Randomize terminates original, creates replacement, restores original slot ask_count."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    question_id = _ask_question(client, game.id, seeker.id, question_type='radar', slot_index=0)
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/randomize',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+
+    # Original question is now randomized
+    original = _get_question_by_id(question_id)
+    assert original.status == QuestionStatus.randomized
+    assert original.answered_at is not None
+
+    # A new replacement question was created
+    replacement = _get_latest_question(game.id)
+    assert replacement.id != question_id
+    assert replacement.question_type == QuestionType.radar
+    assert replacement.status == QuestionStatus.answerable
+    assert replacement.asked_by == seeker.id  # Seeker is still the asker
+
+
+def test_randomize_restores_original_slot(client: TestClient, session: Session):
+    """Randomize decrements the original slot's ask_count back to 0."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    question_id = _ask_question(client, game.id, seeker.id, question_type='radar', slot_index=1)
+
+    # Before randomize: slot 1 should have ask_count=1
+    db = get_session()
+    slot = db.scalars(
+        select(InventorySlot).where(
+            InventorySlot.game == game,
+            InventorySlot.question_type == QuestionType.radar,
+            InventorySlot.slot_index == 1,
+        )
+    ).one()
+    assert slot.ask_count == 1
+
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/randomize',
+        headers=_headers(hider.id),
+    )
+
+    db.refresh(slot)
+    assert slot.ask_count == 0
+
+
+def test_randomize_seeker_forbidden(client: TestClient, session: Session):
+    """Seekers cannot randomize — returns 403."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    question_id = _ask_question(client, game.id, seeker.id)
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/randomize',
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 403
+
+
+def test_randomize_non_answerable(client: TestClient, session: Session):
+    """Randomizing an already-answered question returns 409."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    question_id = _ask_question(client, game.id, seeker.id)
+
+    # Answer first
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/answer',
+        headers=_headers(hider.id),
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/randomize',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 409
+
+
+def test_randomize_no_eligible_slots(client: TestClient, session: Session):
+    """If all same-type slots have ask_count > 0, randomize returns 409."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+
+    # Ask all 3 radar slots, then veto each (so ask_count > 0 on all)
+    for slot_idx in range(3):
+        qid = _ask_question(
+            client,
+            game.id,
+            seeker.id,
+            question_type='radar',
+            slot_index=slot_idx,
+            custom_distance=1.0 if slot_idx == 2 else None,
+        )
+        client.post(
+            f'/games/{game.id}/questions/{qid}/veto',
+            headers=_headers(hider.id),
+        )
+
+    # Ask slot 0 again (ask_count=2)
+    question_id = _ask_question(client, game.id, seeker.id, question_type='radar', slot_index=0)
+
+    # All slots now have ask_count > 0; randomize should fail
+    # (slot 0 will be restored to ask_count=1 during randomize check,
+    #  but we check eligibility before calling randomize_question)
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/randomize',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 409
+
+
+def test_randomize_then_answer_replacement(client: TestClient, session: Session):
+    """After randomize, the hider can answer the replacement question."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    question_id = _ask_question(client, game.id, seeker.id, question_type='radar', slot_index=0)
+
+    client.post(
+        f'/games/{game.id}/questions/{question_id}/randomize',
+        headers=_headers(hider.id),
+    )
+
+    replacement = _get_latest_question(game.id)
+    resp = client.post(
+        f'/games/{game.id}/questions/{replacement.id}/answer',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+    db = get_session()
+    db.refresh(replacement)
+    assert replacement.status == QuestionStatus.answered
+
+
+def test_randomize_thermometer_starts_in_progress(client: TestClient, session: Session):
+    """Thermometer replacement starts in in_progress — seeker must travel again."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+
+    # Ask thermometer and lock in so it becomes answerable
+    question_id = _ask_question(
+        client, game.id, seeker.id, question_type='thermometer', slot_index=0
+    )
+    _report_location(client, game.id, seeker.id, -0.2, 51.6)
+    client.post(
+        f'/games/{game.id}/questions/thermometer/{question_id}/lock-in',
+        headers=_headers(seeker.id),
+    )
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/randomize',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+
+    replacement = _get_latest_question(game.id)
+    assert replacement.question_type == QuestionType.thermometer
+    assert replacement.status == QuestionStatus.in_progress

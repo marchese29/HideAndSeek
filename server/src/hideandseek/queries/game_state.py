@@ -44,7 +44,12 @@ from hideandseek_core.queries.stops import get_playable_stops
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import PlayerRole, QuestionStatus, StationElectionStatus
 
-_TERMINAL_STATUSES = {QuestionStatus.answered, QuestionStatus.vetoed, QuestionStatus.abandoned}
+_TERMINAL_STATUSES = {
+    QuestionStatus.answered,
+    QuestionStatus.vetoed,
+    QuestionStatus.abandoned,
+    QuestionStatus.randomized,
+}
 
 
 def _compute_deadline(answerable_at: datetime | None, delay_min: int) -> datetime | None:

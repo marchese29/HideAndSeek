@@ -1316,6 +1316,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}/randomize:
+    post:
+      tags:
+      - questions
+      summary: Randomize Question Endpoint
+      description: "Hider randomizes a question \u2014 terminates the original and\
+        \ creates a replacement.\n\nThe server picks a random slot of the same question\
+        \ type with ask_count == 0.\nThe original question is marked as randomized\
+        \ and its slot's ask_count is restored.\nA standard QuestionAskedEvent is\
+        \ emitted for the replacement."
+      operationId: randomize_question_endpoint_games__game_id__questions__question_id__randomize_post
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/endgame-exclusions:
     get:
       tags:
@@ -2854,6 +2902,7 @@ components:
       - answered
       - vetoed
       - abandoned
+      - randomized
       title: QuestionStatus
       type: string
     RadarEventParams:

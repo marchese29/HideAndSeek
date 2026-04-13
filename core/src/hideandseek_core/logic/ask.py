@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from datetime import UTC, datetime
 
 from shapely import Point
@@ -8,7 +9,12 @@ from hideandseek_core.conventions import from_meters, resolve_tentacle_distance,
 from hideandseek_core.db import register
 from hideandseek_core.logic.resolution import resolve_matching_feature, resolve_measuring_feature
 from hideandseek_core.queries.features import get_features_within_distance
-from hideandseek_core.queries.questions import get_question_count
+from hideandseek_core.queries.location import get_latest_location_for_player
+from hideandseek_core.queries.questions import (
+    get_eligible_randomize_slots,
+    get_question_count,
+    get_slot_by_index,
+)
 from hideandseek_models.game import Game, Player
 from hideandseek_models.inventory import InventorySlot
 from hideandseek_models.question import Question
@@ -216,3 +222,66 @@ def lock_in_thermometer(question: Question, seeker_end: Point) -> None:
     question.seeker_location_end = seeker_end
     question.status = QuestionStatus.answerable
     question.answerable_at = datetime.now(UTC)
+
+
+# ── Ask function dispatch ──────────────────────────────────────────────
+
+_ASK_DISPATCH: dict[QuestionType, str] = {
+    QuestionType.radar: 'ask_radar',
+    QuestionType.thermometer: 'ask_thermometer',
+    QuestionType.matching: 'ask_matching',
+    QuestionType.measuring: 'ask_measuring',
+    QuestionType.tentacles: 'ask_tentacles',
+}
+
+
+def randomize_question(question: Question, game: Game) -> Question:
+    """Terminate the original question and create a replacement from a random eligible slot.
+
+    Restores the original slot's ask_count, picks a random slot of the same type
+    with ask_count == 0, and calls the appropriate ask function.
+
+    The caller is responsible for revoking the original auto-answer timer
+    and scheduling a new one for the replacement.
+    """
+    # Terminate the original question
+    question.status = QuestionStatus.randomized
+    question.answered_at = datetime.now(UTC)
+
+    # Restore the original slot
+    original_slot = get_slot_by_index(game, question.question_type, question.slot_index)
+    assert original_slot is not None
+    original_slot.ask_count -= 1
+
+    # Pick a random replacement slot
+    eligible = get_eligible_randomize_slots(game, question.question_type)
+    replacement_slot = random.choice(eligible)  # noqa: S311
+
+    # Determine seeker location
+    seeker = question.asked_by_player
+    if question.question_type == QuestionType.thermometer:
+        latest = get_latest_location_for_player(seeker, game)
+        assert latest is not None
+        seeker_location = latest.coordinates
+    else:
+        seeker_location = question.seeker_location_start
+
+    # Determine custom_distance for radar/thermometer custom slots
+    custom_distance: float | None = None
+    if replacement_slot.distance is None:
+        if question.question_type == QuestionType.radar and question.radar_params:
+            custom_distance = question.radar_params.radius
+        elif question.question_type == QuestionType.thermometer and question.thermometer_params:
+            custom_distance = question.thermometer_params.min_travel
+
+    # Dispatch to the appropriate ask function
+    qt = question.question_type
+    if qt in (QuestionType.radar, QuestionType.thermometer):
+        ask_fn = ask_radar if qt == QuestionType.radar else ask_thermometer
+        return ask_fn(game, seeker, seeker_location, replacement_slot, custom_distance)
+    elif qt == QuestionType.matching:
+        return ask_matching(game, seeker, seeker_location, replacement_slot)
+    elif qt == QuestionType.measuring:
+        return ask_measuring(game, seeker, seeker_location, replacement_slot)
+    else:
+        return ask_tentacles(game, seeker, seeker_location, replacement_slot)
