@@ -42,6 +42,9 @@ function resolveAction(
     if (role === 'seeker') {
       return { icon: 'chat-question-outline', label: 'Questions', pressable: true };
     }
+    if (stationElectionStatus === 'ambiguous') {
+      return { icon: 'bus-stop', label: 'Set Stop', pressable: true };
+    }
     return { icon: 'arm-flex-outline', label: 'Powers', pressable: true };
   }
 

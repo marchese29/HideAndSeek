@@ -341,6 +341,9 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
     set((prev) => {
       if (prev.status !== 'connected') return prev;
       if (prev.role === 'hider') {
+        const elected =
+          delta.station_election_status === 'elected' ||
+          delta.station_election_status === 'auto_assigned';
         return {
           ...prev,
           state: {
@@ -349,6 +352,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
             seeking_started_at: delta.seeking_started_at,
             station_election_status: delta.station_election_status,
             hider_station_id: delta.hider_station_id,
+            candidate_stations: elected ? null : prev.state.candidate_stations,
           },
         };
       }

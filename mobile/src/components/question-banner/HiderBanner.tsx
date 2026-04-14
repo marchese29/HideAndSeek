@@ -37,6 +37,7 @@ function formatAnswerLabel(answer: string, featureNames: Map<string, string>): s
 interface HiderBannerProps {
   activeQuestion: HiderActiveQuestion;
   computedAnswer: string | null;
+  stationElectionStatus: string | null;
   disabled: boolean;
   gameId: string;
 }
@@ -79,9 +80,11 @@ function buttonPressedStyle(onActive: string, variant: 'answer' | 'powerUp') {
 export const HiderBanner = memo(function HiderBanner({
   activeQuestion,
   computedAnswer,
+  stationElectionStatus,
   disabled,
   gameId,
 }: HiderBannerProps) {
+  const isAmbiguous = stationElectionStatus === 'ambiguous';
   const [actionInProgress, setActionInProgress] = useState(false);
   const isDisabled = disabled || actionInProgress;
 
@@ -175,14 +178,14 @@ export const HiderBanner = memo(function HiderBanner({
       <View style={styles.container}>
         <MaterialCommunityIcons name="thermometer" size={20} color={colors.onActive} />
         <Text style={[styles.label, { color: colors.onActive }]} numberOfLines={1}>
-          Waiting for lock-in{answerLabel ? ` (${answerLabel})` : ''}
+          {isAmbiguous ? 'Pick A Hiding Zone First!' : `Waiting for lock-in${answerLabel ? ` (${answerLabel})` : ''}`}
         </Text>
       </View>
     );
   }
 
   // Answerable: type-colored background with action buttons
-  const answerDisabled = isDisabled || !answerLabel;
+  const answerDisabled = isDisabled || isAmbiguous || !answerLabel;
 
   return (
     <View style={styles.container}>
@@ -204,7 +207,7 @@ export const HiderBanner = memo(function HiderBanner({
         onPress={onAnswer}
       >
         <Text style={[styles.buttonText, { color: colors.onActive }]} numberOfLines={1}>
-          {answerLabel ?? 'Answer'}
+          {isAmbiguous ? 'Pick A Hiding Zone First!' : (answerLabel ?? 'Answer')}
         </Text>
       </Pressable>
       <Pressable
@@ -212,10 +215,10 @@ export const HiderBanner = memo(function HiderBanner({
           styles.button,
           styles.powerUpButton,
           buttonStyle(colors.onActive, 'powerUp'),
-          isDisabled && styles.disabled,
-          pressed && !isDisabled && buttonPressedStyle(colors.onActive, 'powerUp'),
+          (isDisabled || isAmbiguous) && styles.disabled,
+          pressed && !isDisabled && !isAmbiguous && buttonPressedStyle(colors.onActive, 'powerUp'),
         ]}
-        disabled={isDisabled}
+        disabled={isDisabled || isAmbiguous}
         onPress={onPowerUp}
       >
         <MaterialCommunityIcons name="lightning-bolt" size={16} color={colors.onActive} />

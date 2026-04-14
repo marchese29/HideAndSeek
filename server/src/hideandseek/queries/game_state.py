@@ -166,7 +166,10 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
     not_in_zone = None
     computed_answer = None
 
-    if game.station_election_status == StationElectionStatus.pending:
+    if game.station_election_status in (
+        StationElectionStatus.pending,
+        StationElectionStatus.ambiguous,
+    ):
         candidate_stations = compute_candidate_station_ids(game)
     elif game.hider_station_id is not None:
         not_in_zone = compute_not_in_zone(game)

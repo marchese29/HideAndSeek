@@ -27,6 +27,9 @@ export const QuestionBanner = memo(function QuestionBanner({
   const computedAnswer = useGameplayStore((s) =>
     s.status === 'connected' && s.role === 'hider' ? s.state.computed_answer : null,
   );
+  const stationElectionStatus = useGameplayStore((s) =>
+    s.status === 'connected' && s.role === 'hider' ? s.state.station_election_status : null,
+  );
   const previewQuestion = useGameplayStore((s) => s.previewQuestion);
 
   const visible = activeQuestion !== null || previewQuestion !== null;
@@ -42,6 +45,7 @@ export const QuestionBanner = memo(function QuestionBanner({
       <HiderBanner
         activeQuestion={activeQuestion as HiderActiveQuestion}
         computedAnswer={computedAnswer}
+        stationElectionStatus={stationElectionStatus}
         disabled={!connected}
         gameId={gameId}
       />

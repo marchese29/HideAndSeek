@@ -64,19 +64,20 @@ export const UtilityBelt = memo(function UtilityBelt({
   );
 
   // ── Stop selection logic ──────────────────────────────────────────────────
-  const isHiderHiding =
+  // Active during hiding (pre-election) AND during seeking if ambiguous (needs resolution)
+  const isStopSelectionActive =
     role === 'hider' &&
-    state.phase === 'hiding' &&
     stationElectionStatus !== 'elected' &&
-    stationElectionStatus !== 'auto_assigned';
+    stationElectionStatus !== 'auto_assigned' &&
+    (state.phase === 'hiding' || stationElectionStatus === 'ambiguous');
 
   // Auto-highlight when there's exactly one candidate
   useEffect(() => {
-    if (!isHiderHiding || !candidateStations) return;
+    if (!isStopSelectionActive || !candidateStations) return;
     if (candidateStations.length === 1) {
       onHighlightStop(candidateStations[0]);
     }
-  }, [isHiderHiding, candidateStations, onHighlightStop]);
+  }, [isStopSelectionActive, candidateStations, onHighlightStop]);
 
   // Resolve highlighted stop name for the confirmation dialog
   const highlightedStopName = useMemo(() => {
@@ -141,7 +142,7 @@ export const UtilityBelt = memo(function UtilityBelt({
   }, [gameId, hiderState?.hiding_zone_expanded]);
 
   // "Set Stop" is pressable only when a candidate is highlighted
-  const canSetStop = isHiderHiding && highlightedStopId !== null;
+  const canSetStop = isStopSelectionActive && highlightedStopId !== null;
 
   return (
     <View style={styles.container}>
@@ -153,14 +154,14 @@ export const UtilityBelt = memo(function UtilityBelt({
             phase={state.phase}
             stationElectionStatus={stationElectionStatus}
             hasActiveQuestion={isSeekerSeeking && hasActiveQuestion}
-            disabled={disabled || (isHiderHiding && !canSetStop)}
+            disabled={disabled || (isStopSelectionActive && !canSetStop)}
             onPress={
               isSeekerSeeking
                 ? selection.toggle
-                : isHiderSeeking
-                  ? handlePowers
-                  : canSetStop
-                    ? handleSetStop
+                : canSetStop
+                  ? handleSetStop
+                  : isHiderSeeking && !isStopSelectionActive
+                    ? handlePowers
                     : undefined
             }
             active={isSeekerSeeking && selection.isOpen}
@@ -177,7 +178,7 @@ export const UtilityBelt = memo(function UtilityBelt({
 
       {/* Center: Question selection (seeker seeking) or candidate status (hider hiding) */}
       <View style={styles.center}>
-        {isHiderHiding && (
+        {isStopSelectionActive && (
           <CandidateStatus
             candidateStationIds={candidateStations}
             stops={gameInfo.stops}

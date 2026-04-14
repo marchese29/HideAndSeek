@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DepartureWarningBanner } from '@/components/DepartureWarningBanner';
@@ -30,6 +30,24 @@ export default function GameplayScreen() {
   const hiders = useGameplayStore((s) =>
     s.status === 'connected' && s.role === 'hider' ? s.state.hiders : EMPTY_HIDERS,
   );
+
+  // Auto-assigned station toast
+  const stationElectionStatus = useGameplayStore((s) =>
+    s.status === 'connected' && s.role === 'hider' ? s.state.station_election_status : null,
+  );
+  const hiderStationId = useGameplayStore((s) =>
+    s.status === 'connected' && s.role === 'hider' ? s.state.hider_station_id : null,
+  );
+  const prevStationStatusRef = useRef<string | null>(stationElectionStatus);
+  useEffect(() => {
+    const prev = prevStationStatusRef.current;
+    prevStationStatusRef.current = stationElectionStatus;
+    if (prev && stationElectionStatus === 'auto_assigned' && prev !== 'auto_assigned' && hiderStationId) {
+      const stopName =
+        gameInfo?.stops.find((s) => s.id === hiderStationId)?.name ?? 'Unknown stop';
+      Alert.alert('Station Auto-Assigned', `Your hiding station was set to ${stopName}.`);
+    }
+  }, [stationElectionStatus, hiderStationId, gameInfo?.stops]);
 
   // Highlighted candidate stop — bridges UtilityBelt and GameMap
   const [highlightedStopId, setHighlightedStopId] = useState<string | null>(null);
