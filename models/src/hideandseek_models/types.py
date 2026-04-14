@@ -220,6 +220,7 @@ class GameplayEventType(StrEnum):
     player_left = 'player_left'
     host_changed = 'host_changed'
     game_dissolved = 'game_dissolved'
+    game_ended = 'game_ended'
     hiding_zone_expanded = 'hiding_zone_expanded'
 
 
@@ -243,6 +244,7 @@ class PushEventType(StrEnum):
     question_randomized = 'question_randomized'
     station_auto_resolved = 'station_auto_resolved'
     hiding_zone_expanded = 'hiding_zone_expanded'
+    game_ended = 'game_ended'
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

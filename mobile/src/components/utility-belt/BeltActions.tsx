@@ -78,6 +78,31 @@ export const BeltActions = memo(function BeltActions({ disabled }: BeltActionsPr
       router.replace('/');
     }
 
+    function doEndGame() {
+      Alert.alert('End Game', 'This will end the game for all players.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'End Game',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await api.POST('/games/{game_id}/end', {
+                  params: {
+                    path: { game_id: gameId! },
+                    header: authHeader(),
+                  },
+                });
+              } catch {
+                Alert.alert('Error', 'Failed to end game.');
+              }
+              // SSE game_ended event handles navigation for everyone
+            })();
+          },
+        },
+      ]);
+    }
+
     async function doKick(targetPlayerId: string) {
       try {
         await api.DELETE('/games/{game_id}/players/{player_id}', {
@@ -141,6 +166,7 @@ export const BeltActions = memo(function BeltActions({ disabled }: BeltActionsPr
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'End Game', style: 'destructive', onPress: () => void doLeave() },
+            { text: 'End Game For All', onPress: doEndGame },
             { text: 'Kick Player', onPress: showKickPicker },
           ],
         );
@@ -148,6 +174,7 @@ export const BeltActions = memo(function BeltActions({ disabled }: BeltActionsPr
         Alert.alert('Host Options', 'What would you like to do?', [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Leave Game', onPress: showNominationFlow },
+          { text: 'End Game For All', onPress: doEndGame },
           { text: 'Kick Player', style: 'destructive', onPress: showKickPicker },
         ]);
       }

@@ -9,6 +9,7 @@ import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
   GameDissolvedDelta,
+  GameEndedDelta,
   HiderGameState,
   HiderQuestionAnsweredDelta,
   HidingZoneExpandedDelta,
@@ -38,6 +39,7 @@ type GameplayEventType =
   | 'player_left'
   | 'host_changed'
   | 'game_dissolved'
+  | 'game_ended'
   | 'hiding_zone_expanded';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
@@ -202,6 +204,18 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         const data = parseData<GameDissolvedDelta>(event);
         if (data) {
           Alert.alert('Game Over', 'The game has ended.');
+          useAppStore.getState().clearSession();
+          closedRef.current = true;
+          es.close();
+          if (router.canDismiss()) router.dismissAll();
+          router.replace('/');
+        }
+      });
+
+      es.addEventListener('game_ended', (event) => {
+        const data = parseData<GameEndedDelta>(event);
+        if (data) {
+          Alert.alert('Game Over', 'The host has ended the game.');
           useAppStore.getState().clearSession();
           closedRef.current = true;
           es.close();

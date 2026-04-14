@@ -377,30 +377,48 @@ def test_end_game(client: TestClient, session: Session):
     # In real flow, join_code is already cleared at hiding start.
     # Factory creates directly at seeking, so we set join_code=None to match.
     game = create_game(session, status=GameStatus.seeking, join_code=None)
-    resp = client.post(f'/games/{game.id}/end')
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data['status'] == 'finished'
-    assert data['join_code'] is None
+    resp = client.post(
+        f'/games/{game.id}/end',
+        headers=_headers(game.host_player_id),
+    )
+    assert resp.status_code == 204
 
 
 def test_end_game_from_hiding(client: TestClient, session: Session):
     game = create_game(session, status=GameStatus.hiding)
-    resp = client.post(f'/games/{game.id}/end')
-    assert resp.status_code == 200
-    assert resp.json()['status'] == 'finished'
+    resp = client.post(
+        f'/games/{game.id}/end',
+        headers=_headers(game.host_player_id),
+    )
+    assert resp.status_code == 204
 
 
 def test_end_game_from_lobby(client: TestClient, session: Session):
     game = create_game(session, status=GameStatus.lobby)
-    resp = client.post(f'/games/{game.id}/end')
+    resp = client.post(
+        f'/games/{game.id}/end',
+        headers=_headers(game.host_player_id),
+    )
     assert resp.status_code == 409
 
 
 def test_end_game_already_finished(client: TestClient, session: Session):
     game = create_game(session, status=GameStatus.finished, join_code=None)
-    resp = client.post(f'/games/{game.id}/end')
+    resp = client.post(
+        f'/games/{game.id}/end',
+        headers=_headers(game.host_player_id),
+    )
     assert resp.status_code == 409
+
+
+def test_end_game_non_host_forbidden(client: TestClient, session: Session):
+    game = create_game(session, status=GameStatus.seeking, join_code=None)
+    non_host = create_player(session, game.id)
+    resp = client.post(
+        f'/games/{game.id}/end',
+        headers=_headers(non_host.id),
+    )
+    assert resp.status_code == 403
 
 
 # ── GET /games/{game_id}/map ────────────────────────────────────────────────

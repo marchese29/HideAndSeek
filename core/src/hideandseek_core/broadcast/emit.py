@@ -9,6 +9,7 @@ import structlog
 
 from hideandseek_core.broadcast.events import (
     GameDissolvedEvent,
+    GameEndedEvent,
     GameHostChangedEvent,
     GamePlayerLeftEvent,
     GameplayEvent,
@@ -150,6 +151,10 @@ def emit_gameplay(event: GameplayEvent) -> None:
         case GameDissolvedEvent():
             data = event.model_dump(mode='json')
             _both_channels(event.game_id, GameplayEventType.game_dissolved, data)
+
+        case GameEndedEvent():
+            data = event.model_dump(mode='json')
+            _both_channels(event.game_id, GameplayEventType.game_ended, data)
 
         case HidingZoneExpandedEvent():
             data = event.model_dump(mode='json')

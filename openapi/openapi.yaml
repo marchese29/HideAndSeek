@@ -423,7 +423,7 @@ paths:
       tags:
       - games
       summary: End Game
-      description: Transition the game to finished.
+      description: End the game for all players. Host-only.
       operationId: end_game_games__game_id__end_post
       parameters:
       - name: game_id
@@ -433,13 +433,22 @@ paths:
           type: string
           format: uuid
           title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
       responses:
-        '200':
+        '204':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GameResponse'
         '422':
           description: Validation Error
           content:
@@ -2857,6 +2866,154 @@ components:
       - msg
       - type
       title: ValidationError
+    QuestionStatus:
+      enum:
+      - asked
+      - in_progress
+      - answerable
+      - answered
+      - vetoed
+      - abandoned
+      - randomized
+      title: QuestionStatus
+      type: string
+    SeekerQuestionAnsweredEvent:
+      description: "A question was answered \u2014 seeker channel only (with exclusion\
+        \ geometry).\n\nCarries answer-time delta fields only. No hider-privileged\
+        \ data\n(no hider_location, no hider feature resolution)."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        answer:
+          title: Answer
+          type: string
+        slot_index:
+          title: Slot Index
+          type: integer
+        asked_by:
+          format: uuid
+          title: Asked By
+          type: string
+        exclusion:
+          anyOf:
+          - discriminator:
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+              propertyName: type
+            oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+          - type: 'null'
+          title: Exclusion
+        total_exclusion:
+          anyOf:
+          - discriminator:
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+              propertyName: type
+            oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+          - type: 'null'
+          title: Total Exclusion
+        answered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Answered At
+      required:
+      - question_id
+      - question_type
+      - status
+      - answer
+      - slot_index
+      - asked_by
+      - exclusion
+      - total_exclusion
+      - answered_at
+      title: SeekerQuestionAnsweredEvent
+      type: object
+    PlayerLocationEvent:
+      properties:
+        player_id:
+          format: uuid
+          title: Player Id
+          type: string
+        name:
+          title: Name
+          type: string
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        role:
+          $ref: '#/components/schemas/PlayerRole'
+        coordinates:
+          $ref: '#/components/schemas/Point'
+        timestamp:
+          format: date-time
+          title: Timestamp
+          type: string
+        candidate_stations:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Candidate Stations
+        not_in_zone:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Not In Zone
+        computed_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Computed Answer
+      required:
+      - player_id
+      - name
+      - color
+      - role
+      - coordinates
+      - timestamp
+      title: PlayerLocationEvent
+      type: object
     FeatureEventParams:
       description: Matching/measuring question parameters (seeker resolution only).
       properties:
@@ -2894,17 +3051,6 @@ components:
       - seeker_distance
       title: FeatureEventParams
       type: object
-    QuestionStatus:
-      enum:
-      - asked
-      - in_progress
-      - answerable
-      - answered
-      - vetoed
-      - abandoned
-      - randomized
-      title: QuestionStatus
-      type: string
     RadarEventParams:
       description: Radar question parameters.
       properties:
@@ -3035,58 +3181,6 @@ components:
       - question_deadline
       title: QuestionAskedEvent
       type: object
-    PlayerLocationEvent:
-      properties:
-        player_id:
-          format: uuid
-          title: Player Id
-          type: string
-        name:
-          title: Name
-          type: string
-        color:
-          $ref: '#/components/schemas/PlayerColor'
-        role:
-          $ref: '#/components/schemas/PlayerRole'
-        coordinates:
-          $ref: '#/components/schemas/Point'
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
-        candidate_stations:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Candidate Stations
-        not_in_zone:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Not In Zone
-        computed_answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          title: Computed Answer
-      required:
-      - player_id
-      - name
-      - color
-      - role
-      - coordinates
-      - timestamp
-      title: PlayerLocationEvent
-      type: object
     QuestionAnswerableEvent:
       description: "A thermometer question was locked in \u2014 both channels."
       properties:
@@ -3173,91 +3267,6 @@ components:
       - hider_feature_name
       - hider_distance
       title: HiderQuestionAnsweredEvent
-      type: object
-    SeekerQuestionAnsweredEvent:
-      description: "A question was answered \u2014 seeker channel only (with exclusion\
-        \ geometry).\n\nCarries answer-time delta fields only. No hider-privileged\
-        \ data\n(no hider_location, no hider feature resolution)."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        answer:
-          title: Answer
-          type: string
-        slot_index:
-          title: Slot Index
-          type: integer
-        asked_by:
-          format: uuid
-          title: Asked By
-          type: string
-        exclusion:
-          anyOf:
-          - discriminator:
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-              propertyName: type
-            oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-          - type: 'null'
-          title: Exclusion
-        total_exclusion:
-          anyOf:
-          - discriminator:
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-              propertyName: type
-            oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-          - type: 'null'
-          title: Total Exclusion
-        answered_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Answered At
-      required:
-      - question_id
-      - question_type
-      - status
-      - answer
-      - slot_index
-      - asked_by
-      - exclusion
-      - total_exclusion
-      - answered_at
-      title: SeekerQuestionAnsweredEvent
       type: object
     QuestionVetoedEvent:
       description: "A question was vetoed \u2014 both channels."
@@ -3376,6 +3385,12 @@ components:
       - reason
       title: GameDissolvedEvent
       type: object
+    GameEndedEvent:
+      description: "Host ended the game for all players \u2014 both channels."
+      properties: {}
+      required: []
+      title: GameEndedEvent
+      type: object
     HidingZoneExpandedEvent:
       description: "Hiding zone expanded by the hider \u2014 both channels."
       properties:
@@ -3386,360 +3401,6 @@ components:
       required:
       - effective_radius
       title: HidingZoneExpandedEvent
-      type: object
-    GamePlayer:
-      description: "A player with optional location \u2014 visible to roles that can\
-        \ see this player."
-      properties:
-        id:
-          format: uuid
-          title: Id
-          type: string
-        name:
-          title: Name
-          type: string
-        color:
-          $ref: '#/components/schemas/PlayerColor'
-          description: Server-assigned player color.
-        role:
-          anyOf:
-          - $ref: '#/components/schemas/PlayerRole'
-          - type: 'null'
-        coordinates:
-          anyOf:
-          - $ref: '#/components/schemas/Point'
-          - type: 'null'
-          default: null
-          description: Last known position (null if not yet reported).
-        timestamp:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          default: null
-          description: Time of last location report.
-          title: Timestamp
-      required:
-      - id
-      - name
-      - color
-      - role
-      title: GamePlayer
-      type: object
-    InventorySlotResponse:
-      description: A single inventory slot in the gameplay state.
-      properties:
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        slot_index:
-          description: Original template position (stable across the game).
-          title: Slot Index
-          type: integer
-        distance:
-          anyOf:
-          - type: number
-          - type: 'null'
-          default: null
-          description: Preset distance. Radar/thermometer only.
-          title: Distance
-        category:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: Feature category. Matching/measuring only.
-          title: Category
-        feature_class:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          default: null
-          description: Feature class tier. Classed categories only.
-          title: Feature Class
-        ask_count:
-          description: Number of times this slot has been used.
-          title: Ask Count
-          type: integer
-      required:
-      - question_type
-      - slot_index
-      - ask_count
-      title: InventorySlotResponse
-      type: object
-    RosterPlayer:
-      description: "A player in the roster \u2014 identity only, no location fields."
-      properties:
-        id:
-          format: uuid
-          title: Id
-          type: string
-        name:
-          title: Name
-          type: string
-        color:
-          $ref: '#/components/schemas/PlayerColor'
-          description: Server-assigned player color.
-        role:
-          anyOf:
-          - $ref: '#/components/schemas/PlayerRole'
-          - type: 'null'
-      required:
-      - id
-      - name
-      - color
-      - role
-      title: RosterPlayer
-      type: object
-    SeekerActiveQuestion:
-      description: The active question as seen by the seeker.
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        slot_index:
-          description: Inventory slot used.
-          title: Slot Index
-          type: integer
-        question_deadline:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          default: null
-          description: When auto-answer fires (null if timer not started).
-          title: Question Deadline
-      required:
-      - question_id
-      - question_type
-      - status
-      - slot_index
-      title: SeekerActiveQuestion
-      type: object
-    SeekerQuestionHistoryEntry:
-      description: 'A resolved question from the seeker''s perspective.
-
-
-        Includes answer-time delta fields plus ask-time metadata for reconnecting
-
-        seekers. Supersedes the removed ``GET /questions`` list endpoint.
-
-        No hider-privileged data (no hider_location, no hider feature resolution).'
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        sequence:
-          description: 1-based chronological order within the game.
-          title: Sequence
-          type: integer
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-          description: 'Terminal status: answered, vetoed, or abandoned.'
-        ask_count:
-          description: Which attempt this was (1 = first ask).
-          title: Ask Count
-          type: integer
-        asked_by:
-          description: Seeker who asked.
-          format: uuid
-          title: Asked By
-          type: string
-        asked_at:
-          description: When the question was asked.
-          format: date-time
-          title: Asked At
-          type: string
-        slot_index:
-          description: Inventory slot used.
-          title: Slot Index
-          type: integer
-        answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: yes/no/closer/farther or null if vetoed/abandoned.
-          title: Answer
-        exclusion:
-          anyOf:
-          - discriminator:
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-              propertyName: type
-            oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-          - type: 'null'
-          default: null
-          description: This question's exclusion zone.
-          title: Exclusion
-        total_exclusion:
-          anyOf:
-          - discriminator:
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-              propertyName: type
-            oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-          - type: 'null'
-          default: null
-          description: Cumulative exclusion after this question.
-          title: Total Exclusion
-        answered_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          default: null
-          description: When the question was resolved.
-          title: Answered At
-      required:
-      - question_id
-      - sequence
-      - question_type
-      - status
-      - ask_count
-      - asked_by
-      - asked_at
-      - slot_index
-      title: SeekerQuestionHistoryEntry
-      type: object
-    SeekerGameStateResponse:
-      description: "Dynamic seeker state snapshot \u2014 delivered as initial SSE\
-        \ event on connect."
-      properties:
-        game_id:
-          format: uuid
-          title: Game Id
-          type: string
-        phase:
-          description: 'Current phase: hiding or seeking.'
-          title: Phase
-          type: string
-        hiding_started_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Hiding Started At
-        seeking_started_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Seeking Started At
-        self_player_id:
-          description: Caller's player ID.
-          format: uuid
-          title: Self Player Id
-          type: string
-        host_player_id:
-          description: Player ID of the game's host.
-          format: uuid
-          title: Host Player Id
-          type: string
-        hiders:
-          description: "Hiders \u2014 identity only, no location."
-          items:
-            $ref: '#/components/schemas/RosterPlayer'
-          title: Hiders
-          type: array
-        seekers:
-          description: All seekers with last known positions.
-          items:
-            $ref: '#/components/schemas/GamePlayer'
-          title: Seekers
-          type: array
-        active_question:
-          anyOf:
-          - $ref: '#/components/schemas/SeekerActiveQuestion'
-          - type: 'null'
-          default: null
-          description: Current in-flight question.
-        question_history:
-          description: Resolved questions with answers and exclusion geometry.
-          items:
-            $ref: '#/components/schemas/SeekerQuestionHistoryEntry'
-          title: Question History
-          type: array
-        total_exclusion:
-          anyOf:
-          - discriminator:
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-              propertyName: type
-            oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-          - type: 'null'
-          default: null
-          description: Cumulative exclusion zone.
-          title: Total Exclusion
-        inventory:
-          description: All inventory slots with current ask counts.
-          items:
-            $ref: '#/components/schemas/InventorySlotResponse'
-          title: Inventory
-          type: array
-        hiding_zone_expanded:
-          default: false
-          description: Whether the hiding zone has been expanded.
-          title: Hiding Zone Expanded
-          type: boolean
-      required:
-      - game_id
-      - phase
-      - hiding_started_at
-      - seeking_started_at
-      - self_player_id
-      - host_player_id
-      - hiders
-      - seekers
-      - question_history
-      - inventory
-      title: SeekerGameStateResponse
       type: object
     FeatureParamsResponse:
       description: Parameters for a matching or measuring question.
@@ -3801,6 +3462,45 @@ components:
       - name
       - distance
       title: FeatureResolution
+      type: object
+    GamePlayer:
+      description: "A player with optional location \u2014 visible to roles that can\
+        \ see this player."
+      properties:
+        id:
+          format: uuid
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+          description: Server-assigned player color.
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/PlayerRole'
+          - type: 'null'
+        coordinates:
+          anyOf:
+          - $ref: '#/components/schemas/Point'
+          - type: 'null'
+          default: null
+          description: Last known position (null if not yet reported).
+        timestamp:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Time of last location report.
+          title: Timestamp
+      required:
+      - id
+      - name
+      - color
+      - role
+      title: GamePlayer
       type: object
     HiderActiveQuestion:
       description: The active question as seen by the hider.
@@ -4138,4 +3838,319 @@ components:
       - station_election_status
       - question_history
       title: HiderGameStateResponse
+      type: object
+    InventorySlotResponse:
+      description: A single inventory slot in the gameplay state.
+      properties:
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        slot_index:
+          description: Original template position (stable across the game).
+          title: Slot Index
+          type: integer
+        distance:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: Preset distance. Radar/thermometer only.
+          title: Distance
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Feature category. Matching/measuring only.
+          title: Category
+        feature_class:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          description: Feature class tier. Classed categories only.
+          title: Feature Class
+        ask_count:
+          description: Number of times this slot has been used.
+          title: Ask Count
+          type: integer
+      required:
+      - question_type
+      - slot_index
+      - ask_count
+      title: InventorySlotResponse
+      type: object
+    RosterPlayer:
+      description: "A player in the roster \u2014 identity only, no location fields."
+      properties:
+        id:
+          format: uuid
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+          description: Server-assigned player color.
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/PlayerRole'
+          - type: 'null'
+      required:
+      - id
+      - name
+      - color
+      - role
+      title: RosterPlayer
+      type: object
+    SeekerActiveQuestion:
+      description: The active question as seen by the seeker.
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        slot_index:
+          description: Inventory slot used.
+          title: Slot Index
+          type: integer
+        question_deadline:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: When auto-answer fires (null if timer not started).
+          title: Question Deadline
+      required:
+      - question_id
+      - question_type
+      - status
+      - slot_index
+      title: SeekerActiveQuestion
+      type: object
+    SeekerQuestionHistoryEntry:
+      description: 'A resolved question from the seeker''s perspective.
+
+
+        Includes answer-time delta fields plus ask-time metadata for reconnecting
+
+        seekers. Supersedes the removed ``GET /questions`` list endpoint.
+
+        No hider-privileged data (no hider_location, no hider feature resolution).'
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          description: 1-based chronological order within the game.
+          title: Sequence
+          type: integer
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+          description: 'Terminal status: answered, vetoed, or abandoned.'
+        ask_count:
+          description: Which attempt this was (1 = first ask).
+          title: Ask Count
+          type: integer
+        asked_by:
+          description: Seeker who asked.
+          format: uuid
+          title: Asked By
+          type: string
+        asked_at:
+          description: When the question was asked.
+          format: date-time
+          title: Asked At
+          type: string
+        slot_index:
+          description: Inventory slot used.
+          title: Slot Index
+          type: integer
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: yes/no/closer/farther or null if vetoed/abandoned.
+          title: Answer
+        exclusion:
+          anyOf:
+          - discriminator:
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+              propertyName: type
+            oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+          - type: 'null'
+          default: null
+          description: This question's exclusion zone.
+          title: Exclusion
+        total_exclusion:
+          anyOf:
+          - discriminator:
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+              propertyName: type
+            oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+          - type: 'null'
+          default: null
+          description: Cumulative exclusion after this question.
+          title: Total Exclusion
+        answered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: When the question was resolved.
+          title: Answered At
+      required:
+      - question_id
+      - sequence
+      - question_type
+      - status
+      - ask_count
+      - asked_by
+      - asked_at
+      - slot_index
+      title: SeekerQuestionHistoryEntry
+      type: object
+    SeekerGameStateResponse:
+      description: "Dynamic seeker state snapshot \u2014 delivered as initial SSE\
+        \ event on connect."
+      properties:
+        game_id:
+          format: uuid
+          title: Game Id
+          type: string
+        phase:
+          description: 'Current phase: hiding or seeking.'
+          title: Phase
+          type: string
+        hiding_started_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Hiding Started At
+        seeking_started_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Seeking Started At
+        self_player_id:
+          description: Caller's player ID.
+          format: uuid
+          title: Self Player Id
+          type: string
+        host_player_id:
+          description: Player ID of the game's host.
+          format: uuid
+          title: Host Player Id
+          type: string
+        hiders:
+          description: "Hiders \u2014 identity only, no location."
+          items:
+            $ref: '#/components/schemas/RosterPlayer'
+          title: Hiders
+          type: array
+        seekers:
+          description: All seekers with last known positions.
+          items:
+            $ref: '#/components/schemas/GamePlayer'
+          title: Seekers
+          type: array
+        active_question:
+          anyOf:
+          - $ref: '#/components/schemas/SeekerActiveQuestion'
+          - type: 'null'
+          default: null
+          description: Current in-flight question.
+        question_history:
+          description: Resolved questions with answers and exclusion geometry.
+          items:
+            $ref: '#/components/schemas/SeekerQuestionHistoryEntry'
+          title: Question History
+          type: array
+        total_exclusion:
+          anyOf:
+          - discriminator:
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+              propertyName: type
+            oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+          - type: 'null'
+          default: null
+          description: Cumulative exclusion zone.
+          title: Total Exclusion
+        inventory:
+          description: All inventory slots with current ask counts.
+          items:
+            $ref: '#/components/schemas/InventorySlotResponse'
+          title: Inventory
+          type: array
+        hiding_zone_expanded:
+          default: false
+          description: Whether the hiding zone has been expanded.
+          title: Hiding Zone Expanded
+          type: boolean
+      required:
+      - game_id
+      - phase
+      - hiding_started_at
+      - seeking_started_at
+      - self_player_id
+      - host_player_id
+      - hiders
+      - seekers
+      - question_history
+      - inventory
+      title: SeekerGameStateResponse
       type: object

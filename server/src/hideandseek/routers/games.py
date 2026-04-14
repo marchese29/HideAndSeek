@@ -46,6 +46,7 @@ from hideandseek.schemas.response import (
 from hideandseek_core.broadcast.emit import emit_gameplay
 from hideandseek_core.broadcast.events import (
     GameDissolvedEvent,
+    GameEndedEvent,
     GameHostChangedEvent,
     GamePlayerLeftEvent,
     HidingZoneExpandedEvent,
@@ -77,7 +78,7 @@ from hideandseek_core.queries.games import (
 )
 from hideandseek_core.queries.location import create_location_update
 from hideandseek_core.queries.maps import get_map
-from hideandseek_core.queries.questions import get_inventory_slots
+from hideandseek_core.queries.questions import get_active_question, get_inventory_slots
 from hideandseek_core.queries.stops import get_stops_near_point, validate_stop_playable
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import (
@@ -344,23 +345,34 @@ def start_game(
     return GameResponse.from_model(game)
 
 
-@router.post('/{game_id}/end', response_model=GameResponse)
+@router.post('/{game_id}/end', status_code=204)
 def end_game(
     game: Game = Depends(get_game),
-) -> GameResponse:
-    """Transition the game to finished."""
+    auth_player_id: uuid.UUID = Depends(get_authenticated_player_id),
+) -> None:
+    """End the game for all players. Host-only."""
+    if auth_player_id != game.host_player_id:
+        raise HTTPException(status_code=403, detail='Only the host can end the game.')
+
     if not game.status.is_active:
         raise HTTPException(
             status_code=409,
             detail=f'Cannot end game in {game.status} state.',
         )
 
-    # Revoke pending hiding timer if it exists
     if not celery_app.conf.task_always_eager:
         celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
+        active_question = get_active_question(game)
+        if active_question:
+            celery_app.control.revoke(f'answer_deadline:{active_question.id}', terminate=False)
 
-    game = update_game_status(game, GameStatus.finished)
-    return GameResponse.from_model(game)
+    update_game_status(game, GameStatus.finished)
+    emit_gameplay(GameEndedEvent(game_id=game.id))
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.game_ended,
+        alert='The host has ended the game.',
+    )
 
 
 @router.post('/{game_id}/hider-station', status_code=204)

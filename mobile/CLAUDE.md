@@ -210,6 +210,7 @@ Both hooks:
 - **`player_left`**: Player removed — `removePlayer()` filters player from `hiders`/`seekers` arrays. If the removed `player_id` matches the current player (kicked by host), shows alert, clears session, and navigates home.
 - **`host_changed`**: Host transferred — `setHostPlayerId()` updates `host_player_id` on state.
 - **`game_dissolved`**: Game ended (last hider/seeker left) — shows alert, clears session, navigates home.
+- **`game_ended`**: Host ended the game for all players — shows alert ("The host has ended the game"), clears session, navigates home.
 - **`hiding_zone_expanded`**: Hider expanded the hiding zone — sets `hiding_zone_expanded = true` on state, invalidates `['hiding-zone']` TanStack Query cache (forces re-fetch of larger polygon), shows alert to seekers.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 

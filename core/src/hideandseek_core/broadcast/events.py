@@ -378,6 +378,10 @@ class GameDissolvedEvent(GameplayEventSchema):
     reason: str
 
 
+class GameEndedEvent(GameplayEventSchema):
+    """Host ended the game for all players — both channels."""
+
+
 class HidingZoneExpandedEvent(GameplayEventSchema):
     """Hiding zone expanded by the hider — both channels."""
 
@@ -399,5 +403,6 @@ GameplayEvent = (
     | GamePlayerLeftEvent
     | GameHostChangedEvent
     | GameDissolvedEvent
+    | GameEndedEvent
     | HidingZoneExpandedEvent
 )

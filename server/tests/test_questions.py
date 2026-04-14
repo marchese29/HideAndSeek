@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 from shapely.geometry import Point
 from sqlalchemy import func, select
@@ -1502,7 +1503,9 @@ def test_randomize_radar_question(client: TestClient, session: Session):
     assert replacement.asked_by == seeker.id  # Seeker is still the asker
 
 
-def test_randomize_restores_original_slot(client: TestClient, session: Session):
+def test_randomize_restores_original_slot(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+):
     """Randomize decrements the original slot's ask_count back to 0."""
     game, hider, seeker = _setup_seeking_game(client, session)
     question_id = _ask_question(client, game.id, seeker.id, question_type='radar', slot_index=1)
@@ -1517,6 +1520,10 @@ def test_randomize_restores_original_slot(client: TestClient, session: Session):
         )
     ).one()
     assert slot.ask_count == 1
+
+    # Force random.choice to pick the first element so the replacement is
+    # deterministic and never re-picks slot 1 (slot 0 will be first eligible).
+    monkeypatch.setattr('hideandseek_core.logic.ask.random.choice', lambda seq: seq[0])
 
     client.post(
         f'/games/{game.id}/questions/{question_id}/randomize',
