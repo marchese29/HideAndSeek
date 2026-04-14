@@ -5,9 +5,9 @@
 
 Mobile UX for asking questions (seeker) and answering questions (hider) during the seeking phase. Covers the full lifecycle from question selection through resolution.
 
-Depends on: `utility-belt.md` (belt layout, state action button), `gameplay-mobile.md` (screen layout, SSE state, map layers), `gameplay-state.md` (SSE events, question lifecycle).
+Depends on: `2026-04-03-utility-belt.md` (belt layout, state action button), `2026-03-29-gameplay-mobile.md` (screen layout, SSE state, map layers), `2026-03-29-gameplay-state.md` (SSE events, question lifecycle).
 
-Supersedes: the placeholder "Ask question" slot in `gameplay-mobile.md` section 6, the Question Drawer (hider bottom sheet) in `gameplay-mobile.md` section 7, and the Seeker Question Banner in `gameplay-mobile.md` section 7.
+Supersedes: the placeholder "Ask question" slot in `2026-03-29-gameplay-mobile.md` section 6, the Question Drawer (hider bottom sheet) in `2026-03-29-gameplay-mobile.md` section 7, and the Seeker Question Banner in `2026-03-29-gameplay-mobile.md` section 7.
 
 ---
 
@@ -152,7 +152,7 @@ On terminal SSE event:
 
 ## 5. Banner and Context Strip
 
-The Question Banner and the context strip (`utility-belt.md` section 2) occupy the **same space** above the belt's main row. They never display simultaneously.
+The Question Banner and the context strip (`2026-04-03-utility-belt.md` section 2) occupy the **same space** above the belt's main row. They never display simultaneously.
 
 **Animation:** The banner slides up from the bottom of the context strip space (drawer-style), covering the context strip. On dismiss, it slides back down to reveal the context strip underneath. This gives spatial continuity — the context strip feels like it's "behind" the banner.
 
@@ -190,7 +190,7 @@ A circle overlay centered on the seeker's ask location with a radius of `min_tra
 
 ### Existing: Total Exclusion
 
-The existing `total_exclusion` polygon overlay (seeker, seeking phase) continues to render as described in `gameplay-mobile.md`. Preview boundary lines render on top of it.
+The existing `total_exclusion` polygon overlay (seeker, seeking phase) continues to render as described in `2026-03-29-gameplay-mobile.md`. Preview boundary lines render on top of it.
 
 ---
 

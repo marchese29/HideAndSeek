@@ -3,9 +3,9 @@
 > Status: **Draft**
 > Last updated: 2026-04-03
 
-The gameplay HUD at the bottom of the screen. Provides timers, phase-specific actions, map tools, game info, and meta actions (leave). Replaces the flat "row of slots" concept from `gameplay-mobile.md` section 6 with a structured, zone-based layout.
+The gameplay HUD at the bottom of the screen. Provides timers, phase-specific actions, map tools, game info, and meta actions (leave). Replaces the flat "row of slots" concept from `2026-03-29-gameplay-mobile.md` section 6 with a structured, zone-based layout.
 
-Depends on: `gameplay-mobile.md` (screen layout, SSE state, component hierarchy).
+Depends on: `2026-03-29-gameplay-mobile.md` (screen layout, SSE state, component hierarchy).
 
 ---
 

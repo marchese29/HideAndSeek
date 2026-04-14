@@ -5,7 +5,7 @@
 
 Server changes to support the gameplay screen. Covers role-specific game state SSE endpoints, dual-channel broadcasting with publish-side visibility, location broadcasting, and simplified REST responses.
 
-Depends on: `lobby-server.md` (broadcast infrastructure, SSE patterns, Redis pub/sub).
+Depends on: `2026-03-07-lobby-server.md` (broadcast infrastructure, SSE patterns, Redis pub/sub).
 
 ---
 

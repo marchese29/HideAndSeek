@@ -3,9 +3,9 @@
 > Status: **Draft**
 > Last updated: 2026-03-29
 
-Mobile app screens, navigation, state management, and real-time connectivity for the gameplay phase (hiding + seeking). Companion to `gameplay-state.md` which defines the server contract.
+Mobile app screens, navigation, state management, and real-time connectivity for the gameplay phase (hiding + seeking). Companion to `2026-03-29-gameplay-state.md` which defines the server contract.
 
-Depends on: `lobby-mobile.md` (SSE patterns, state management conventions, color mapping).
+Depends on: `2026-03-07-lobby-mobile.md` (SSE patterns, state management conventions, color mapping).
 
 ---
 

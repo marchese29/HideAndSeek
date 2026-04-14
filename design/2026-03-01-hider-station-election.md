@@ -2,7 +2,7 @@
 
 > Status: **Implementation**
 > Last updated: 2026-03-01
-> Supersedes: Station Selection section in `endgame.md`
+> Supersedes: Station Selection section in `2026-02-22-endgame.md`
 
 How the hider's station is determined — voluntary election during hiding, automatic
 assignment at the hiding-to-seeking transition, and ambiguity resolution.

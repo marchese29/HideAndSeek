@@ -3,7 +3,7 @@
 > Status: **Draft**
 > Last updated: 2026-03-07
 
-Mobile app screens, navigation, state management, and real-time connectivity for game creation, joining, and the lobby. Companion to `lobby-server.md` which defines the API changes.
+Mobile app screens, navigation, state management, and real-time connectivity for game creation, joining, and the lobby. Companion to `2026-03-07-lobby-server.md` which defines the API changes.
 
 ---
 
@@ -179,7 +179,7 @@ Events update the TanStack Query cache directly, so all components re-render aut
 
 ### Idempotency
 
-The initial `game_state` event may overlap with incremental events (see race condition in `lobby-server.md`). Clients handle this by upserting players by ID — receiving a `player_joined` for someone already in the player list is a no-op.
+The initial `game_state` event may overlap with incremental events (see race condition in `2026-03-07-lobby-server.md`). Clients handle this by upserting players by ID — receiving a `player_joined` for someone already in the player list is a no-op.
 
 ### Reconnection
 

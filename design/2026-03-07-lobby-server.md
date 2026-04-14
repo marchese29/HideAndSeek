@@ -341,7 +341,7 @@ On reconnect, clients get a fresh `game_state` event with full current state. No
 
 ## 9. Interaction with Push Notifications
 
-The push notification design (`push-notifications.md`) says "No push" for lobby events. That remains correct — SSE handles lobby updates for foreground clients.
+The push notification design (`2026-02-14-push-notifications.md`) says "No push" for lobby events. That remains correct — SSE handles lobby updates for foreground clients.
 
 Push remains the right tool for:
 - `game_started` — players who backgrounded their phone while waiting.

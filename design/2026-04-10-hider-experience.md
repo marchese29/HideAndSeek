@@ -7,8 +7,8 @@ The hider's experience during active gameplay — station selection, zone awaren
 warnings, and question answer previews. Covers server-side enrichment of location events and
 the mobile UX that consumes them.
 
-Depends on: `hider-station-election.md` (election mechanics), `gameplay-state.md` (SSE
-contract), `gameplay-mobile.md` (screen layout), `question-flow-mobile.md` (question banner).
+Depends on: `2026-03-01-hider-station-election.md` (election mechanics), `2026-03-29-gameplay-state.md` (SSE
+contract), `2026-03-29-gameplay-mobile.md` (screen layout), `2026-04-04-question-flow-mobile.md` (question banner).
 
 ---
 
@@ -357,7 +357,7 @@ question's exclusion boundary on the map — the same boundary seekers see as a 
 
 ### Station election
 
-This design does not change the election mechanics defined in `hider-station-election.md`.
+This design does not change the election mechanics defined in `2026-03-01-hider-station-election.md`.
 The `POST /hider-station` endpoint, validation rules, and `StationElectionEvent` are
 unchanged. This design adds the client-side UX for invoking those mechanics and the
 server-side enrichment that makes them discoverable without polling.

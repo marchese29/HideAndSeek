@@ -2,7 +2,7 @@
 
 > Status: **Draft**
 > Last updated: 2026-04-09
-> Depends on: `matching-measuring-questions.md` (MapFeature, FeatureCategory, feature resolution), `question-flow-mobile.md` (belt takeover, question banner, preview endpoint)
+> Depends on: `2026-02-16-matching-measuring-questions.md` (MapFeature, FeatureCategory, feature resolution), `2026-04-04-question-flow-mobile.md` (belt takeover, question banner, preview endpoint)
 
 A new question type where the seeker picks a POI category and the game determines which specific POI the hider is closest to. Unlike all other question types which produce binary answers (yes/no, closer/farther), tentacles produces a **multi-valued answer** — a specific POI — and excludes everything outside that POI's Voronoi cell. High information yield, high draw cost.
 
@@ -388,7 +388,7 @@ def get_features_by_stable_ids(
 
 ### 4.1 Type Selection
 
-Tentacles appears as a fifth button in the belt takeover type selection (section 2 of `question-flow-mobile.md`):
+Tentacles appears as a fifth button in the belt takeover type selection (section 2 of `2026-04-04-question-flow-mobile.md`):
 
 | Button | Icon | Label |
 |--------|------|-------|
@@ -451,7 +451,7 @@ On `question_answered` SSE event:
 
 When a tentacles hit resolves, the map should briefly highlight the Voronoi cell that the hider is in (the "safe zone") before the exclusion overlay settles. This helps seekers immediately understand the spatial implication of the answer. The highlight can be a brief pulse or glow on the safe zone polygon, then it fades to the standard "non-excluded area" rendering.
 
-For the timeline scrubbing feature (from `utility-belt.md`), the tentacles exclusion zone is treated like any other — scrubbing to this question shows the exclusion it produced. The timeline entry could show a small POI icon or the category icon.
+For the timeline scrubbing feature (from `2026-04-03-utility-belt.md`), the tentacles exclusion zone is treated like any other — scrubbing to this question shows the exclusion it produced. The timeline entry could show a small POI icon or the category icon.
 
 ---
 
