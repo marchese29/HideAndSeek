@@ -34,6 +34,24 @@ export async function abandonQuestion(gameId: string, questionId: string): Promi
   return !error;
 }
 
+/** Randomize a question as hider. Returns ok or an error detail for user display. */
+export async function randomizeQuestion(
+  gameId: string,
+  questionId: string,
+): Promise<{ ok: true } | { ok: false; detail: string }> {
+  const { error } = await api.POST('/games/{game_id}/questions/{question_id}/randomize', {
+    params: {
+      path: { game_id: gameId, question_id: questionId },
+      header: authHeader(),
+    },
+  });
+  if (error) {
+    const detail = (error as { detail?: string }).detail ?? 'Unable to randomize this question.';
+    return { ok: false, detail };
+  }
+  return { ok: true };
+}
+
 /** Lock in the seeker's end position for a thermometer question. Returns true on success. */
 export async function lockInThermometer(gameId: string, questionId: string): Promise<boolean> {
   const { error } = await api.POST('/games/{game_id}/questions/thermometer/{question_id}/lock-in', {

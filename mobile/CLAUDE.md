@@ -35,7 +35,7 @@ src/
     schema.d.ts                # Auto-generated from OpenAPI — DO NOT EDIT
     client.ts                  # openapi-fetch wrapper + X-Player-Id + X-Player-Secret middleware
     queryClient.ts             # TanStack Query client instance
-    questions.ts               # Question API calls (answer, veto, abandon, lock-in). Ask uses api.POST directly.
+    questions.ts               # Question API calls (answer, veto, randomize, abandon, lock-in). Ask uses api.POST directly.
     powers.ts                  # Power-up API calls (expand hiding zone)
   store.ts                     # Zustand store (session + push token state)
   stores/
@@ -44,6 +44,7 @@ src/
     gameplay.ts                # Gameplay type aliases — unions derived from schema via indexed access, auto-update with server changes
   constants/
     colors.ts                  # PlayerColor → hex mapping
+    questionColors.ts          # Per-question-type color constants (active/inactive/onActive/rgb) — shared by banner, belt, and map overlays
   hooks/
     useCountdownTimer.ts       # Countdown timer to an ISO deadline (question deadline display)
     useGameInfo.ts             # Static game info (TanStack Query, fetched once, staleTime=Infinity)
@@ -78,7 +79,7 @@ src/
       index.ts                 # Barrel export
       QuestionBanner.tsx       # Container — slide animation, role dispatch
       SeekerBanner.tsx         # Seeker: preview/ask/active/thermometer states + abandon/lock-in (min_travel validation)
-      HiderBanner.tsx          # Hider: pre-lock-in (gray) / answerable (urgency-colored) + answer preview on button + veto
+      HiderBanner.tsx          # Hider: pre-lock-in / answerable (type-colored bg) + answer preview on button + veto + randomize
       BannerCountdown.tsx      # MM:SS countdown to question deadline
     utility-belt/              # Gameplay utility belt + question selection
       index.ts                 # Barrel export

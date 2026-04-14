@@ -117,7 +117,7 @@ const EMPTY_HIDERS: GamePlayer[] = [];
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#2C3E50',
+    backgroundColor: '#1C1C1E',
   },
   mapArea: {
     flex: 1,

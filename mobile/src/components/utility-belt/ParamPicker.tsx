@@ -1,20 +1,8 @@
 import { memo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { getTypeColors } from '@/constants/questionColors';
 import type { InventorySlotResponse } from '@/types/gameplay';
-
-interface TypeColors {
-  active: string;
-  inactive: string;
-}
-
-const TYPE_COLORS: Record<string, TypeColors> = {
-  radar: { active: 'rgb(245, 121, 59)', inactive: 'rgb(242, 181, 150)' },
-  thermometer: { active: 'rgb(255, 191, 65)', inactive: 'rgb(248, 215, 152)' },
-  matching: { active: 'rgb(33, 47, 64)', inactive: 'rgb(135, 143, 151)' },
-  measuring: { active: 'rgb(77, 162, 100)', inactive: 'rgb(158, 201, 169)' },
-  tentacles: { active: 'rgb(138, 92, 199)', inactive: 'rgb(183, 152, 217)' },
-};
 
 interface ParamPickerProps {
   slots: InventorySlotResponse[];
@@ -70,7 +58,7 @@ export const ParamPicker = memo(function ParamPicker({
 }: ParamPickerProps) {
   const itemsPerRow = Math.ceil(slots.length / 4);
   const rows = chunk(slots, itemsPerRow);
-  const colors = TYPE_COLORS[questionType] ?? TYPE_COLORS.radar;
+  const colors = getTypeColors(questionType);
 
   return (
     <ScrollView

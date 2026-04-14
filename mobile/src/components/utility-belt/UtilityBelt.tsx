@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     justifyContent: 'center',
     gap: 4,
-    backgroundColor: '#2C3E50',
+    backgroundColor: '#1C1C1E',
     padding: 8,
     borderTopRightRadius: 10,
     borderBottomRightRadius: 10,

@@ -1,11 +1,14 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 
+import { getBannerColor } from '@/constants/questionColors';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { HiderActiveQuestion } from '@/types/gameplay';
 
 import { HiderBanner } from './HiderBanner';
 import { SeekerBanner } from './SeekerBanner';
+
+const BELT_DARK = '#1C1C1E';
 
 interface QuestionBannerProps {
   role: 'hider' | 'seeker';
@@ -27,6 +30,10 @@ export const QuestionBanner = memo(function QuestionBanner({
   const previewQuestion = useGameplayStore((s) => s.previewQuestion);
 
   const visible = activeQuestion !== null || previewQuestion !== null;
+
+  // Derive banner background from question type
+  const questionType = activeQuestion?.question_type ?? previewQuestion?.question_type ?? null;
+  const liveBgColor = questionType ? getBannerColor(questionType) : BELT_DARK;
 
   // Build live banner content
   let liveContent: React.ReactNode = null;
@@ -50,10 +57,12 @@ export const QuestionBanner = memo(function QuestionBanner({
     );
   }
 
-  // Snapshot the last visible content so it stays frozen during slide-out.
+  // Snapshot the last visible content and background so they stay frozen during slide-out.
   const lastContentRef = useRef<React.ReactNode>(null);
+  const lastBgColorRef = useRef(BELT_DARK);
   if (visible && liveContent !== null) {
     lastContentRef.current = liveContent;
+    lastBgColorRef.current = liveBgColor;
   }
 
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -76,6 +85,7 @@ export const QuestionBanner = memo(function QuestionBanner({
         if (finished) {
           setShouldRender(false);
           lastContentRef.current = null;
+          lastBgColorRef.current = BELT_DARK;
         }
       });
     }
@@ -88,8 +98,15 @@ export const QuestionBanner = memo(function QuestionBanner({
     outputRange: [60, 0],
   });
 
+  const bgColor = visible ? liveBgColor : lastBgColorRef.current;
+
   return (
-    <Animated.View style={[styles.wrapper, { transform: [{ translateY }], opacity: slideAnim }]}>
+    <Animated.View
+      style={[
+        styles.wrapper,
+        { backgroundColor: bgColor, transform: [{ translateY }], opacity: slideAnim },
+      ]}
+    >
       {visible ? liveContent : lastContentRef.current}
     </Animated.View>
   );
@@ -101,6 +118,6 @@ const styles = StyleSheet.create({
     bottom: '100%',
     left: 0,
     right: 0,
-    backgroundColor: '#2C3E50',
+    backgroundColor: BELT_DARK,
   },
 });

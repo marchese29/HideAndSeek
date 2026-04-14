@@ -2,25 +2,14 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { getTypeColors } from '@/constants/questionColors';
+
 interface QuestionTypeBarProps {
   onSelectType: (type: string) => void;
   selectedType: string | null;
   disabled: boolean;
   availableTypes: Set<string>;
 }
-
-interface TypeColors {
-  active: string;
-  inactive: string;
-}
-
-const TYPE_COLORS: Record<string, TypeColors> = {
-  radar: { active: 'rgb(245, 121, 59)', inactive: 'rgb(242, 181, 150)' },
-  thermometer: { active: 'rgb(255, 191, 65)', inactive: 'rgb(248, 215, 152)' },
-  matching: { active: 'rgb(33, 47, 64)', inactive: 'rgb(135, 143, 151)' },
-  measuring: { active: 'rgb(77, 162, 100)', inactive: 'rgb(158, 201, 169)' },
-  tentacles: { active: 'rgb(138, 92, 199)', inactive: 'rgb(183, 152, 217)' },
-};
 
 const ALL_QUESTION_TYPES: {
   type: string;
@@ -53,7 +42,7 @@ export const QuestionTypeBar = memo(function QuestionTypeBar({
         <View key={rowIndex} style={styles.row}>
           {row.map(({ type, icon, label }) => {
             const isSelected = type === selectedType;
-            const colors = TYPE_COLORS[type];
+            const colors = getTypeColors(type);
             const bg = disabled ? colors.inactive : colors.active;
             return (
               <Pressable

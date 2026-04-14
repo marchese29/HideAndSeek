@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import { abandonQuestion, lockInThermometer } from '@/api/questions';
+import { getTypeColors } from '@/constants/questionColors';
 import { useGameInfo } from '@/hooks/useGameInfo';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
 import { useGameplayStore } from '@/stores/gameplayStore';
@@ -18,6 +19,20 @@ import type {
 import { haversineMeters, metersToConvention } from '@/utils/geo';
 
 import { BannerCountdown } from './BannerCountdown';
+
+/** Adaptive button styling: uses dark overlays when text is dark, white overlays otherwise. */
+function buttonStyle(onActive: string) {
+  const dark = onActive !== '#fff';
+  return {
+    backgroundColor: dark ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.2)',
+    borderColor: dark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.4)',
+  };
+}
+
+function buttonPressedStyle(onActive: string) {
+  const dark = onActive !== '#fff';
+  return { backgroundColor: dark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.35)' };
+}
 
 interface SeekerBannerProps {
   activeQuestion: SeekerActiveQuestion | HiderActiveQuestion | null;
@@ -192,6 +207,7 @@ export const SeekerBanner = memo(function SeekerBanner({
 
   // Preview state (pre-ask) — triggered by question selection UI
   if (previewQuestion && !activeQuestion) {
+    const previewColors = getTypeColors(previewQuestion.question_type);
     const previewLabel = previewQuestion.custom_distance
       ? `${previewQuestion.custom_distance} ${convention === 'metric' ? 'km' : 'mi'}`
       : formatQuestionLabel(previewQuestion.question_type, previewSlot, convention);
@@ -206,11 +222,11 @@ export const SeekerBanner = memo(function SeekerBanner({
         <MaterialCommunityIcons
           name={questionTypeIcon(previewQuestion.question_type)}
           size={20}
-          color="#fff"
+          color={previewColors.onActive}
         />
         {zeroPoi ? (
           <View style={styles.labelColumn}>
-            <Text style={styles.label} numberOfLines={1}>
+            <Text style={[styles.label, { color: previewColors.onActive }]} numberOfLines={1}>
               {previewLabel}
             </Text>
             <Text style={styles.warningText} numberOfLines={1}>
@@ -218,7 +234,7 @@ export const SeekerBanner = memo(function SeekerBanner({
             </Text>
           </View>
         ) : (
-          <Text style={styles.label} numberOfLines={1}>
+          <Text style={[styles.label, { color: previewColors.onActive }]} numberOfLines={1}>
             {previewLabel}
             {poiCount !== null && poiCount > 0 ? ` — ${poiCount} in range` : ''}
           </Text>
@@ -226,14 +242,14 @@ export const SeekerBanner = memo(function SeekerBanner({
         <Pressable
           style={({ pressed }) => [
             styles.button,
-            styles.primaryButton,
+            buttonStyle(previewColors.onActive),
             isDisabled && styles.disabled,
-            pressed && !isDisabled && styles.primaryPressed,
+            pressed && !isDisabled && buttonPressedStyle(previewColors.onActive),
           ]}
           disabled={isDisabled}
           onPress={onAsk}
         >
-          <Text style={styles.buttonText}>Ask</Text>
+          <Text style={[styles.buttonText, { color: previewColors.onActive }]}>Ask</Text>
         </Pressable>
       </View>
     );
@@ -246,10 +262,11 @@ export const SeekerBanner = memo(function SeekerBanner({
 
   // Thermometer in-progress: seeker needs to travel then lock in
   if (isThermometerInProgress) {
+    const thermoColors = getTypeColors('thermometer');
     return (
       <View style={styles.container}>
-        <MaterialCommunityIcons name="thermometer" size={20} color="#fff" />
-        <Text style={styles.label} numberOfLines={1}>
+        <MaterialCommunityIcons name="thermometer" size={20} color={thermoColors.onActive} />
+        <Text style={[styles.label, { color: thermoColors.onActive }]} numberOfLines={1}>
           {formatQuestionLabel('thermometer', activeSlot, convention)}
           {lockInEnabled
             ? ' — ready to lock in'
@@ -260,54 +277,58 @@ export const SeekerBanner = memo(function SeekerBanner({
         <Pressable
           style={({ pressed }) => [
             styles.iconButton,
-            styles.primaryButton,
+            buttonStyle(thermoColors.onActive),
             (isDisabled || !lockInEnabled) && styles.disabled,
-            pressed && !isDisabled && lockInEnabled && styles.primaryPressed,
+            pressed && !isDisabled && lockInEnabled && buttonPressedStyle(thermoColors.onActive),
           ]}
           disabled={isDisabled || !lockInEnabled}
           onPress={onLockIn}
         >
-          <MaterialCommunityIcons name="map-marker-check" size={20} color="#fff" />
+          <MaterialCommunityIcons name="map-marker-check" size={20} color={thermoColors.onActive} />
         </Pressable>
         <Pressable
           style={({ pressed }) => [
             styles.iconButton,
-            styles.destructiveButton,
+            buttonStyle(thermoColors.onActive),
             isDisabled && styles.disabled,
-            pressed && !isDisabled && styles.destructivePressed,
+            pressed && !isDisabled && buttonPressedStyle(thermoColors.onActive),
           ]}
           disabled={isDisabled}
           onPress={onAbandon}
         >
-          <MaterialCommunityIcons name="close" size={20} color="#F1C40F" />
+          <MaterialCommunityIcons name="close" size={20} color={thermoColors.onActive} />
         </Pressable>
       </View>
     );
   }
 
   // Active question (asked or answerable): waiting for hider to answer
+  const activeColors = getTypeColors(activeQuestion.question_type);
   return (
     <View style={styles.container}>
       <MaterialCommunityIcons
         name={questionTypeIcon(activeQuestion.question_type)}
         size={20}
-        color="#fff"
+        color={activeColors.onActive}
       />
-      <Text style={styles.label} numberOfLines={1}>
+      <Text style={[styles.label, { color: activeColors.onActive }]} numberOfLines={1}>
         {formatQuestionLabel(activeQuestion.question_type, activeSlot, convention)} — waiting...
       </Text>
-      <BannerCountdown deadlineIso={activeQuestion.question_deadline} />
+      <BannerCountdown
+        deadlineIso={activeQuestion.question_deadline}
+        color={activeColors.onActive}
+      />
       <Pressable
         style={({ pressed }) => [
           styles.iconButton,
-          styles.destructiveButton,
+          buttonStyle(activeColors.onActive),
           isDisabled && styles.disabled,
-          pressed && !isDisabled && styles.destructivePressed,
+          pressed && !isDisabled && buttonPressedStyle(activeColors.onActive),
         ]}
         disabled={isDisabled}
         onPress={onAbandon}
       >
-        <MaterialCommunityIcons name="close" size={18} color="#F1C40F" />
+        <MaterialCommunityIcons name="close" size={18} color={activeColors.onActive} />
       </Pressable>
     </View>
   );
@@ -353,27 +374,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryButton: {
-    backgroundColor: 'rgba(52, 152, 219, 0.3)',
-    borderColor: 'rgba(52, 152, 219, 0.5)',
-  },
-  primaryPressed: {
-    backgroundColor: 'rgba(52, 152, 219, 0.5)',
-  },
-  destructiveButton: {
-    backgroundColor: 'rgba(241, 196, 15, 0.2)',
-    borderColor: 'rgba(241, 196, 15, 0.4)',
-  },
-  destructivePressed: {
-    backgroundColor: 'rgba(241, 196, 15, 0.35)',
-  },
   buttonText: {
     color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  destructiveText: {
-    color: '#F1C40F',
     fontSize: 13,
     fontWeight: '600',
   },

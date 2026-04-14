@@ -2,8 +2,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { answerQuestion, vetoQuestion } from '@/api/questions';
-import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { answerQuestion, randomizeQuestion, vetoQuestion } from '@/api/questions';
+import { getTypeColors } from '@/constants/questionColors';
 import { useGameInfo } from '@/hooks/useGameInfo';
 import type { HiderActiveQuestion } from '@/types/gameplay';
 
@@ -41,18 +41,6 @@ interface HiderBannerProps {
   gameId: string;
 }
 
-const URGENCY_GREEN = '#2ECC71';
-const URGENCY_YELLOW = '#F1C40F';
-const URGENCY_RED = '#E74C3C';
-const WAITING_GRAY = '#7F8C8D';
-
-function urgencyColor(remainingSeconds: number | null): string {
-  if (remainingSeconds === null) return WAITING_GRAY;
-  if (remainingSeconds > 120) return URGENCY_GREEN;
-  if (remainingSeconds > 60) return URGENCY_YELLOW;
-  return URGENCY_RED;
-}
-
 const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
   radar: 'radar',
   thermometer: 'thermometer',
@@ -63,6 +51,29 @@ const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.gl
 
 function questionTypeIcon(questionType: string): keyof typeof MaterialCommunityIcons.glyphMap {
   return QUESTION_TYPE_ICONS[questionType] ?? 'help-circle-outline';
+}
+
+/** Adaptive button styling: uses dark overlays when text is dark, white overlays otherwise. */
+function buttonStyle(onActive: string, variant: 'answer' | 'powerUp') {
+  const dark = onActive !== '#fff';
+  if (variant === 'powerUp') {
+    return {
+      backgroundColor: dark ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.15)',
+      borderColor: dark ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.3)',
+    };
+  }
+  return {
+    backgroundColor: dark ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.2)',
+    borderColor: dark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.4)',
+  };
+}
+
+function buttonPressedStyle(onActive: string, variant: 'answer' | 'powerUp') {
+  const dark = onActive !== '#fff';
+  if (variant === 'powerUp') {
+    return { backgroundColor: dark ? 'rgba(0, 0, 0, 0.18)' : 'rgba(255, 255, 255, 0.3)' };
+  }
+  return { backgroundColor: dark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.35)' };
 }
 
 export const HiderBanner = memo(function HiderBanner({
@@ -76,7 +87,7 @@ export const HiderBanner = memo(function HiderBanner({
 
   const { gameInfo } = useGameInfo(gameId);
 
-  const remaining = useCountdownTimer(activeQuestion.question_deadline);
+  const colors = getTypeColors(activeQuestion.question_type);
 
   // Build stable_id → name lookup for tentacle POI answers
   const featureNames = useMemo(() => {
@@ -131,10 +142,24 @@ export const HiderBanner = memo(function HiderBanner({
         },
       },
       {
-        text: 'Randomize (coming soon)',
-        isPreferred: false,
+        text: 'Randomize',
         onPress: () => {
-          Alert.alert('Coming Soon', 'Randomize power-up is not yet available.');
+          Alert.alert('Randomize', 'Replace this question with a random one of the same type?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Randomize',
+              onPress: () => {
+                setActionInProgress(true);
+                void randomizeQuestion(gameId, activeQuestion.question_id)
+                  .then((result) => {
+                    if (!result.ok) {
+                      Alert.alert('Cannot Randomize', result.detail);
+                    }
+                  })
+                  .finally(() => setActionInProgress(false));
+              },
+            },
+          ]);
         },
       },
     ]);
@@ -144,41 +169,41 @@ export const HiderBanner = memo(function HiderBanner({
     activeQuestion.question_type === 'thermometer' &&
     (activeQuestion.status === 'asked' || activeQuestion.status === 'in_progress');
 
-  // Thermometer pre-lock-in: gray background, no actions
+  // Thermometer pre-lock-in: type-colored background, no actions
   if (isThermometerPreLockIn) {
     return (
-      <View style={[styles.container, { backgroundColor: WAITING_GRAY }]}>
-        <MaterialCommunityIcons name="thermometer" size={20} color="#fff" />
-        <Text style={styles.label} numberOfLines={1}>
+      <View style={styles.container}>
+        <MaterialCommunityIcons name="thermometer" size={20} color={colors.onActive} />
+        <Text style={[styles.label, { color: colors.onActive }]} numberOfLines={1}>
           Waiting for lock-in{answerLabel ? ` (${answerLabel})` : ''}
         </Text>
       </View>
     );
   }
 
-  // Answerable: urgency-colored background with action buttons
-  const bgColor = urgencyColor(remaining);
+  // Answerable: type-colored background with action buttons
   const answerDisabled = isDisabled || !answerLabel;
 
   return (
-    <View style={[styles.container, { backgroundColor: bgColor }]}>
+    <View style={styles.container}>
       <MaterialCommunityIcons
         name={questionTypeIcon(activeQuestion.question_type)}
         size={20}
-        color="#fff"
+        color={colors.onActive}
       />
-      <BannerCountdown deadlineIso={activeQuestion.question_deadline} />
+      <BannerCountdown deadlineIso={activeQuestion.question_deadline} color={colors.onActive} />
       <Pressable
         style={({ pressed }) => [
           styles.button,
           styles.answerButton,
+          buttonStyle(colors.onActive, 'answer'),
           answerDisabled && styles.disabled,
-          pressed && !answerDisabled && styles.answerPressed,
+          pressed && !answerDisabled && buttonPressedStyle(colors.onActive, 'answer'),
         ]}
         disabled={answerDisabled}
         onPress={onAnswer}
       >
-        <Text style={styles.buttonText} numberOfLines={1}>
+        <Text style={[styles.buttonText, { color: colors.onActive }]} numberOfLines={1}>
           {answerLabel ?? 'Answer'}
         </Text>
       </Pressable>
@@ -186,13 +211,14 @@ export const HiderBanner = memo(function HiderBanner({
         style={({ pressed }) => [
           styles.button,
           styles.powerUpButton,
+          buttonStyle(colors.onActive, 'powerUp'),
           isDisabled && styles.disabled,
-          pressed && !isDisabled && styles.powerUpPressed,
+          pressed && !isDisabled && buttonPressedStyle(colors.onActive, 'powerUp'),
         ]}
         disabled={isDisabled}
         onPress={onPowerUp}
       >
-        <MaterialCommunityIcons name="lightning-bolt" size={16} color="#fff" />
+        <MaterialCommunityIcons name="lightning-bolt" size={16} color={colors.onActive} />
       </Pressable>
     </View>
   );
@@ -208,7 +234,6 @@ const styles = StyleSheet.create({
   },
   label: {
     flexShrink: 1,
-    color: '#fff',
     fontSize: 14,
   },
   button: {
@@ -219,22 +244,11 @@ const styles = StyleSheet.create({
   },
   answerButton: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-  },
-  answerPressed: {
-    backgroundColor: 'rgba(255, 255, 255, 0.35)',
   },
   powerUpButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
     paddingHorizontal: 8,
   },
-  powerUpPressed: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
   buttonText: {
-    color: '#fff',
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
