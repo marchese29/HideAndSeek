@@ -256,6 +256,7 @@ class PushEventType(StrEnum):
     game_ended = 'game_ended'
     proximity_escalated = 'proximity_escalated'
     proximity_deescalated = 'proximity_deescalated'
+    freeze_departed = 'freeze_departed'
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

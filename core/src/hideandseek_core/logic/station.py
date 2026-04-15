@@ -181,3 +181,48 @@ def compute_not_in_zone(game: Game) -> list[uuid.UUID]:
         for player_id, loc in hider_entries
         if geo_distance(stop.coordinates, loc) > radius_m
     ]
+
+
+# ── Freeze mechanics ──────────────────────────────────────────────────
+
+_FREEZE_DEPARTURE_THRESHOLD_M = 50.0
+
+
+def set_freeze_locations(game: Game) -> None:
+    """Capture each hider's current position as their freeze location.
+
+    Called when proximity_tier escalates to ``entered``.  Hiders without a
+    recent location update are skipped (freeze_location stays None).
+    """
+    hiders = [p for p in game.players if p.role == PlayerRole.hider]
+    for hider in hiders:
+        latest = get_latest_location_for_player(hider, game)
+        hider.freeze_location = latest.coordinates if latest else None
+
+
+def clear_freeze_locations(game: Game) -> None:
+    """Clear freeze locations for all hiders.
+
+    Called when proximity_tier de-escalates from ``entered``.
+    """
+    hiders = [p for p in game.players if p.role == PlayerRole.hider]
+    for hider in hiders:
+        hider.freeze_location = None
+
+
+def compute_freeze_departed(game: Game) -> list[uuid.UUID]:
+    """Player IDs of hiders who moved >50 m from their freeze position.
+
+    Skips hiders whose freeze_location is None (no position captured).
+    """
+    hiders = [p for p in game.players if p.role == PlayerRole.hider]
+    departed: list[uuid.UUID] = []
+    for hider in hiders:
+        if hider.freeze_location is None:
+            continue
+        latest = get_latest_location_for_player(hider, game)
+        if not latest:
+            continue
+        if geo_distance(hider.freeze_location, latest.coordinates) > _FREEZE_DEPARTURE_THRESHOLD_M:
+            departed.append(hider.id)
+    return departed

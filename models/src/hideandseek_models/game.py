@@ -7,10 +7,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
+from shapely.geometry import Point
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek_models.base import Base
+from hideandseek_models.geo_types import ShapelyGeography
 from hideandseek_models.types import (
     GameStatus,
     MapSize,
@@ -68,6 +70,7 @@ class Player(Base):
     color: Mapped[PlayerColor]
     role: Mapped[PlayerRole | None] = mapped_column(default=None)
     secret_hash: Mapped[str] = mapped_column(default='')
+    freeze_location: Mapped[Point | None] = mapped_column(ShapelyGeography('POINT'), default=None)
 
     game: Mapped[Game] = relationship(back_populates='players')
 

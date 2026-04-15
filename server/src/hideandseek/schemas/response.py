@@ -723,6 +723,10 @@ class HiderGameStateResponse(SSEExposed, BaseModel):
         default=ProximityTier.none,
         description='Current proximity tier based on nearest seeker distance to hiding zone.',
     )
+    freeze_departed: list[uuid.UUID] | None = Field(
+        default=None,
+        description='Player IDs of hiders who moved >50m from freeze position during entered tier.',
+    )
 
 
 class SeekerGameStateResponse(SSEExposed, BaseModel):

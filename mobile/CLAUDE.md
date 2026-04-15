@@ -73,6 +73,7 @@ src/
     TransitRoute.tsx           # Transit route polyline + white stop dots (hides candidates via hiddenStopIds)
     PlayerPin.tsx              # Player map pin (animated — colored circle + initial + self ring + hider badge + stack count)
     DepartureWarningBanner.tsx # Red warning banner when hiders leave the hiding zone (driven by not_in_zone field)
+    FreezeWarningBanner.tsx # Red warning banner when hiders move during freeze (driven by freeze_departed field)
     LocationDeniedBanner.tsx   # Warning banner when location permission denied
     ConnectionDot.tsx          # SSE connection status dot (green/red) — used in lobby
     question-banner/           # Question Banner (active question state for both roles)
@@ -206,6 +207,9 @@ Both hooks:
 - **Server-confirmed self-location**: Each GPS fix is POSTed to the server; `selfLocation` in `GameplayStore` is only updated on successful response (not optimistic). This means the self pin correctly goes gray if the server is unreachable. `GameMap` prefers `selfLocation` over SSE data for the self player. `hydrate()` clears `selfLocation` once the SSE snapshot's timestamp catches up.
 - **Permission denied**: `LocationDeniedBanner` renders between map and utility belt when location access is refused. Links to device Settings via `Linking.openSettings()`.
 - **Departure warning**: `DepartureWarningBanner` renders absolutely positioned at the bottom of the map area (overlays the map, does not affect flex layout). Shown when `not_in_zone` is non-empty (hider role only, post-election). Red background (`#E74C3C`), resolves player IDs to names from hiders array. Auto-dismisses when all hiders return to zone.
+- **Freeze warning**: `FreezeWarningBanner` takes priority over `DepartureWarningBanner` when `freeze_departed` is non-empty (hider role only, during `entered` proximity tier). Same red background, shows "[Name] moved during freeze!". Auto-dismisses when hiders return to freeze positions.
+- **Amber hiding zone**: `HidingZoneOverlay` changes from blue to amber (`#F59E0B`) when `proximity_tier === 'entered'`, signaling hiders should stay put. Reverts on de-escalation.
+- **Proximity SSE events**: `useGameplayEvents` handles `proximity_escalated` and `proximity_deescalated` events, updating `proximity_tier` in the gameplay store via `updateProximityTier()`. `freeze_departed` is dispatched from `player_location` events via `updateFreezeDeparted()`.
 
 ## SSE Delta Events
 
@@ -222,6 +226,7 @@ Both hooks:
 - **`game_dissolved`**: Game ended (last hider/seeker left) — shows alert, clears session, navigates home.
 - **`game_ended`**: Host ended the game for all players — shows alert ("The host has ended the game"), clears session, navigates home.
 - **`hiding_zone_expanded`**: Hider expanded the hiding zone — sets `hiding_zone_expanded = true` on state, invalidates `['hiding-zone']` TanStack Query cache (forces re-fetch of larger polygon), shows alert to seekers.
+- **`proximity_escalated`** / **`proximity_deescalated`**: Seeker distance ring changed — `updateProximityTier()` on state. Drives amber hiding zone color. Hider channel only.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 
 ## Stop Selection (Hider Hiding Phase)

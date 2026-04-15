@@ -3022,6 +3022,15 @@ components:
           - type: 'null'
           default: null
           title: Computed Answer
+        freeze_departed:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Freeze Departed
       required:
       - player_id
       - name
@@ -3880,6 +3889,17 @@ components:
           default: none
           description: Current proximity tier based on nearest seeker distance to
             hiding zone.
+        freeze_departed:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          description: Player IDs of hiders who moved >50m from freeze position during
+            entered tier.
+          title: Freeze Departed
       required:
       - game_id
       - phase

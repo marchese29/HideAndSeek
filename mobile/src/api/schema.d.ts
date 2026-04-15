@@ -1723,6 +1723,11 @@ export interface components {
              * @default null
              */
             computed_answer: string | null;
+            /**
+             * Freeze Departed
+             * @default null
+             */
+            freeze_departed: string[] | null;
         };
         /**
          * SeekerQuestionAnsweredEvent
@@ -2362,6 +2367,12 @@ export interface components {
              * @default none
              */
             proximity_tier: components["schemas"]["ProximityTier"];
+            /**
+             * Freeze Departed
+             * @description Player IDs of hiders who moved >50m from freeze position during entered tier.
+             * @default null
+             */
+            freeze_departed: string[] | null;
         };
         /**
          * InventorySlotResponse

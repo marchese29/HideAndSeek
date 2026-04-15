@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, BackHandler, StyleSheet, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DepartureWarningBanner } from '@/components/DepartureWarningBanner';
+import { FreezeWarningBanner } from '@/components/FreezeWarningBanner';
 import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
 import { QuestionBanner } from '@/components/question-banner';
@@ -23,9 +24,12 @@ export default function GameplayScreen() {
   const role = useGameplayStore((s) => s.role);
   const state = useGameplayStore((s) => s.state);
 
-  // Departure warning: hider zone violations
+  // Departure / freeze warnings: hider zone violations
   const notInZone = useGameplayStore((s) =>
     s.status === 'connected' && s.role === 'hider' ? s.state.not_in_zone : null,
+  );
+  const freezeDeparted = useGameplayStore((s) =>
+    s.status === 'connected' && s.role === 'hider' ? s.state.freeze_departed : null,
   );
   const hiders = useGameplayStore((s) =>
     s.status === 'connected' && s.role === 'hider' ? s.state.hiders : EMPTY_HIDERS,
@@ -108,8 +112,11 @@ export default function GameplayScreen() {
             onMapPress={handleMapPress}
           />
         )}
-        {notInZone && notInZone.length > 0 && (
-          <DepartureWarningBanner notInZone={notInZone} hiders={hiders} />
+        {freezeDeparted && freezeDeparted.length > 0 ? (
+          <FreezeWarningBanner freezeDeparted={freezeDeparted} hiders={hiders} />
+        ) : (
+          notInZone &&
+          notInZone.length > 0 && <DepartureWarningBanner notInZone={notInZone} hiders={hiders} />
         )}
       </View>
 

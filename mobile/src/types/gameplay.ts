@@ -49,6 +49,8 @@ export type GameDissolvedDelta = S['GameDissolvedEvent'];
 export type GameEndedDelta = S['GameEndedEvent'];
 export type StationElectionDelta = S['StationElectionEvent'];
 export type HidingZoneExpandedDelta = S['HidingZoneExpandedEvent'];
+export type ProximityEscalatedDelta = S['ProximityEscalatedEvent'];
+export type ProximityDeescalatedDelta = S['ProximityDeescalatedEvent'];
 
 // ── Question Event Parameters ───────────────────────────────────────────────
 

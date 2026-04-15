@@ -29,6 +29,7 @@ src/hideandseek_core/
     emit.py            # publish_sse(), channel helpers, emit_gameplay()
   queries/             # DB query functions by domain
   logic/               # Business logic (session-free, side-effect-free beyond DB)
+    location.py        # process_location_update() — enrichment, proximity, freeze orchestration
 ```
 
 ## Architecture Rules
@@ -64,6 +65,19 @@ src/hideandseek_core/
 - `_distance_to_tier(distance_m, radius_m)` — maps distance to `ProximityTier` via 1×/2×/4× threshold multipliers of the effective hiding zone radius.
 
 Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×, `none` beyond 4×. Asymmetric rules: escalation on any single seeker, de-escalation requires all seekers unanimous. The router handles SSE event emission and push notification dispatch based on the result.
+
+## Logic — Hider Freeze Mechanic
+
+`logic/station.py` also provides freeze-related functions triggered when `proximity_tier` reaches `entered`:
+- `set_freeze_locations(game)` — captures each hider's latest position into `Player.freeze_location`. Called on escalation to `entered`.
+- `clear_freeze_locations(game)` — nulls out all hiders' freeze locations. Called on de-escalation from `entered`.
+- `compute_freeze_departed(game)` — player IDs of hiders who moved >50m from their freeze position. Used for `freeze_departed` field on `PlayerLocationEvent` and `HiderGameStateResponse`.
+
+## Logic — Location Update Processing
+
+`logic/location.py` orchestrates all business logic for a location update:
+- `process_location_update(game, player, coordinates, timestamp)` → `LocationEnrichment` — persists the location, evaluates proximity (seeker path), manages freeze state transitions, and computes hider enrichment fields. Returns a `LocationEnrichment` dataclass; the router dispatches events and push based on the result.
+- This module owns the freeze departure edge-trigger detection (`freeze_departure_push` flag on the result).
 
 ## Logic — Randomize Powerup
 

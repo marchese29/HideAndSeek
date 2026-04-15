@@ -154,6 +154,7 @@ class PlayerLocationEvent(GameplayEventSchema):
     candidate_stations: list[uuid.UUID] | None = None
     not_in_zone: list[uuid.UUID] | None = None
     computed_answer: str | None = None
+    freeze_departed: list[uuid.UUID] | None = None
 
 
 class QuestionAskedEvent(GameplayEventSchema):

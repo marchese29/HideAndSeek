@@ -76,6 +76,9 @@ export function GameMap({
   // Hiding zone: preview (pre-election highlight) or permanent (post-election)
   const { hidingZone } = useHidingZone(highlightedStopId ?? hiderStationId);
 
+  // Proximity tier from hider state (drives amber zone color)
+  const proximityTier = role === 'hider' ? (state as HiderGameState).proximity_tier : null;
+
   // Candidate stations from hider state
   const candidateStations = role === 'hider' ? (state as HiderGameState).candidate_stations : null;
 
@@ -177,7 +180,7 @@ export function GameMap({
           onStopPress={onCandidateStopPress}
         />
       )}
-      <HidingZoneOverlay hidingZone={hidingZone} />
+      <HidingZoneOverlay hidingZone={hidingZone} proximityEntered={proximityTier === 'entered'} />
       {players.map(({ player, isSelf, isHider, isStale, index, stackCount }) => (
         <PlayerPin
           key={player.id}

@@ -17,6 +17,8 @@ import type {
   PhaseChangedDelta,
   PlayerLeftDelta,
   PlayerLocationDelta,
+  ProximityDeescalatedDelta,
+  ProximityEscalatedDelta,
   QuestionAbandonedDelta,
   QuestionAnswerableDelta,
   QuestionAskedDelta,
@@ -40,13 +42,43 @@ type GameplayEventType =
   | 'host_changed'
   | 'game_dissolved'
   | 'game_ended'
-  | 'hiding_zone_expanded';
+  | 'hiding_zone_expanded'
+  | 'proximity_escalated'
+  | 'proximity_deescalated';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
 function parseData<T>(event: SSEEvent): T | null {
   if (!event.data) return null;
   return JSON.parse(event.data) as T;
+}
+
+type ProximityTier = ProximityEscalatedDelta['proximity_tier'];
+
+function proximityEscalationMessage(tier: ProximityTier): string | null {
+  switch (tier) {
+    case 'approaching':
+      return 'A seeker is heading your way.';
+    case 'near':
+      return 'A seeker is getting close!';
+    case 'entered':
+      return 'A seeker entered your hiding zone — freeze!';
+    default:
+      return null;
+  }
+}
+
+function proximityDeescalationMessage(tier: ProximityTier): string | null {
+  switch (tier) {
+    case 'near':
+      return 'Seekers moved back but are still close.';
+    case 'approaching':
+      return 'Seekers are pulling away.';
+    case 'none':
+      return 'All seekers are far away.';
+    default:
+      return null;
+  }
 }
 
 const BASE_RECONNECT_MS = 1_000;
@@ -125,6 +157,27 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           if (data.computed_answer !== undefined) {
             store.updateComputedAnswer(data.computed_answer);
           }
+          if (data.freeze_departed !== undefined) {
+            store.updateFreezeDeparted(data.freeze_departed);
+          }
+        }
+      });
+
+      es.addEventListener('proximity_escalated', (event) => {
+        const data = parseData<ProximityEscalatedDelta>(event);
+        if (data) {
+          useGameplayStore.getState().updateProximityTier(data.proximity_tier);
+          const message = proximityEscalationMessage(data.proximity_tier);
+          if (message) Alert.alert('Seekers Approaching', message);
+        }
+      });
+
+      es.addEventListener('proximity_deescalated', (event) => {
+        const data = parseData<ProximityDeescalatedDelta>(event);
+        if (data) {
+          useGameplayStore.getState().updateProximityTier(data.proximity_tier);
+          const message = proximityDeescalationMessage(data.proximity_tier);
+          if (message) Alert.alert('Seekers Pulling Back', message);
         }
       });
 

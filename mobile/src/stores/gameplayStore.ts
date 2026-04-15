@@ -41,7 +41,9 @@ interface GameplayActions {
   setPreviewQuestion: (preview: PreviewQuestion | null) => void;
   updateCandidateStations: (candidates: string[] | null) => void;
   updateNotInZone: (notInZone: string[] | null) => void;
+  updateFreezeDeparted: (departed: string[] | null) => void;
   updateComputedAnswer: (answer: string | null) => void;
+  updateProximityTier: (tier: HiderGameState['proximity_tier']) => void;
   applyStationElection: (delta: StationElectionDelta) => void;
   removePlayer: (playerId: string) => void;
   setHostPlayerId: (hostPlayerId: string) => void;
@@ -387,11 +389,27 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
     });
   },
 
+  updateFreezeDeparted: (departed) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
+      if (candidatesEqual(prev.state.freeze_departed ?? null, departed)) return prev;
+      return { ...prev, state: { ...prev.state, freeze_departed: departed } };
+    });
+  },
+
   updateComputedAnswer: (answer) => {
     set((prev) => {
       if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
       if (prev.state.computed_answer === answer) return prev;
       return { ...prev, state: { ...prev.state, computed_answer: answer } };
+    });
+  },
+
+  updateProximityTier: (tier) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
+      if (prev.state.proximity_tier === tier) return prev;
+      return { ...prev, state: { ...prev.state, proximity_tier: tier } };
     });
   },
 

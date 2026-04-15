@@ -20,7 +20,7 @@ src/hideandseek_models/
                            #   constants (MAX_PLAYERS), value objects (DistrictClass),
                            #   category classification sets
   geo_types.py             # Custom SQLAlchemy column types (ShapelyGeography, ShapelyGeometry)
-  game.py                  # Game, Player
+  game.py                  # Game, Player (Player.freeze_location for endgame freeze mechanic)
   game_map.py              # GameMap (tentacle_categories JSON column for tentacles config)
   inventory.py             # InventorySlot
   location.py              # LocationUpdate

@@ -28,6 +28,7 @@ from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_core.logic.answer import preview_answer
 from hideandseek_core.logic.station import (
     compute_candidate_station_ids,
+    compute_freeze_departed,
     compute_hider_centroid,
     compute_not_in_zone,
 )
@@ -42,7 +43,12 @@ from hideandseek_core.queries.questions import (
 from hideandseek_core.queries.routes import get_gameplay_routes
 from hideandseek_core.queries.stops import get_playable_stops
 from hideandseek_models.game import Game, Player
-from hideandseek_models.types import PlayerRole, QuestionStatus, StationElectionStatus
+from hideandseek_models.types import (
+    PlayerRole,
+    ProximityTier,
+    QuestionStatus,
+    StationElectionStatus,
+)
 
 _TERMINAL_STATUSES = {
     QuestionStatus.answered,
@@ -178,6 +184,10 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
             if hider_loc is not None:
                 computed_answer = preview_answer(active_q, hider_loc, game)
 
+    freeze_departed = (
+        compute_freeze_departed(game) if game.proximity_tier == ProximityTier.entered else None
+    )
+
     return HiderGameStateResponse(
         game_id=game.id,
         phase=game.status,
@@ -196,6 +206,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         computed_answer=computed_answer,
         hiding_zone_expanded=game.hiding_zone_expanded,
         proximity_tier=game.proximity_tier,
+        freeze_departed=freeze_departed,
     )
 
 
