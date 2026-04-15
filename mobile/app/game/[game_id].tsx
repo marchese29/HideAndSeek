@@ -42,9 +42,13 @@ export default function GameplayScreen() {
   useEffect(() => {
     const prev = prevStationStatusRef.current;
     prevStationStatusRef.current = stationElectionStatus;
-    if (prev && stationElectionStatus === 'auto_assigned' && prev !== 'auto_assigned' && hiderStationId) {
-      const stopName =
-        gameInfo?.stops.find((s) => s.id === hiderStationId)?.name ?? 'Unknown stop';
+    if (
+      prev &&
+      stationElectionStatus === 'auto_assigned' &&
+      prev !== 'auto_assigned' &&
+      hiderStationId
+    ) {
+      const stopName = gameInfo?.stops.find((s) => s.id === hiderStationId)?.name ?? 'Unknown stop';
       Alert.alert('Station Auto-Assigned', `Your hiding station was set to ${stopName}.`);
     }
   }, [stationElectionStatus, hiderStationId, gameInfo?.stops]);

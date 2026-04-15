@@ -178,7 +178,9 @@ export const HiderBanner = memo(function HiderBanner({
       <View style={styles.container}>
         <MaterialCommunityIcons name="thermometer" size={20} color={colors.onActive} />
         <Text style={[styles.label, { color: colors.onActive }]} numberOfLines={1}>
-          {isAmbiguous ? 'Pick A Hiding Zone First!' : `Waiting for lock-in${answerLabel ? ` (${answerLabel})` : ''}`}
+          {isAmbiguous
+            ? 'Pick A Hiding Zone First!'
+            : `Waiting for lock-in${answerLabel ? ` (${answerLabel})` : ''}`}
         </Text>
       </View>
     );

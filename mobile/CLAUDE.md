@@ -87,10 +87,19 @@ src/
       CandidateStatus.tsx      # Belt center status text for hiders (stop name / "Tap a stop" / "No stops in range")
       StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker, "Set Stop" for hider, "Powers" for hider seeking)
       GameTimer.tsx            # Live timer with connection-colored background
-      BeltActions.tsx          # Info + leave icon buttons (context-aware: host-kick / last-of-role / host-transfer / normal)
+      BeltActions.tsx          # More button (ellipsis icon) — opens MoreModal for meta-actions
       QuestionTypeBar.tsx      # Question type buttons (radar/thermo/match/measure/tentacles), filtered by inventory
       ParamPicker.tsx          # Horizontal scrollable inventory slot picker
       CustomDistanceInput.tsx  # Inline numeric input for custom distance slots
+    more-modal/                # More modal — bottom sheet for game meta-actions
+      index.ts                 # Barrel export
+      MoreModal.tsx            # Modal container, screen state machine, shared header (back/close)
+      MoreMenu.tsx             # Preferences-style menu list (Stats, Preferences, Leave, End Game, Kick)
+      PlaceholderScreen.tsx    # Reusable "Coming soon" body for Stats & Preferences
+      LeaveGameScreen.tsx      # Leave confirmation + host transfer picker (multi-step)
+      EndGameScreen.tsx        # End game confirmation screen
+      KickPlayerScreen.tsx     # Player picker + kick confirmation (multi-step, color dots)
+      gameActions.ts           # Extracted async functions: doLeave, doEndGame, doKick
     TentaclePOIOverlay.tsx     # Tentacles preview POI markers (purple dots with name callouts)
 scripts/
   generate-api.sh              # OpenAPI → TypeScript types

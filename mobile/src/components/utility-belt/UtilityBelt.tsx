@@ -217,7 +217,7 @@ export const UtilityBelt = memo(function UtilityBelt({
         )}
       </View>
 
-      {/* Right: Info + Leave */}
+      {/* Right: More button */}
       <BeltActions disabled={disabled} />
     </View>
   );
