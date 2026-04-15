@@ -9,6 +9,7 @@ import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, HiderGameState, SeekerGameState } from '@/types/gameplay';
 
 import { BeltActions } from './BeltActions';
+import { BeltUtilities } from './BeltUtilities';
 import { CandidateStatus } from './CandidateStatus';
 import { CustomDistanceInput } from './CustomDistanceInput';
 import { GameTimer } from './GameTimer';
@@ -184,6 +185,9 @@ export const UtilityBelt = memo(function UtilityBelt({
             stops={gameInfo.stops}
             highlightedStopId={highlightedStopId}
           />
+        )}
+        {isSeekerSeeking && selection.state.step === 'closed' && (
+          <BeltUtilities disabled={disabled} />
         )}
         {isSeekerSeeking && selection.state.step === 'type' && (
           <QuestionTypeBar

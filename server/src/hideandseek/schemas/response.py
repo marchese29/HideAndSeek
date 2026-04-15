@@ -466,12 +466,17 @@ class EndgameExclusionsResponse(BaseModel):
     hiding_zone: GeoJSONGeometry = Field(
         description='Hiding zone circle (clipped to game map boundary).'
     )
+    safe_zone: GeoJSONGeometry = Field(
+        description='Area within the hiding zone not covered by any exclusion. '
+        'Equals hiding_zone when no exclusions exist.',
+    )
     entries: list[EndgameExclusionEntryResponse]
 
     @staticmethod
     def from_result(result: EndgameExclusionResult) -> EndgameExclusionsResponse:
         return EndgameExclusionsResponse(
             hiding_zone=_geojson_adapter.validate_python(mapping(result.hiding_zone)),
+            safe_zone=_geojson_adapter.validate_python(mapping(result.safe_zone)),
             entries=[
                 EndgameExclusionEntryResponse(
                     question_id=e.question_id,

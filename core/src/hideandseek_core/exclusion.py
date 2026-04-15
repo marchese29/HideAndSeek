@@ -246,6 +246,7 @@ class EndgameExclusionResult:
 
     hiding_zone: BaseGeometry
     entries: list[EndgameExclusionEntry]
+    safe_zone: BaseGeometry
 
 
 def compute_endgame_exclusions(
@@ -295,7 +296,9 @@ def compute_endgame_exclusions(
             )
         )
 
-    return EndgameExclusionResult(hiding_zone=hiding_zone, entries=entries)
+    safe_zone = hiding_zone.difference(cumulative) if cumulative is not None else hiding_zone
+
+    return EndgameExclusionResult(hiding_zone=hiding_zone, entries=entries, safe_zone=safe_zone)
 
 
 # ── Preview boundaries ───────────────────────────────────────────────────

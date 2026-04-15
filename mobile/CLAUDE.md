@@ -83,7 +83,8 @@ src/
       BannerCountdown.tsx      # MM:SS countdown to question deadline
     utility-belt/              # Gameplay utility belt + question selection
       index.ts                 # Barrel export
-      UtilityBelt.tsx          # Container — three-section row, wires question selection + stop selection
+      UtilityBelt.tsx          # Container — three-section row, wires question selection + stop selection + utility buttons
+      BeltUtilities.tsx       # Seeker utility buttons (default belt center when question selection closed) — "Endgame" placeholder
       CandidateStatus.tsx      # Belt center status text for hiders (stop name / "Tap a stop" / "No stops in range")
       StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker, "Set Stop" for hider, "Powers" for hider seeking)
       GameTimer.tsx            # Live timer with connection-colored background

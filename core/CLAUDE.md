@@ -23,7 +23,7 @@ src/hideandseek_core/
   geo.py               # Pure geodesic distance functions (pyproj)
   geo_helpers.py       # Shapely-to-GeoJSON conversion helpers
   conventions.py       # Metric/imperial conversion, default inventory, resolve_tentacle_distance()
-  exclusion.py         # Exclusion zone geometry, boundary computation (incl. tentacles Voronoi)
+  exclusion.py         # Exclusion zone geometry, boundary computation (incl. tentacles Voronoi), endgame safe_zone
   broadcast/           # Gameplay event production + Redis publishing
     events.py          # Typed gameplay event Pydantic models (frozen, auto-registered for OpenAPI)
     emit.py            # publish_sse(), channel helpers, emit_gameplay()

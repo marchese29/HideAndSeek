@@ -817,6 +817,11 @@ export interface components {
              * @description Hiding zone circle (clipped to game map boundary).
              */
             hiding_zone: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
+            /**
+             * Safe Zone
+             * @description Area within the hiding zone not covered by any exclusion. Equals hiding_zone when no exclusions exist.
+             */
+            safe_zone: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
             /** Entries */
             entries: components["schemas"]["EndgameExclusionEntryResponse"][];
         };

@@ -99,6 +99,38 @@ def test_endgame_exclusions_none_exclusion_skipped() -> None:
     assert result.entries[0].total_exclusion is None
 
 
+def test_endgame_safe_zone_equals_hiding_zone_when_no_exclusions() -> None:
+    """safe_zone equals hiding_zone when no entries have exclusions."""
+    q = _make_question(sequence=1, exclusion=None)
+    result = compute_endgame_exclusions(GAME_MAP, Point(0, 0), 500, [q])
+    assert result.safe_zone.equals(result.hiding_zone)
+
+
+def test_endgame_safe_zone_equals_hiding_zone_when_empty() -> None:
+    """safe_zone equals hiding_zone when there are no entries at all."""
+    result = compute_endgame_exclusions(GAME_MAP, Point(0, 0), 500, [])
+    assert result.safe_zone.equals(result.hiding_zone)
+
+
+def test_endgame_safe_zone_is_hiding_zone_minus_exclusion() -> None:
+    """safe_zone equals hiding_zone minus the cumulative exclusion."""
+    exclusion = exclude_radar(GAME_MAP, Point(0, 0), 200, hit=False)
+    q = _make_question(sequence=1, exclusion=exclusion)
+    result = compute_endgame_exclusions(GAME_MAP, Point(0, 0), 500, [q])
+
+    assert not result.safe_zone.is_empty
+    # safe_zone should be within the hiding zone
+    assert result.hiding_zone.contains(result.safe_zone)
+    # safe_zone should not have area overlap with the cumulative exclusion
+    # (shared boundary lines are expected from difference() floating-point artifacts)
+    last_entry = result.entries[-1]
+    assert last_entry.total_exclusion is not None
+    assert result.safe_zone.intersection(last_entry.total_exclusion).area < 1e-10
+    # safe_zone + total_exclusion should roughly equal hiding_zone
+    combined_area = result.safe_zone.area + last_entry.total_exclusion.area
+    assert abs(combined_area - result.hiding_zone.area) / result.hiding_zone.area < 0.01
+
+
 def test_endgame_hiding_zone_clipped_to_game_map() -> None:
     """Hiding zone circle is clipped to the game map boundary at the edge."""
     # Station at the corner of a large map — circle extends outside the boundary
@@ -147,6 +179,8 @@ def test_endgame_exclusions_endpoint_seeking(session: Session, client: TestClien
     assert resp.status_code == 200
     data = resp.json()
     assert 'hiding_zone' in data
+    assert 'safe_zone' in data
+    assert data['safe_zone'] is not None
     assert 'entries' in data
     assert data['entries'] == []
 
@@ -186,6 +220,7 @@ def test_endgame_exclusions_with_answered_questions(session: Session, client: Te
     assert len(data['entries']) == 1
     assert data['entries'][0]['exclusion'] is not None
     assert data['entries'][0]['total_exclusion'] is not None
+    assert data['safe_zone'] is not None
 
 
 def test_endgame_exclusions_after_question_filters(session: Session, client: TestClient) -> None:

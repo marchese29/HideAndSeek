@@ -1691,6 +1691,28 @@ components:
               MultiPolygon: '#/components/schemas/MultiPolygon'
               Point: '#/components/schemas/Point'
               Polygon: '#/components/schemas/Polygon'
+        safe_zone:
+          oneOf:
+          - $ref: '#/components/schemas/Point'
+          - $ref: '#/components/schemas/MultiPoint'
+          - $ref: '#/components/schemas/LineString'
+          - $ref: '#/components/schemas/MultiLineString'
+          - $ref: '#/components/schemas/Polygon'
+          - $ref: '#/components/schemas/MultiPolygon'
+          - $ref: '#/components/schemas/GeometryCollection'
+          title: Safe Zone
+          description: Area within the hiding zone not covered by any exclusion. Equals
+            hiding_zone when no exclusions exist.
+          discriminator:
+            propertyName: type
+            mapping:
+              GeometryCollection: '#/components/schemas/GeometryCollection'
+              LineString: '#/components/schemas/LineString'
+              MultiLineString: '#/components/schemas/MultiLineString'
+              MultiPoint: '#/components/schemas/MultiPoint'
+              MultiPolygon: '#/components/schemas/MultiPolygon'
+              Point: '#/components/schemas/Point'
+              Polygon: '#/components/schemas/Polygon'
         entries:
           items:
             $ref: '#/components/schemas/EndgameExclusionEntryResponse'
@@ -1699,6 +1721,7 @@ components:
       type: object
       required:
       - hiding_zone
+      - safe_zone
       - entries
       title: EndgameExclusionsResponse
       description: "Endgame exclusion view \u2014 hiding zone geometry and per-question\
