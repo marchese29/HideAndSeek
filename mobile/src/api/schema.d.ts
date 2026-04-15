@@ -1635,18 +1635,31 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * ProximityTier
+         * @enum {string}
+         */
+        ProximityTier: "none" | "approaching" | "near" | "entered";
+        /**
+         * ProximityDeescalatedEvent
+         * @description All seekers pulled back — hider channel only.
+         */
+        ProximityDeescalatedEvent: {
+            proximity_tier: components["schemas"]["ProximityTier"];
+        };
+        /**
          * QuestionStatus
          * @enum {string}
          */
         QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned" | "randomized";
         /**
-         * SeekerQuestionAnsweredEvent
-         * @description A question was answered — seeker channel only (with exclusion geometry).
+         * HiderQuestionAnsweredEvent
+         * @description A question was answered — hider channel only.
          *
-         *     Carries answer-time delta fields only. No hider-privileged data
-         *     (no hider_location, no hider feature resolution).
+         *     Carries answer-time delta fields only (ask-time fields were sent
+         *     with QuestionAskedEvent). Includes hider-privileged data: location
+         *     and feature resolution.
          */
-        SeekerQuestionAnsweredEvent: {
+        HiderQuestionAnsweredEvent: {
             /**
              * Question Id
              * Format: uuid
@@ -1663,12 +1676,15 @@ export interface components {
              * Format: uuid
              */
             asked_by: string;
-            /** Exclusion */
-            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-            /** Total Exclusion */
-            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
             /** Answered At */
             answered_at: string | null;
+            hider_location: components["schemas"]["Point"] | null;
+            /** Hider Feature Id */
+            hider_feature_id: string | null;
+            /** Hider Feature Name */
+            hider_feature_name: string | null;
+            /** Hider Distance */
+            hider_distance: number | null;
         };
         /** PlayerLocationEvent */
         PlayerLocationEvent: {
@@ -1702,6 +1718,37 @@ export interface components {
              * @default null
              */
             computed_answer: string | null;
+        };
+        /**
+         * SeekerQuestionAnsweredEvent
+         * @description A question was answered — seeker channel only (with exclusion geometry).
+         *
+         *     Carries answer-time delta fields only. No hider-privileged data
+         *     (no hider_location, no hider feature resolution).
+         */
+        SeekerQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Exclusion */
+            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Total Exclusion */
+            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Answered At */
+            answered_at: string | null;
         };
         /**
          * FeatureEventParams
@@ -1837,41 +1884,6 @@ export interface components {
             question_deadline: string;
         };
         /**
-         * HiderQuestionAnsweredEvent
-         * @description A question was answered — hider channel only.
-         *
-         *     Carries answer-time delta fields only (ask-time fields were sent
-         *     with QuestionAskedEvent). Includes hider-privileged data: location
-         *     and feature resolution.
-         */
-        HiderQuestionAnsweredEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
-            /**
-             * Asked By
-             * Format: uuid
-             */
-            asked_by: string;
-            /** Answered At */
-            answered_at: string | null;
-            hider_location: components["schemas"]["Point"] | null;
-            /** Hider Feature Id */
-            hider_feature_id: string | null;
-            /** Hider Feature Name */
-            hider_feature_name: string | null;
-            /** Hider Distance */
-            hider_distance: number | null;
-        };
-        /**
          * QuestionVetoedEvent
          * @description A question was vetoed — both channels.
          */
@@ -1974,6 +1986,13 @@ export interface components {
              * @description New effective hiding zone radius in convention units.
              */
             effective_radius: number;
+        };
+        /**
+         * ProximityEscalatedEvent
+         * @description Seekers moved closer — hider channel only.
+         */
+        ProximityEscalatedEvent: {
+            proximity_tier: components["schemas"]["ProximityTier"];
         };
         /**
          * FeatureParamsResponse
@@ -2333,6 +2352,11 @@ export interface components {
              * @default false
              */
             hiding_zone_expanded: boolean;
+            /**
+             * @description Current proximity tier based on nearest seeker distance to hiding zone.
+             * @default none
+             */
+            proximity_tier: components["schemas"]["ProximityTier"];
         };
         /**
          * InventorySlotResponse

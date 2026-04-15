@@ -23,6 +23,7 @@ from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_models.types import (
     PlayerColor,
     PlayerRole,
+    ProximityTier,
     QuestionStatus,
     QuestionType,
     StationElectionStatus,
@@ -390,6 +391,18 @@ class HidingZoneExpandedEvent(GameplayEventSchema):
     )
 
 
+class ProximityEscalatedEvent(GameplayEventSchema):
+    """Seekers moved closer — hider channel only."""
+
+    proximity_tier: ProximityTier
+
+
+class ProximityDeescalatedEvent(GameplayEventSchema):
+    """All seekers pulled back — hider channel only."""
+
+    proximity_tier: ProximityTier
+
+
 GameplayEvent = (
     PlayerLocationEvent
     | QuestionAskedEvent
@@ -405,4 +418,6 @@ GameplayEvent = (
     | GameDissolvedEvent
     | GameEndedEvent
     | HidingZoneExpandedEvent
+    | ProximityEscalatedEvent
+    | ProximityDeescalatedEvent
 )

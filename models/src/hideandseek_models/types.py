@@ -198,6 +198,13 @@ class StationElectionStatus(StrEnum):
     ambiguous = 'ambiguous'
 
 
+class ProximityTier(StrEnum):
+    none = 'none'
+    approaching = 'approaching'
+    near = 'near'
+    entered = 'entered'
+
+
 class LobbyEventType(StrEnum):
     game_state = 'game_state'
     player_joined = 'player_joined'
@@ -222,6 +229,8 @@ class GameplayEventType(StrEnum):
     game_dissolved = 'game_dissolved'
     game_ended = 'game_ended'
     hiding_zone_expanded = 'hiding_zone_expanded'
+    proximity_escalated = 'proximity_escalated'
+    proximity_deescalated = 'proximity_deescalated'
 
 
 class TokenProvider(StrEnum):
@@ -245,6 +254,8 @@ class PushEventType(StrEnum):
     station_auto_resolved = 'station_auto_resolved'
     hiding_zone_expanded = 'hiding_zone_expanded'
     game_ended = 'game_ended'
+    proximity_escalated = 'proximity_escalated'
+    proximity_deescalated = 'proximity_deescalated'
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

@@ -41,7 +41,7 @@ src/hideandseek_core/
 
 ## Broadcast
 
-`broadcast/events.py` defines frozen Pydantic models for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left, host changed, game dissolved, game ended, hiding zone expanded). All gameplay events extend `GameplayEventSchema` which auto-registers them for OpenAPI schema injection via `__init_subclass__`. `game_id = Field(exclude=True)` is on the base — present for construction/routing but excluded from `.model_dump()` and JSON schema. Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter models (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`, `TentacleEventParams`) are standalone `BaseModel` subclasses with `Literal` type discriminators (`type: Literal['radar'] = 'radar'`), pulled into the OpenAPI spec automatically via `$defs` hoisting. `TentacleEventParams` includes `poi_names` denormalized from the model (no DB queries in event builders).
+`broadcast/events.py` defines frozen Pydantic models for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left, host changed, game dissolved, game ended, hiding zone expanded, proximity escalated/deescalated). All gameplay events extend `GameplayEventSchema` which auto-registers them for OpenAPI schema injection via `__init_subclass__`. `game_id = Field(exclude=True)` is on the base — present for construction/routing but excluded from `.model_dump()` and JSON schema. Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter models (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`, `TentacleEventParams`) are standalone `BaseModel` subclasses with `Literal` type discriminators (`type: Literal['radar'] = 'radar'`), pulled into the OpenAPI spec automatically via `$defs` hoisting. `TentacleEventParams` includes `poi_names` denormalized from the model (no DB queries in event builders).
 
 `broadcast/emit.py` provides:
 - `publish_sse(channel, event_type, data, *, required)` — low-level Redis publish (used by both core's `emit_gameplay` and server's lobby `emit`)
@@ -56,6 +56,14 @@ src/hideandseek_core/
 - `compute_candidate_station_ids(game)` — stop IDs where ALL hiders are within hiding zone radius. Pre-election only. Reuses `get_stops_within_radius_of_all()`.
 - `compute_not_in_zone(game)` — player IDs of hiders outside the hiding zone. Post-election only. Uses geodesic distance (pure math via `geo.distance()`).
 - `compute_hider_centroid(game)` — centroid of hiders with recent locations (used as representative hider location for answer previews).
+
+## Logic — Proximity Tier Tracking
+
+`logic/proximity.py` monitors seeker distance rings around the hider's hiding zone:
+- `evaluate_proximity(game, reporting_seeker)` — two-phase algorithm: (1) check only the reporting seeker's distance to hider station — if closer than current tier, escalate immediately; (2) if not escalating, query all seekers' latest positions and de-escalate to the closest remaining seeker's tier if it's farther than current. Returns `ProximityResult(old_tier, new_tier)` dataclass with `.changed`, `.escalated`, `.deescalated` properties. Mutates `game.proximity_tier` if changed.
+- `_distance_to_tier(distance_m, radius_m)` — maps distance to `ProximityTier` via 1×/2×/4× threshold multipliers of the effective hiding zone radius.
+
+Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×, `none` beyond 4×. Asymmetric rules: escalation on any single seeker, de-escalation requires all seekers unanimous. The router handles SSE event emission and push notification dispatch based on the result.
 
 ## Logic — Randomize Powerup
 

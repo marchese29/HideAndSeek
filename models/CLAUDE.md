@@ -16,7 +16,7 @@ uv run pyright             # Type check
 src/hideandseek_models/
   __init__.py              # Re-exports all models, enums, and constants
   base.py                  # DeclarativeBase with StrEnum type annotation map
-  types.py                 # Enums (GameStatus, PlayerColor, QuestionType, etc.),
+  types.py                 # Enums (GameStatus, PlayerColor, QuestionType, ProximityTier, etc.),
                            #   constants (MAX_PLAYERS), value objects (DistrictClass),
                            #   category classification sets
   geo_types.py             # Custom SQLAlchemy column types (ShapelyGeography, ShapelyGeometry)

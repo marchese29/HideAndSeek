@@ -17,6 +17,8 @@ from hideandseek_core.broadcast.events import (
     HidingZoneExpandedEvent,
     PhaseChangedEvent,
     PlayerLocationEvent,
+    ProximityDeescalatedEvent,
+    ProximityEscalatedEvent,
     QuestionAbandonedEvent,
     QuestionAnswerableEvent,
     QuestionAskedEvent,
@@ -159,3 +161,21 @@ def emit_gameplay(event: GameplayEvent) -> None:
         case HidingZoneExpandedEvent():
             data = event.model_dump(mode='json')
             _both_channels(event.game_id, GameplayEventType.hiding_zone_expanded, data)
+
+        case ProximityEscalatedEvent():
+            data = event.model_dump(mode='json')
+            publish_sse(
+                hider_channel(event.game_id),
+                GameplayEventType.proximity_escalated,
+                data,
+                required=True,
+            )
+
+        case ProximityDeescalatedEvent():
+            data = event.model_dump(mode='json')
+            publish_sse(
+                hider_channel(event.game_id),
+                GameplayEventType.proximity_deescalated,
+                data,
+                required=True,
+            )

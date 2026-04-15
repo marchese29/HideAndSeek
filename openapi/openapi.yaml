@@ -2866,6 +2866,23 @@ components:
       - msg
       - type
       title: ValidationError
+    ProximityTier:
+      enum:
+      - none
+      - approaching
+      - near
+      - entered
+      title: ProximityTier
+      type: string
+    ProximityDeescalatedEvent:
+      description: "All seekers pulled back \u2014 hider channel only."
+      properties:
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+      required:
+      - proximity_tier
+      title: ProximityDeescalatedEvent
+      type: object
     QuestionStatus:
       enum:
       - asked
@@ -2877,6 +2894,120 @@ components:
       - randomized
       title: QuestionStatus
       type: string
+    HiderQuestionAnsweredEvent:
+      description: "A question was answered \u2014 hider channel only.\n\nCarries\
+        \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
+        \ Includes hider-privileged data: location\nand feature resolution."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        answer:
+          title: Answer
+          type: string
+        slot_index:
+          title: Slot Index
+          type: integer
+        asked_by:
+          format: uuid
+          title: Asked By
+          type: string
+        answered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Answered At
+        hider_location:
+          anyOf:
+          - $ref: '#/components/schemas/Point'
+          - type: 'null'
+        hider_feature_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hider Feature Id
+        hider_feature_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hider Feature Name
+        hider_distance:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Hider Distance
+      required:
+      - question_id
+      - question_type
+      - status
+      - answer
+      - slot_index
+      - asked_by
+      - answered_at
+      - hider_location
+      - hider_feature_id
+      - hider_feature_name
+      - hider_distance
+      title: HiderQuestionAnsweredEvent
+      type: object
+    PlayerLocationEvent:
+      properties:
+        player_id:
+          format: uuid
+          title: Player Id
+          type: string
+        name:
+          title: Name
+          type: string
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        role:
+          $ref: '#/components/schemas/PlayerRole'
+        coordinates:
+          $ref: '#/components/schemas/Point'
+        timestamp:
+          format: date-time
+          title: Timestamp
+          type: string
+        candidate_stations:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Candidate Stations
+        not_in_zone:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Not In Zone
+        computed_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Computed Answer
+      required:
+      - player_id
+      - name
+      - color
+      - role
+      - coordinates
+      - timestamp
+      title: PlayerLocationEvent
+      type: object
     SeekerQuestionAnsweredEvent:
       description: "A question was answered \u2014 seeker channel only (with exclusion\
         \ geometry).\n\nCarries answer-time delta fields only. No hider-privileged\
@@ -2961,58 +3092,6 @@ components:
       - total_exclusion
       - answered_at
       title: SeekerQuestionAnsweredEvent
-      type: object
-    PlayerLocationEvent:
-      properties:
-        player_id:
-          format: uuid
-          title: Player Id
-          type: string
-        name:
-          title: Name
-          type: string
-        color:
-          $ref: '#/components/schemas/PlayerColor'
-        role:
-          $ref: '#/components/schemas/PlayerRole'
-        coordinates:
-          $ref: '#/components/schemas/Point'
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
-        candidate_stations:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Candidate Stations
-        not_in_zone:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Not In Zone
-        computed_answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          title: Computed Answer
-      required:
-      - player_id
-      - name
-      - color
-      - role
-      - coordinates
-      - timestamp
-      title: PlayerLocationEvent
       type: object
     FeatureEventParams:
       description: Matching/measuring question parameters (seeker resolution only).
@@ -3206,68 +3285,6 @@ components:
       - question_deadline
       title: QuestionAnswerableEvent
       type: object
-    HiderQuestionAnsweredEvent:
-      description: "A question was answered \u2014 hider channel only.\n\nCarries\
-        \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
-        \ Includes hider-privileged data: location\nand feature resolution."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        answer:
-          title: Answer
-          type: string
-        slot_index:
-          title: Slot Index
-          type: integer
-        asked_by:
-          format: uuid
-          title: Asked By
-          type: string
-        answered_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Answered At
-        hider_location:
-          anyOf:
-          - $ref: '#/components/schemas/Point'
-          - type: 'null'
-        hider_feature_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hider Feature Id
-        hider_feature_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hider Feature Name
-        hider_distance:
-          anyOf:
-          - type: number
-          - type: 'null'
-          title: Hider Distance
-      required:
-      - question_id
-      - question_type
-      - status
-      - answer
-      - slot_index
-      - asked_by
-      - answered_at
-      - hider_location
-      - hider_feature_id
-      - hider_feature_name
-      - hider_distance
-      title: HiderQuestionAnsweredEvent
-      type: object
     QuestionVetoedEvent:
       description: "A question was vetoed \u2014 both channels."
       properties:
@@ -3401,6 +3418,15 @@ components:
       required:
       - effective_radius
       title: HidingZoneExpandedEvent
+      type: object
+    ProximityEscalatedEvent:
+      description: "Seekers moved closer \u2014 hider channel only."
+      properties:
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+      required:
+      - proximity_tier
+      title: ProximityEscalatedEvent
       type: object
     FeatureParamsResponse:
       description: Parameters for a matching or measuring question.
@@ -3826,6 +3852,11 @@ components:
           description: Whether the hiding zone has been expanded.
           title: Hiding Zone Expanded
           type: boolean
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+          default: none
+          description: Current proximity tier based on nearest seeker distance to
+            hiding zone.
       required:
       - game_id
       - phase

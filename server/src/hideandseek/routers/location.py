@@ -9,9 +9,14 @@ from hideandseek.dependencies import get_game, get_player_in_game
 from hideandseek.schemas.request import LocationReportRequest
 from hideandseek.schemas.response import LocationHistoryEntry
 from hideandseek_core.broadcast.emit import emit_gameplay
-from hideandseek_core.broadcast.events import PlayerLocationEvent
+from hideandseek_core.broadcast.events import (
+    PlayerLocationEvent,
+    ProximityDeescalatedEvent,
+    ProximityEscalatedEvent,
+)
 from hideandseek_core.db import session_dependency
 from hideandseek_core.logic.answer import preview_answer
+from hideandseek_core.logic.proximity import evaluate_proximity
 from hideandseek_core.logic.station import (
     compute_candidate_station_ids,
     compute_hider_centroid,
@@ -20,7 +25,26 @@ from hideandseek_core.logic.station import (
 from hideandseek_core.queries.location import create_location_update, get_location_history
 from hideandseek_core.queries.questions import get_active_question
 from hideandseek_models.game import Game, Player
-from hideandseek_models.types import PlayerRole, QuestionStatus, StationElectionStatus
+from hideandseek_models.types import (
+    PlayerRole,
+    ProximityTier,
+    PushEventType,
+    QuestionStatus,
+    StationElectionStatus,
+)
+from hideandseek_worker.tasks.push import send_push
+
+_ESCALATION_ALERTS: dict[ProximityTier, str] = {
+    ProximityTier.approaching: 'Seekers are in your area',
+    ProximityTier.near: 'Seekers are getting close',
+    ProximityTier.entered: 'Seekers are in your hiding zone \u2014 stay put!',
+}
+
+_DEESCALATION_ALERTS: dict[ProximityTier, str] = {
+    ProximityTier.near: 'Seekers left your zone \u2014 you may reposition',
+    ProximityTier.approaching: 'Seekers have pulled back',
+    ProximityTier.none: 'Seekers are no longer nearby',
+}
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['location'], dependencies=[Depends(session_dependency)]
@@ -75,6 +99,16 @@ def report_location(
                 if hider_loc is not None:
                     computed_answer = preview_answer(active_q, hider_loc, game)
 
+    # Proximity tier tracking — seeker location updates only, after station election.
+    proximity_result = None
+    if (
+        player.role == PlayerRole.seeker
+        and game.status.is_seeking
+        and game.station_election_status
+        in (StationElectionStatus.elected, StationElectionStatus.auto_assigned)
+    ):
+        proximity_result = evaluate_proximity(game, player)
+
     emit_gameplay(
         PlayerLocationEvent(
             game_id=game.id,
@@ -89,6 +123,34 @@ def report_location(
             computed_answer=computed_answer,
         )
     )
+
+    if proximity_result is not None and proximity_result.changed:
+        if proximity_result.escalated:
+            emit_gameplay(
+                ProximityEscalatedEvent(
+                    game_id=game.id,
+                    proximity_tier=proximity_result.new_tier,
+                )
+            )
+            send_push.delay(  # type: ignore[attr-defined]
+                str(game.id),
+                PushEventType.proximity_escalated,
+                role_filter='hider',
+                alert=_ESCALATION_ALERTS.get(proximity_result.new_tier),
+            )
+        else:
+            emit_gameplay(
+                ProximityDeescalatedEvent(
+                    game_id=game.id,
+                    proximity_tier=proximity_result.new_tier,
+                )
+            )
+            send_push.delay(  # type: ignore[attr-defined]
+                str(game.id),
+                PushEventType.proximity_deescalated,
+                role_filter='hider',
+                alert=_DEESCALATION_ALERTS.get(proximity_result.new_tier),
+            )
 
 
 @router.get('/location-history', response_model=list[LocationHistoryEntry])

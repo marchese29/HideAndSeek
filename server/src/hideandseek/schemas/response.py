@@ -23,6 +23,7 @@ from hideandseek_models.types import (
     MapSize,
     PlayerColor,
     PlayerRole,
+    ProximityTier,
     QuestionStatus,
     QuestionType,
     StationElectionStatus,
@@ -712,6 +713,10 @@ class HiderGameStateResponse(SSEExposed, BaseModel):
     )
     hiding_zone_expanded: bool = Field(
         default=False, description='Whether the hiding zone has been expanded.'
+    )
+    proximity_tier: ProximityTier = Field(
+        default=ProximityTier.none,
+        description='Current proximity tier based on nearest seeker distance to hiding zone.',
     )
 
 

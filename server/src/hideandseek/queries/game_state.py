@@ -195,6 +195,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         not_in_zone=not_in_zone,
         computed_answer=computed_answer,
         hiding_zone_expanded=game.hiding_zone_expanded,
+        proximity_tier=game.proximity_tier,
     )
 
 
