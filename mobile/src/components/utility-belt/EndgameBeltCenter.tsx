@@ -1,15 +1,17 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { memo } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface EndgameBeltCenterProps {
   disabled?: boolean;
   onLongGame: () => void;
+  onFoundThem: () => void;
 }
 
 export const EndgameBeltCenter = memo(function EndgameBeltCenter({
   disabled,
   onLongGame,
+  onFoundThem,
 }: EndgameBeltCenterProps) {
   return (
     <View style={styles.row}>
@@ -17,11 +19,7 @@ export const EndgameBeltCenter = memo(function EndgameBeltCenter({
         <MaterialCommunityIcons name="binoculars" size={28} color={disabled ? '#999' : '#000'} />
         <Text style={[styles.label, disabled && styles.labelDisabled]}>Long Game</Text>
       </Pressable>
-      <Pressable
-        style={styles.cell}
-        onPress={() => Alert.alert('Found Them', 'Coming soon.')}
-        disabled={disabled}
-      >
+      <Pressable style={styles.cell} onPress={onFoundThem} disabled={disabled}>
         <MaterialCommunityIcons
           name="map-marker-account"
           size={28}

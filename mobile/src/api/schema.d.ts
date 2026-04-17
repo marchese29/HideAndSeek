@@ -640,6 +640,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/found": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim Found
+         * @description Seeker claims to have found the hiders. Opens a 2-minute hider decision window.
+         */
+        post: operations["claim_found_games__game_id__found_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/games/{game_id}/found/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Found
+         * @description Hider confirms the found claim. Ends the game with end_reason=found.
+         */
+        post: operations["confirm_found_games__game_id__found_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/games/{game_id}/found/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Found
+         * @description Hider rejects the found claim. Clears claim state; game continues.
+         */
+        post: operations["reject_found_games__game_id__found_reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1758,6 +1818,169 @@ export interface components {
             /** Question Deadline */
             question_deadline: string | null;
         };
+        /**
+         * HiderQuestionAnsweredEvent
+         * @description A question was answered — hider channel only.
+         *
+         *     Carries answer-time delta fields only (ask-time fields were sent
+         *     with QuestionAskedEvent). Includes hider-privileged data: location
+         *     and feature resolution.
+         */
+        HiderQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Sequence */
+            sequence: number;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Answered At */
+            answered_at: string | null;
+            hider_location: components["schemas"]["Point"] | null;
+            /** Hider Feature Id */
+            hider_feature_id: string | null;
+            /** Hider Feature Name */
+            hider_feature_name: string | null;
+            /** Hider Distance */
+            hider_distance: number | null;
+        };
+        /**
+         * QuestionVetoedEvent
+         * @description A question was vetoed — both channels.
+         */
+        QuestionVetoedEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            /** Slot Index */
+            slot_index: number;
+        };
+        /**
+         * StationElectionStatus
+         * @enum {string}
+         */
+        StationElectionStatus: "pending" | "elected" | "auto_assigned" | "ambiguous";
+        /**
+         * PhaseChangedEvent
+         * @description Game transitioned from hiding to seeking — both channels.
+         */
+        PhaseChangedEvent: {
+            /** Phase */
+            phase: string;
+            /**
+             * Seeking Started At
+             * Format: date-time
+             */
+            seeking_started_at: string;
+            station_election_status: components["schemas"]["StationElectionStatus"];
+            /** Hider Station Id */
+            hider_station_id: string | null;
+        };
+        /**
+         * GamePlayerLeftEvent
+         * @description A player left during active gameplay — both channels.
+         */
+        GamePlayerLeftEvent: {
+            /**
+             * Player Id
+             * Format: uuid
+             */
+            player_id: string;
+        };
+        /**
+         * FoundClaimRejectedEvent
+         * @description Hiders rejected the found claim — seeker channel only.
+         */
+        FoundClaimRejectedEvent: Record<string, never>;
+        /**
+         * GameDissolvedEvent
+         * @description Game dissolved during active gameplay — both channels.
+         */
+        GameDissolvedEvent: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * HidingZoneExpandedEvent
+         * @description Hiding zone expanded by the hider — both channels.
+         */
+        HidingZoneExpandedEvent: {
+            /**
+             * Effective Radius
+             * @description New effective hiding zone radius in convention units.
+             */
+            effective_radius: number;
+        };
+        /**
+         * ProximityTier
+         * @enum {string}
+         */
+        ProximityTier: "none" | "approaching" | "near" | "entered";
+        /**
+         * ProximityDeescalatedEvent
+         * @description All seekers pulled back — hider channel only.
+         */
+        ProximityDeescalatedEvent: {
+            proximity_tier: components["schemas"]["ProximityTier"];
+        };
+        /**
+         * FoundClaimEvent
+         * @description A seeker claims to have found the hiders — hider channel only.
+         */
+        FoundClaimEvent: {
+            /**
+             * Seeker Player Id
+             * Format: uuid
+             */
+            seeker_player_id: string;
+        };
+        /**
+         * SeekerQuestionAnsweredEvent
+         * @description A question was answered — seeker channel only (with exclusion geometry).
+         *
+         *     Carries answer-time delta fields only. No hider-privileged data
+         *     (no hider_location, no hider feature resolution).
+         */
+        SeekerQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Sequence */
+            sequence: number;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Exclusion */
+            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Total Exclusion */
+            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Answered At */
+            answered_at: string | null;
+        };
         /** PlayerLocationEvent */
         PlayerLocationEvent: {
             /**
@@ -1816,90 +2039,6 @@ export interface components {
             question_deadline: string;
         };
         /**
-         * HiderQuestionAnsweredEvent
-         * @description A question was answered — hider channel only.
-         *
-         *     Carries answer-time delta fields only (ask-time fields were sent
-         *     with QuestionAskedEvent). Includes hider-privileged data: location
-         *     and feature resolution.
-         */
-        HiderQuestionAnsweredEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            /** Sequence */
-            sequence: number;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
-            /**
-             * Asked By
-             * Format: uuid
-             */
-            asked_by: string;
-            /** Answered At */
-            answered_at: string | null;
-            hider_location: components["schemas"]["Point"] | null;
-            /** Hider Feature Id */
-            hider_feature_id: string | null;
-            /** Hider Feature Name */
-            hider_feature_name: string | null;
-            /** Hider Distance */
-            hider_distance: number | null;
-        };
-        /**
-         * SeekerQuestionAnsweredEvent
-         * @description A question was answered — seeker channel only (with exclusion geometry).
-         *
-         *     Carries answer-time delta fields only. No hider-privileged data
-         *     (no hider_location, no hider feature resolution).
-         */
-        SeekerQuestionAnsweredEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            /** Sequence */
-            sequence: number;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
-            /**
-             * Asked By
-             * Format: uuid
-             */
-            asked_by: string;
-            /** Exclusion */
-            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-            /** Total Exclusion */
-            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-            /** Answered At */
-            answered_at: string | null;
-        };
-        /**
-         * QuestionVetoedEvent
-         * @description A question was vetoed — both channels.
-         */
-        QuestionVetoedEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            question_type: components["schemas"]["QuestionType"];
-            /** Slot Index */
-            slot_index: number;
-        };
-        /**
          * QuestionAbandonedEvent
          * @description A question was abandoned — both channels.
          */
@@ -1914,27 +2053,6 @@ export interface components {
             slot_index: number;
         };
         /**
-         * StationElectionStatus
-         * @enum {string}
-         */
-        StationElectionStatus: "pending" | "elected" | "auto_assigned" | "ambiguous";
-        /**
-         * PhaseChangedEvent
-         * @description Game transitioned from hiding to seeking — both channels.
-         */
-        PhaseChangedEvent: {
-            /** Phase */
-            phase: string;
-            /**
-             * Seeking Started At
-             * Format: date-time
-             */
-            seeking_started_at: string;
-            station_election_status: components["schemas"]["StationElectionStatus"];
-            /** Hider Station Id */
-            hider_station_id: string | null;
-        };
-        /**
          * StationElectionEvent
          * @description Station election status changed — hider channel only.
          */
@@ -1944,16 +2062,10 @@ export interface components {
             hider_station_id: string | null;
         };
         /**
-         * GamePlayerLeftEvent
-         * @description A player left during active gameplay — both channels.
+         * FoundClaimExpiredEvent
+         * @description Found claim timed out — both channels.
          */
-        GamePlayerLeftEvent: {
-            /**
-             * Player Id
-             * Format: uuid
-             */
-            player_id: string;
-        };
+        FoundClaimExpiredEvent: Record<string, never>;
         /**
          * GameHostChangedEvent
          * @description Host transferred during active gameplay — both channels.
@@ -1966,46 +2078,15 @@ export interface components {
             new_host_player_id: string;
         };
         /**
-         * GameDissolvedEvent
-         * @description Game dissolved during active gameplay — both channels.
-         */
-        GameDissolvedEvent: {
-            /** Reason */
-            reason: string;
-        };
-        /**
          * GameEndedEvent
          * @description Host ended the game for all players — both channels.
          */
         GameEndedEvent: Record<string, never>;
         /**
-         * HidingZoneExpandedEvent
-         * @description Hiding zone expanded by the hider — both channels.
-         */
-        HidingZoneExpandedEvent: {
-            /**
-             * Effective Radius
-             * @description New effective hiding zone radius in convention units.
-             */
-            effective_radius: number;
-        };
-        /**
-         * ProximityTier
-         * @enum {string}
-         */
-        ProximityTier: "none" | "approaching" | "near" | "entered";
-        /**
          * ProximityEscalatedEvent
          * @description Seekers moved closer — hider channel only.
          */
         ProximityEscalatedEvent: {
-            proximity_tier: components["schemas"]["ProximityTier"];
-        };
-        /**
-         * ProximityDeescalatedEvent
-         * @description All seekers pulled back — hider channel only.
-         */
-        ProximityDeescalatedEvent: {
             proximity_tier: components["schemas"]["ProximityTier"];
         };
         /**
@@ -3712,6 +3793,102 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EndgameExclusionsResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_found_games__game_id__found_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_found_games__game_id__found_confirm_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_found_games__game_id__found_reject_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

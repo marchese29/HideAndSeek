@@ -51,6 +51,9 @@ export type StationElectionDelta = S['StationElectionEvent'];
 export type HidingZoneExpandedDelta = S['HidingZoneExpandedEvent'];
 export type ProximityEscalatedDelta = S['ProximityEscalatedEvent'];
 export type ProximityDeescalatedDelta = S['ProximityDeescalatedEvent'];
+export type FoundClaimDelta = S['FoundClaimEvent'];
+export type FoundClaimRejectedDelta = S['FoundClaimRejectedEvent'];
+export type FoundClaimExpiredDelta = S['FoundClaimExpiredEvent'];
 
 // ── Question Event Parameters ───────────────────────────────────────────────
 

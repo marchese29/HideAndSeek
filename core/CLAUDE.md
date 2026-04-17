@@ -42,7 +42,7 @@ src/hideandseek_core/
 
 ## Broadcast
 
-`broadcast/events.py` defines frozen Pydantic models for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left, host changed, game dissolved, game ended, hiding zone expanded, proximity escalated/deescalated). All gameplay events extend `GameplayEventSchema` which auto-registers them for OpenAPI schema injection via `__init_subclass__`. `game_id = Field(exclude=True)` is on the base — present for construction/routing but excluded from `.model_dump()` and JSON schema. Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter models (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`, `TentacleEventParams`) are standalone `BaseModel` subclasses with `Literal` type discriminators (`type: Literal['radar'] = 'radar'`), pulled into the OpenAPI spec automatically via `$defs` hoisting. `TentacleEventParams` includes `poi_names` denormalized from the model (no DB queries in event builders).
+`broadcast/events.py` defines frozen Pydantic models for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left, host changed, game dissolved, game ended, hiding zone expanded, proximity escalated/deescalated, found claim/rejected/expired). All gameplay events extend `GameplayEventSchema` which auto-registers them for OpenAPI schema injection via `__init_subclass__`. `game_id = Field(exclude=True)` is on the base — present for construction/routing but excluded from `.model_dump()` and JSON schema. Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter models (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`, `TentacleEventParams`) are standalone `BaseModel` subclasses with `Literal` type discriminators (`type: Literal['radar'] = 'radar'`), pulled into the OpenAPI spec automatically via `$defs` hoisting. `TentacleEventParams` includes `poi_names` denormalized from the model (no DB queries in event builders).
 
 `broadcast/emit.py` provides:
 - `publish_sse(channel, event_type, data, *, required)` — low-level Redis publish (used by both core's `emit_gameplay` and server's lobby `emit`)
@@ -86,6 +86,17 @@ Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×
 ## Logic — Answer Previews
 
 `logic/answer.py` provides both mutating answer functions (`answer_radar`, `answer_thermometer`, etc.) and read-only preview variants (`preview_radar`, `preview_thermometer`, `preview_matching`, `preview_measuring`, `preview_tentacles`). Preview functions compute the same answer string without persisting exclusion zones or mutating the question. `preview_answer(question, hider_location, game)` dispatches to the appropriate preview function by question type.
+
+## Logic — Two-Party Game Completion
+
+`logic/endgame.py` also owns the found-claim lifecycle (seeker-in-zone claim → hider confirm/reject, with auto-dismiss as a backstop):
+- `seeker_inside_hiding_zone(game, seeker)` — true if the seeker's latest location is within `effective_hiding_zone_radius_m` of `game.hider_station`. Gate for `POST /found`.
+- `record_found_claim(game, seeker)` — sets `found_claim_at` + `found_claim_player_id`.
+- `confirm_found_claim(game)` — clears claim state, sets `end_reason = EndReason.found`, transitions the game to `finished`.
+- `reject_found_claim(game)` — clears claim state; game keeps seeking.
+- `expire_found_claim(game) -> bool` — called by the worker's `auto_dismiss_found_claim` task; returns True if a live claim was cleared (no-op if already resolved or game not active).
+
+Routers set `end_reason` directly on confirm. 7kw.7 retrofits the host-end and dissolution paths to set `end_reason = host_ended` / `dissolved` and adds `reason` to `GameEndedEvent`.
 
 ## Conventions
 

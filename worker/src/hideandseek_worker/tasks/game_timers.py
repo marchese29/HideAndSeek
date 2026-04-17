@@ -8,6 +8,7 @@ import structlog
 
 from hideandseek_core.broadcast.emit import emit_gameplay
 from hideandseek_core.broadcast.events import (
+    FoundClaimExpiredEvent,
     HiderQuestionAnsweredEvent,
     PhaseChangedEvent,
     QuestionVetoedEvent,
@@ -23,6 +24,7 @@ from hideandseek_core.logic.answer import (
     answer_thermometer,
     veto_immediate,
 )
+from hideandseek_core.logic.endgame import expire_found_claim
 from hideandseek_core.logic.station import (
     resolve_station_at_transition,
     resolve_station_fallback,
@@ -222,3 +224,28 @@ def auto_answer_question(question_id: str) -> None:
 
         emit_gameplay(HiderQuestionAnsweredEvent.from_question(question))
         emit_gameplay(SeekerQuestionAnsweredEvent.from_question(question))
+
+
+@app.task
+def auto_dismiss_found_claim(game_id: str) -> None:
+    """Dismiss a pending found claim after the 2-minute deadline expires.
+
+    Idempotent: no-op if the claim has already been confirmed, rejected, or if
+    the game is no longer active.
+    """
+    with session_scope():
+        game = get_game_by_id(uuid.UUID(game_id))
+        if not game:
+            logger.warning('found_claim_expire_game_not_found', game_id=game_id)
+            return
+        if not expire_found_claim(game):
+            logger.info('found_claim_expire_skipped', game_id=game_id)
+            return
+
+        logger.info('found_claim_expired', game_id=game_id)
+        emit_gameplay(FoundClaimExpiredEvent(game_id=game.id))
+        send_push.delay(  # type: ignore[attr-defined]
+            game_id,
+            PushEventType.found_claim_expired,
+            alert='The found claim timed out.',
+        )

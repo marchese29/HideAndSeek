@@ -19,9 +19,20 @@ src/hideandseek_worker/
   celery_app.py        # Celery application instance + task autodiscovery
   celery_config.py     # Broker/result backend config (env var → auto-detect → eager)
   tasks/
-    game_timers.py     # Phase transition (hiding→seeking) + auto-answer deadline
+    game_timers.py     # Phase transition (hiding→seeking), auto-answer deadline,
+                       # auto-dismiss found claim
     push.py            # Push notification delivery (APNs + FCM) with retry
 ```
+
+## Game Timer Tasks
+
+| Task | Task ID | Purpose |
+|------|---------|---------|
+| `transition_hiding_to_seeking` | `hiding_timer:{game_id}` | Flip game to seeking after hiding timer |
+| `auto_answer_question` | `answer_deadline:{question_id}` | Auto-answer after question deadline |
+| `auto_dismiss_found_claim` | `found_claim:{game_id}` | Clear a pending found claim after 2 min |
+
+All tasks are idempotent: they re-check preconditions inside `session_scope()` and no-op if the state has already moved on. Task IDs are deterministic so routers can revoke pending tasks (on `/end`, `/found/confirm`, `/found/reject`, answer, etc.) without persisting Celery IDs.
 
 ## Architecture Rules
 

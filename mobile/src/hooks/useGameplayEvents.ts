@@ -8,6 +8,7 @@ import { queryClient } from '@/api/queryClient';
 import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
+  FoundClaimDelta,
   GameDissolvedDelta,
   GameEndedDelta,
   HiderGameState,
@@ -44,7 +45,10 @@ type GameplayEventType =
   | 'game_ended'
   | 'hiding_zone_expanded'
   | 'proximity_escalated'
-  | 'proximity_deescalated';
+  | 'proximity_deescalated'
+  | 'found_claim'
+  | 'found_claim_rejected'
+  | 'found_claim_expired';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
@@ -290,6 +294,24 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
             Alert.alert('Hiding Zone Expanded', 'The hider has expanded the hiding zone!');
           }
         }
+      });
+
+      es.addEventListener('found_claim', (event) => {
+        const data = parseData<FoundClaimDelta>(event);
+        if (data && role === 'hider') {
+          useGameplayStore.getState().setFoundClaimPending(data.seeker_player_id);
+        }
+      });
+
+      es.addEventListener('found_claim_rejected', () => {
+        if (role === 'seeker') {
+          Alert.alert('Claim Rejected', 'The hiders rejected your found claim.');
+        }
+      });
+
+      es.addEventListener('found_claim_expired', () => {
+        useGameplayStore.getState().clearFoundClaim();
+        Alert.alert('Claim Expired', 'The found claim timed out.');
       });
     }
 

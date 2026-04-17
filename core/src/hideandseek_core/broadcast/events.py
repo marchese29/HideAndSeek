@@ -408,6 +408,20 @@ class ProximityDeescalatedEvent(GameplayEventSchema):
     proximity_tier: ProximityTier
 
 
+class FoundClaimEvent(GameplayEventSchema):
+    """A seeker claims to have found the hiders — hider channel only."""
+
+    seeker_player_id: uuid.UUID
+
+
+class FoundClaimRejectedEvent(GameplayEventSchema):
+    """Hiders rejected the found claim — seeker channel only."""
+
+
+class FoundClaimExpiredEvent(GameplayEventSchema):
+    """Found claim timed out — both channels."""
+
+
 GameplayEvent = (
     PlayerLocationEvent
     | QuestionAskedEvent
@@ -425,4 +439,7 @@ GameplayEvent = (
     | HidingZoneExpandedEvent
     | ProximityEscalatedEvent
     | ProximityDeescalatedEvent
+    | FoundClaimEvent
+    | FoundClaimRejectedEvent
+    | FoundClaimExpiredEvent
 )

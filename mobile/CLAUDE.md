@@ -233,6 +233,9 @@ Both hooks:
 - **`game_ended`**: Host ended the game for all players — shows alert ("The host has ended the game"), clears session, navigates home.
 - **`hiding_zone_expanded`**: Hider expanded the hiding zone — sets `hiding_zone_expanded = true` on state, invalidates `['hiding-zone']` TanStack Query cache (forces re-fetch of larger polygon), shows alert to seekers.
 - **`proximity_escalated`** / **`proximity_deescalated`**: Seeker distance ring changed — `updateProximityTier()` on state. Drives amber hiding zone color. Hider channel only.
+- **`found_claim`**: Seeker claimed found — `setFoundClaimPending(seekerPlayerId)` opens the `FoundClaimModal`. Hider channel only.
+- **`found_claim_rejected`**: Hiders rejected a claim — seekers see a rejection alert. Seeker channel only.
+- **`found_claim_expired`**: Auto-dismiss fired — `clearFoundClaim()` closes the modal (hider), both roles see an expiration alert.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 
 ## Stop Selection (Hider Hiding Phase)
@@ -254,14 +257,18 @@ Phone-local seeker mode for narrowing down hider location. Each seeker independe
 - **State**: `endgameView` in `GameplayStore` — `{ stationId, afterQuestion, hidingZone, safeZone, totalExclusion } | null`. Preserved across SSE reconnects (phone-local, not server state). Cleared on `reset()`.
 - **Flow**: Tap "Endgame" → station picking mode → candidate stations rendered as blue dots (from `GET /candidate-stations`) → tap station → highlights green with hiding zone preview → tap checkmark → question cutoff modal → pick starting question → `GET /endgame-exclusions` → endgame overlays activate.
 - **Station picking belt**: 3-button layout (`EndgameStationPicker`) — checkmark (select, disabled until highlighted), station name (center), X (cancel). Map taps clear highlight but stay in picking mode. X exits picking entirely.
-- **Endgame belt**: 2-button layout (`EndgameBeltCenter`) — "Long Game" (binoculars, exits endgame view), "Found Them" (map-marker-account, placeholder for found claim flow).
+- **Endgame belt**: 2-button layout (`EndgameBeltCenter`) — "Long Game" (binoculars, exits endgame view), "Found Them" (map-marker-account). "Found Them" fires a confirmation `Alert.alert` → `POST /games/{id}/found`. Server rejects with 409 (detail surfaced as toast) if the seeker is outside the hiding zone, there's no station elected, or a claim is already pending.
 - **Map overlays when endgame active**: Hiding zone = stroke only (no fill). Safe zone = blue fill (`SafeZoneOverlay`, zIndex 460). Endgame exclusion = red fill (reuses `ExclusionOverlay`). Long-game `total_exclusion` hidden.
 - **Question cutoff modal**: `QuestionCutoffModal` — pageSheet modal listing answered questions with type-colored icons. "None" option at bottom = no exclusions. Tapping a question passes `after_question = sequence - 1` (inclusive of selected question).
 - **Live updates**: When `question_answered` SSE fires during endgame view, `useGameplayEvents` invalidates `['endgame-exclusions']` query cache → `useEndgameExclusions` re-fetches → overlays update via `updateEndgameView()`.
 - **Camera animation**: Animates to endgame hiding zone on activation (same pattern as hider station election). Resets when exiting endgame view.
 - **Question selection**: Works normally during endgame — the type bar / param picker takes rendering priority over endgame belt center. Closing question selection returns to Long Game / Found Them buttons.
 
-## Conventions
+## Two-Party Game Completion (Hider Confirm/Reject)
+
+- **Store field**: `foundClaimPending: { seekerPlayerId: string } | null` on `GameplayStore`. Hider-only — ignored when `role !== 'hider'`. Preserved across SSE hider reconnects (cleared on hydrate for seekers).
+- **Modal**: `FoundClaimModal` (`src/components/FoundClaimModal.tsx`) — auto-presented at gameplay screen root when `foundClaimPending !== null` and `role === 'hider'`. `presentationStyle="pageSheet"`, `onRequestClose` is a no-op (Android back button cannot dismiss), no swipe-to-dismiss. Two buttons: **Confirm** → `POST /games/{id}/found/confirm` (game ends via subsequent `game_ended` SSE), **Reject** → `POST /games/{id}/found/reject` (clears claim locally and via the server). Either button on 409 clears local state with "Already Resolved" alert (covers the race where a second hider or the auto-dismiss timer beat this one).
+- **Backstop**: No SSE replay for missed `found_claim` events. The 2-minute server-side auto-dismiss is the backstop — if a hider's phone was offline when the claim arrived, the event expires silently and the modal never presents. The `found_claim_at` field is not exposed on `HiderGameStateResponse` (intentional, keeps scope tight).
 
 - TypeScript strict mode enabled
 - `@/` path alias maps to `src/`

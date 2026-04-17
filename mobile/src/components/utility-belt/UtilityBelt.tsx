@@ -162,6 +162,30 @@ export const UtilityBelt = memo(function UtilityBelt({
     useGameplayStore.getState().clearEndgameView();
   }, []);
 
+  const handleFoundThem = useCallback(() => {
+    Alert.alert(
+      'Claim Found',
+      "Tell the hiders you've found them. They'll have to confirm or reject.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Claim',
+          onPress: () => {
+            void (async () => {
+              const { error } = await api.POST('/games/{game_id}/found', {
+                params: { path: { game_id: gameId }, header: authHeader() },
+              });
+              if (error) {
+                const detail = (error as { detail?: string }).detail;
+                Alert.alert('Claim failed', detail ?? 'Unable to submit claim. Try again.');
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [gameId]);
+
   // "Set Stop" is pressable only when a candidate is highlighted
   const canSetStop = isStopSelectionActive && highlightedStopId !== null;
 
@@ -207,7 +231,13 @@ export const UtilityBelt = memo(function UtilityBelt({
 
     // Closed state: endgame view → station picking → default utilities
     if (endgameView) {
-      return <EndgameBeltCenter disabled={disabled} onLongGame={handleLongGame} />;
+      return (
+        <EndgameBeltCenter
+          disabled={disabled}
+          onLongGame={handleLongGame}
+          onFoundThem={handleFoundThem}
+        />
+      );
     }
     if (endgameStationPicking) {
       return (

@@ -37,6 +37,10 @@ type GameplayData =
   | { status: 'connected'; role: 'hider'; state: HiderGameState }
   | { status: 'connected'; role: 'seeker'; state: SeekerGameState };
 
+export interface FoundClaimPending {
+  seekerPlayerId: string;
+}
+
 interface GameplayActions {
   hydrate: (role: 'hider' | 'seeker', data: HiderGameState | SeekerGameState) => void;
   reset: () => void;
@@ -60,23 +64,28 @@ interface GameplayActions {
   setEndgameView: (view: EndgameView) => void;
   clearEndgameView: () => void;
   updateEndgameView: (safeZone: GeoJSONGeometry, totalExclusion: GeoJSONGeometry | null) => void;
+  setFoundClaimPending: (seekerPlayerId: string) => void;
+  clearFoundClaim: () => void;
 }
 
 type GameplayStore = GameplayData & {
   selfLocation: SelfLocation | null;
   previewQuestion: PreviewQuestion | null;
   endgameView: EndgameView | null;
+  foundClaimPending: FoundClaimPending | null;
 } & GameplayActions;
 
 const initialState: GameplayData & {
   selfLocation: SelfLocation | null;
   previewQuestion: PreviewQuestion | null;
   endgameView: EndgameView | null;
+  foundClaimPending: FoundClaimPending | null;
 } = {
   status: 'connecting',
   selfLocation: null,
   previewQuestion: null,
   endgameView: null,
+  foundClaimPending: null,
 };
 
 /** Shallow-compare two string arrays (or nulls). */
@@ -204,6 +213,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           selfLocation,
           previewQuestion: null,
           endgameView: null,
+          foundClaimPending: prev.foundClaimPending,
         };
       }
       return {
@@ -213,6 +223,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         selfLocation,
         previewQuestion: null,
         endgameView,
+        foundClaimPending: null,
       };
     });
   },
@@ -511,5 +522,13 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
       if (!prev.endgameView) return prev;
       return { ...prev, endgameView: { ...prev.endgameView, safeZone, totalExclusion } };
     });
+  },
+
+  setFoundClaimPending: (seekerPlayerId) => {
+    set({ foundClaimPending: { seekerPlayerId } });
+  },
+
+  clearFoundClaim: () => {
+    set({ foundClaimPending: null });
   },
 }));

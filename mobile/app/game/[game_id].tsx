@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, BackHandler, StyleSheet, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DepartureWarningBanner } from '@/components/DepartureWarningBanner';
+import { FoundClaimModal } from '@/components/FoundClaimModal';
 import { FreezeWarningBanner } from '@/components/FreezeWarningBanner';
 import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
@@ -224,6 +225,8 @@ export default function GameplayScreen() {
         questions={seekerQuestionHistory}
         convention={gameInfo?.distance_convention ?? 'imperial'}
       />
+
+      <FoundClaimModal />
     </SafeAreaView>
   );
 }

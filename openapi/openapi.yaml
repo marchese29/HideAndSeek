@@ -1433,6 +1433,118 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/found:
+    post:
+      tags:
+      - endgame
+      summary: Claim Found
+      description: Seeker claims to have found the hiders. Opens a 2-minute hider
+        decision window.
+      operationId: claim_found_games__game_id__found_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/found/confirm:
+    post:
+      tags:
+      - endgame
+      summary: Confirm Found
+      description: Hider confirms the found claim. Ends the game with end_reason=found.
+      operationId: confirm_found_games__game_id__found_confirm_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/found/reject:
+    post:
+      tags:
+      - endgame
+      summary: Reject Found
+      description: Hider rejects the found claim. Clears claim state; game continues.
+      operationId: reject_found_games__game_id__found_reject_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /:
     get:
       summary: Root
@@ -3067,92 +3179,6 @@ components:
       - question_deadline
       title: QuestionAskedEvent
       type: object
-    PlayerLocationEvent:
-      properties:
-        player_id:
-          format: uuid
-          title: Player Id
-          type: string
-        name:
-          title: Name
-          type: string
-        color:
-          $ref: '#/components/schemas/PlayerColor'
-        role:
-          $ref: '#/components/schemas/PlayerRole'
-        coordinates:
-          $ref: '#/components/schemas/Point'
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
-        candidate_stations:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Candidate Stations
-        not_in_zone:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Not In Zone
-        computed_answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          title: Computed Answer
-        freeze_departed:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Freeze Departed
-      required:
-      - player_id
-      - name
-      - color
-      - role
-      - coordinates
-      - timestamp
-      title: PlayerLocationEvent
-      type: object
-    QuestionAnswerableEvent:
-      description: "A thermometer question was locked in \u2014 both channels."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        seeker_location_end:
-          $ref: '#/components/schemas/Point'
-        question_deadline:
-          format: date-time
-          title: Question Deadline
-          type: string
-      required:
-      - question_id
-      - question_type
-      - status
-      - seeker_location_end
-      - question_deadline
-      title: QuestionAnswerableEvent
-      type: object
     HiderQuestionAnsweredEvent:
       description: "A question was answered \u2014 hider channel only.\n\nCarries\
         \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
@@ -3218,6 +3244,124 @@ components:
       - hider_feature_name
       - hider_distance
       title: HiderQuestionAnsweredEvent
+      type: object
+    QuestionVetoedEvent:
+      description: "A question was vetoed \u2014 both channels."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        slot_index:
+          title: Slot Index
+          type: integer
+      required:
+      - question_id
+      - question_type
+      - slot_index
+      title: QuestionVetoedEvent
+      type: object
+    StationElectionStatus:
+      enum:
+      - pending
+      - elected
+      - auto_assigned
+      - ambiguous
+      title: StationElectionStatus
+      type: string
+    PhaseChangedEvent:
+      description: "Game transitioned from hiding to seeking \u2014 both channels."
+      properties:
+        phase:
+          title: Phase
+          type: string
+        seeking_started_at:
+          format: date-time
+          title: Seeking Started At
+          type: string
+        station_election_status:
+          $ref: '#/components/schemas/StationElectionStatus'
+        hider_station_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Hider Station Id
+      required:
+      - phase
+      - seeking_started_at
+      - station_election_status
+      - hider_station_id
+      title: PhaseChangedEvent
+      type: object
+    GamePlayerLeftEvent:
+      description: "A player left during active gameplay \u2014 both channels."
+      properties:
+        player_id:
+          format: uuid
+          title: Player Id
+          type: string
+      required:
+      - player_id
+      title: GamePlayerLeftEvent
+      type: object
+    FoundClaimRejectedEvent:
+      description: "Hiders rejected the found claim \u2014 seeker channel only."
+      properties: {}
+      required: []
+      title: FoundClaimRejectedEvent
+      type: object
+    GameDissolvedEvent:
+      description: "Game dissolved during active gameplay \u2014 both channels."
+      properties:
+        reason:
+          title: Reason
+          type: string
+      required:
+      - reason
+      title: GameDissolvedEvent
+      type: object
+    HidingZoneExpandedEvent:
+      description: "Hiding zone expanded by the hider \u2014 both channels."
+      properties:
+        effective_radius:
+          description: New effective hiding zone radius in convention units.
+          title: Effective Radius
+          type: number
+      required:
+      - effective_radius
+      title: HidingZoneExpandedEvent
+      type: object
+    ProximityTier:
+      enum:
+      - none
+      - approaching
+      - near
+      - entered
+      title: ProximityTier
+      type: string
+    ProximityDeescalatedEvent:
+      description: "All seekers pulled back \u2014 hider channel only."
+      properties:
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+      required:
+      - proximity_tier
+      title: ProximityDeescalatedEvent
+      type: object
+    FoundClaimEvent:
+      description: "A seeker claims to have found the hiders \u2014 hider channel\
+        \ only."
+      properties:
+        seeker_player_id:
+          format: uuid
+          title: Seeker Player Id
+          type: string
+      required:
+      - seeker_player_id
+      title: FoundClaimEvent
       type: object
     SeekerQuestionAnsweredEvent:
       description: "A question was answered \u2014 seeker channel only (with exclusion\
@@ -3308,8 +3452,69 @@ components:
       - answered_at
       title: SeekerQuestionAnsweredEvent
       type: object
-    QuestionVetoedEvent:
-      description: "A question was vetoed \u2014 both channels."
+    PlayerLocationEvent:
+      properties:
+        player_id:
+          format: uuid
+          title: Player Id
+          type: string
+        name:
+          title: Name
+          type: string
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        role:
+          $ref: '#/components/schemas/PlayerRole'
+        coordinates:
+          $ref: '#/components/schemas/Point'
+        timestamp:
+          format: date-time
+          title: Timestamp
+          type: string
+        candidate_stations:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Candidate Stations
+        not_in_zone:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Not In Zone
+        computed_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Computed Answer
+        freeze_departed:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Freeze Departed
+      required:
+      - player_id
+      - name
+      - color
+      - role
+      - coordinates
+      - timestamp
+      title: PlayerLocationEvent
+      type: object
+    QuestionAnswerableEvent:
+      description: "A thermometer question was locked in \u2014 both channels."
       properties:
         question_id:
           format: uuid
@@ -3317,14 +3522,21 @@ components:
           type: string
         question_type:
           $ref: '#/components/schemas/QuestionType'
-        slot_index:
-          title: Slot Index
-          type: integer
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        seeker_location_end:
+          $ref: '#/components/schemas/Point'
+        question_deadline:
+          format: date-time
+          title: Question Deadline
+          type: string
       required:
       - question_id
       - question_type
-      - slot_index
-      title: QuestionVetoedEvent
+      - status
+      - seeker_location_end
+      - question_deadline
+      title: QuestionAnswerableEvent
       type: object
     QuestionAbandonedEvent:
       description: "A question was abandoned \u2014 both channels."
@@ -3344,39 +3556,6 @@ components:
       - slot_index
       title: QuestionAbandonedEvent
       type: object
-    StationElectionStatus:
-      enum:
-      - pending
-      - elected
-      - auto_assigned
-      - ambiguous
-      title: StationElectionStatus
-      type: string
-    PhaseChangedEvent:
-      description: "Game transitioned from hiding to seeking \u2014 both channels."
-      properties:
-        phase:
-          title: Phase
-          type: string
-        seeking_started_at:
-          format: date-time
-          title: Seeking Started At
-          type: string
-        station_election_status:
-          $ref: '#/components/schemas/StationElectionStatus'
-        hider_station_id:
-          anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
-          title: Hider Station Id
-      required:
-      - phase
-      - seeking_started_at
-      - station_election_status
-      - hider_station_id
-      title: PhaseChangedEvent
-      type: object
     StationElectionEvent:
       description: "Station election status changed \u2014 hider channel only."
       properties:
@@ -3393,16 +3572,11 @@ components:
       - hider_station_id
       title: StationElectionEvent
       type: object
-    GamePlayerLeftEvent:
-      description: "A player left during active gameplay \u2014 both channels."
-      properties:
-        player_id:
-          format: uuid
-          title: Player Id
-          type: string
-      required:
-      - player_id
-      title: GamePlayerLeftEvent
+    FoundClaimExpiredEvent:
+      description: "Found claim timed out \u2014 both channels."
+      properties: {}
+      required: []
+      title: FoundClaimExpiredEvent
       type: object
     GameHostChangedEvent:
       description: "Host transferred during active gameplay \u2014 both channels."
@@ -3415,41 +3589,12 @@ components:
       - new_host_player_id
       title: GameHostChangedEvent
       type: object
-    GameDissolvedEvent:
-      description: "Game dissolved during active gameplay \u2014 both channels."
-      properties:
-        reason:
-          title: Reason
-          type: string
-      required:
-      - reason
-      title: GameDissolvedEvent
-      type: object
     GameEndedEvent:
       description: "Host ended the game for all players \u2014 both channels."
       properties: {}
       required: []
       title: GameEndedEvent
       type: object
-    HidingZoneExpandedEvent:
-      description: "Hiding zone expanded by the hider \u2014 both channels."
-      properties:
-        effective_radius:
-          description: New effective hiding zone radius in convention units.
-          title: Effective Radius
-          type: number
-      required:
-      - effective_radius
-      title: HidingZoneExpandedEvent
-      type: object
-    ProximityTier:
-      enum:
-      - none
-      - approaching
-      - near
-      - entered
-      title: ProximityTier
-      type: string
     ProximityEscalatedEvent:
       description: "Seekers moved closer \u2014 hider channel only."
       properties:
@@ -3458,15 +3603,6 @@ components:
       required:
       - proximity_tier
       title: ProximityEscalatedEvent
-      type: object
-    ProximityDeescalatedEvent:
-      description: "All seekers pulled back \u2014 hider channel only."
-      properties:
-        proximity_tier:
-          $ref: '#/components/schemas/ProximityTier'
-      required:
-      - proximity_tier
-      title: ProximityDeescalatedEvent
       type: object
     FeatureParamsResponse:
       description: Parameters for a matching or measuring question.

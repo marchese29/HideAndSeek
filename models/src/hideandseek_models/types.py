@@ -205,6 +205,12 @@ class ProximityTier(StrEnum):
     entered = 'entered'
 
 
+class EndReason(StrEnum):
+    found = 'found'
+    host_ended = 'host_ended'
+    dissolved = 'dissolved'
+
+
 class LobbyEventType(StrEnum):
     game_state = 'game_state'
     player_joined = 'player_joined'
@@ -231,6 +237,9 @@ class GameplayEventType(StrEnum):
     hiding_zone_expanded = 'hiding_zone_expanded'
     proximity_escalated = 'proximity_escalated'
     proximity_deescalated = 'proximity_deescalated'
+    found_claim = 'found_claim'
+    found_claim_rejected = 'found_claim_rejected'
+    found_claim_expired = 'found_claim_expired'
 
 
 class TokenProvider(StrEnum):
@@ -257,6 +266,9 @@ class PushEventType(StrEnum):
     proximity_escalated = 'proximity_escalated'
     proximity_deescalated = 'proximity_deescalated'
     freeze_departed = 'freeze_departed'
+    found_claim = 'found_claim'
+    found_claim_rejected = 'found_claim_rejected'
+    found_claim_expired = 'found_claim_expired'
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

@@ -13,6 +13,7 @@ import uuid
 from fastapi import HTTPException
 from shapely.geometry import Point
 
+from hideandseek_core.logic.endgame import seeker_inside_hiding_zone
 from hideandseek_core.queries.location import get_latest_location_for_player
 from hideandseek_core.queries.questions import get_question, get_slot_by_index
 from hideandseek_core.queries.stops import get_stop_by_id
@@ -152,3 +153,25 @@ def validate_endgame_station(station_id: uuid.UUID, game: Game) -> Stop:
             status_code=422, detail="Station does not belong to this game's transit dataset."
         )
     return stop
+
+
+def validate_found_claim(game: Game, seeker: Player) -> None:
+    """Seeker-side claim: seeking phase, station elected, in-zone, no pending claim."""
+    if not game.status.is_seeking:
+        raise HTTPException(status_code=409, detail='Found claims are only allowed during seeking.')
+    if game.hider_station is None:
+        raise HTTPException(status_code=409, detail='No station has been elected yet.')
+    if game.found_claim_at is not None:
+        raise HTTPException(status_code=409, detail='A found claim is already pending.')
+    if not seeker_inside_hiding_zone(game, seeker):
+        raise HTTPException(
+            status_code=409, detail='You must be inside the hiding zone to claim found.'
+        )
+
+
+def validate_found_decision(game: Game) -> None:
+    """Hider-side confirm/reject: game still seeking with a live pending claim."""
+    if not game.status.is_seeking:
+        raise HTTPException(status_code=409, detail='No active found claim.')
+    if game.found_claim_at is None:
+        raise HTTPException(status_code=409, detail='No pending found claim.')

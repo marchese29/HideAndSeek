@@ -14,6 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from hideandseek_models.base import Base
 from hideandseek_models.geo_types import ShapelyGeography
 from hideandseek_models.types import (
+    EndReason,
     GameStatus,
     MapSize,
     PlayerColor,
@@ -51,6 +52,9 @@ class Game(Base):
     hiding_zone_radius_override: Mapped[float | None] = mapped_column(default=None)
     hiding_zone_expanded: Mapped[bool] = mapped_column(default=False)
     proximity_tier: Mapped[ProximityTier] = mapped_column(default=ProximityTier.none)
+    end_reason: Mapped[EndReason | None] = mapped_column(default=None)
+    found_claim_at: Mapped[datetime | None] = mapped_column(default=None)
+    found_claim_player_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
 
     game_map: Mapped[GameMap] = relationship(back_populates='games')
     hider_station: Mapped[Stop | None] = relationship()

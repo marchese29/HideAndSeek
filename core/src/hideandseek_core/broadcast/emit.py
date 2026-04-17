@@ -8,6 +8,9 @@ import uuid
 import structlog
 
 from hideandseek_core.broadcast.events import (
+    FoundClaimEvent,
+    FoundClaimExpiredEvent,
+    FoundClaimRejectedEvent,
     GameDissolvedEvent,
     GameEndedEvent,
     GameHostChangedEvent,
@@ -179,3 +182,25 @@ def emit_gameplay(event: GameplayEvent) -> None:
                 data,
                 required=True,
             )
+
+        case FoundClaimEvent():
+            data = event.model_dump(mode='json')
+            publish_sse(
+                hider_channel(event.game_id),
+                GameplayEventType.found_claim,
+                data,
+                required=True,
+            )
+
+        case FoundClaimRejectedEvent():
+            data = event.model_dump(mode='json')
+            publish_sse(
+                seeker_channel(event.game_id),
+                GameplayEventType.found_claim_rejected,
+                data,
+                required=True,
+            )
+
+        case FoundClaimExpiredEvent():
+            data = event.model_dump(mode='json')
+            _both_channels(event.game_id, GameplayEventType.found_claim_expired, data)

@@ -16,11 +16,12 @@ uv run pyright             # Type check
 src/hideandseek_models/
   __init__.py              # Re-exports all models, enums, and constants
   base.py                  # DeclarativeBase with StrEnum type annotation map
-  types.py                 # Enums (GameStatus, PlayerColor, QuestionType, ProximityTier, etc.),
-                           #   constants (MAX_PLAYERS), value objects (DistrictClass),
-                           #   category classification sets
+  types.py                 # Enums (GameStatus, PlayerColor, QuestionType, ProximityTier,
+                           #   EndReason, etc.), constants (MAX_PLAYERS), value objects
+                           #   (DistrictClass), category classification sets
   geo_types.py             # Custom SQLAlchemy column types (ShapelyGeography, ShapelyGeometry)
-  game.py                  # Game, Player (Player.freeze_location for endgame freeze mechanic)
+  game.py                  # Game (end_reason + found_claim_* for two-party completion),
+                           #   Player (Player.freeze_location for endgame freeze mechanic)
   game_map.py              # GameMap (tentacle_categories JSON column for tentacles config)
   inventory.py             # InventorySlot
   location.py              # LocationUpdate
