@@ -57,17 +57,21 @@ src/
     useHidingZone.ts           # Fetches + caches hiding zone polygon for a candidate stop (TanStack Query, staleTime=Infinity)
     usePreviewBoundary.ts      # Fetches + caches exclusion preview boundary for browse slot (TanStack Query, quantized location key)
     useQuestionSelection.ts    # Question selection state machine (belt takeover flow)
+    useCandidateStations.ts    # Fetches candidate stations for seeker endgame station picker (TanStack Query, staleTime=30s)
+    useEndgameExclusions.ts    # Fetches endgame exclusions for a station + question cutoff, syncs to gameplay store (TanStack Query, staleTime=0)
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
   utils/
     geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary + haversine distance + convention conversion
     locationPermission.ts      # requestLocationPermission() — foreground permission helper
     time.ts                    # parseUtc() — server timestamp parsing (shared by timer hooks)
   components/                  # Reusable UI components
-    GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins, preview overlay, candidate stops)
+    GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins, preview overlay, candidate stops, endgame overlays)
     BoundaryOverlay.tsx        # Game boundary MultiPolygon (outline-only stroke, one <Polygon> per part)
-    CandidateStopOverlay.tsx   # Candidate stop markers (blue dots, green when highlighted, zIndex 500, hider hiding phase)
+    CandidateStopOverlay.tsx   # Candidate stop markers (blue dots, green when highlighted, zIndex 500, hider hiding + seeker endgame picking)
     ExclusionOverlay.tsx       # Exclusion zone polygon overlay (translucent red, seeker seeking phase only, zIndex 2000)
-    HidingZoneOverlay.tsx      # Hiding zone polygon overlay (translucent blue fill, zIndex 450, preview during selection + permanent post-election)
+    HidingZoneOverlay.tsx      # Hiding zone polygon overlay (translucent blue fill, zIndex 450, strokeOnly prop for endgame outline)
+    SafeZoneOverlay.tsx        # Endgame safe zone polygon overlay (translucent blue fill, zIndex 460)
+    QuestionCutoffModal.tsx    # Bottom sheet modal for endgame question cutoff selection
     PreviewBoundaryOverlay.tsx # Question preview boundary polyline (solid, type-colored, seeker only, zIndex 1500)
     StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
     TransitRoute.tsx           # Transit route polyline + white stop dots (hides candidates via hiddenStopIds)
@@ -85,7 +89,9 @@ src/
     utility-belt/              # Gameplay utility belt + question selection
       index.ts                 # Barrel export
       UtilityBelt.tsx          # Container — three-section row, wires question selection + stop selection + utility buttons
-      BeltUtilities.tsx       # Seeker utility buttons (default belt center when question selection closed) — "Endgame" placeholder
+      BeltUtilities.tsx       # Seeker utility buttons (default belt center when question selection closed) — "Endgame" entry point
+      EndgameBeltCenter.tsx    # Endgame view belt center — "Long Game" (exit) + "Found Them" (placeholder) buttons
+      EndgameStationPicker.tsx # Endgame station picking belt center — checkmark/station name/cancel 3-button layout
       CandidateStatus.tsx      # Belt center status text for hiders (stop name / "Tap a stop" / "No stops in range")
       StateAction.tsx          # Role/phase action button (icon + label, "Questions" toggle for seeker, "Set Stop" for hider, "Powers" for hider seeking)
       GameTimer.tsx            # Live timer with connection-colored background
@@ -240,6 +246,20 @@ Both hooks:
 - **Auto-assigned cleanup**: When `phase_changed` carries `auto_assigned` or `elected` status, `applyPhaseChanged` nullifies `candidate_stations` (same as `applyStationElection`) so candidate dots disappear immediately.
 - **Apple Maps marker tap quirk**: Both `Marker.onPress` and `MapView.onPress` fire on the same tap. A ref-based guard in `GameplayScreen` (`markerPressedRef`) prevents the map press from clearing the marker press's selection.
 - **State bridge**: `highlightedStopId` is lifted to `GameplayScreen` (ephemeral UI state, not in Zustand) and passed to both `GameMap` and `UtilityBelt`. Cleared on phase transition.
+
+## Seeker Endgame View
+
+Phone-local seeker mode for narrowing down hider location. Each seeker independently picks a station and question cutoff, then sees the resulting inclusion/exclusion zones.
+
+- **State**: `endgameView` in `GameplayStore` — `{ stationId, afterQuestion, hidingZone, safeZone, totalExclusion } | null`. Preserved across SSE reconnects (phone-local, not server state). Cleared on `reset()`.
+- **Flow**: Tap "Endgame" → station picking mode → candidate stations rendered as blue dots (from `GET /candidate-stations`) → tap station → highlights green with hiding zone preview → tap checkmark → question cutoff modal → pick starting question → `GET /endgame-exclusions` → endgame overlays activate.
+- **Station picking belt**: 3-button layout (`EndgameStationPicker`) — checkmark (select, disabled until highlighted), station name (center), X (cancel). Map taps clear highlight but stay in picking mode. X exits picking entirely.
+- **Endgame belt**: 2-button layout (`EndgameBeltCenter`) — "Long Game" (binoculars, exits endgame view), "Found Them" (map-marker-account, placeholder for found claim flow).
+- **Map overlays when endgame active**: Hiding zone = stroke only (no fill). Safe zone = blue fill (`SafeZoneOverlay`, zIndex 460). Endgame exclusion = red fill (reuses `ExclusionOverlay`). Long-game `total_exclusion` hidden.
+- **Question cutoff modal**: `QuestionCutoffModal` — pageSheet modal listing answered questions with type-colored icons. "None" option at bottom = no exclusions. Tapping a question passes `after_question = sequence - 1` (inclusive of selected question).
+- **Live updates**: When `question_answered` SSE fires during endgame view, `useGameplayEvents` invalidates `['endgame-exclusions']` query cache → `useEndgameExclusions` re-fetches → overlays update via `updateEndgameView()`.
+- **Camera animation**: Animates to endgame hiding zone on activation (same pattern as hider station election). Resets when exiting endgame view.
+- **Question selection**: Works normally during endgame — the type bar / param picker takes rendering priority over endgame belt center. Closing question selection returns to Long Game / Found Them buttons.
 
 ## Conventions
 

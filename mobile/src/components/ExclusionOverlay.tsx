@@ -11,12 +11,18 @@ const Z_INDEX = 2000;
 
 interface ExclusionOverlayProps {
   exclusion: GeoJSONGeometry | null;
+  /** When false, polygon stays mounted but renders fully transparent (Apple Maps workaround). */
+  visible?: boolean;
 }
 
 export const ExclusionOverlay = React.memo(function ExclusionOverlay({
   exclusion,
+  visible = true,
 }: ExclusionOverlayProps) {
   if (!exclusion) return null;
+
+  const fillColor = visible ? FILL_COLOR : 'transparent';
+  const strokeColor = visible ? STROKE_COLOR : 'transparent';
 
   if (exclusion.type === 'Polygon') {
     const polygon = exclusion as unknown as GeoJSONPolygon;
@@ -24,8 +30,8 @@ export const ExclusionOverlay = React.memo(function ExclusionOverlay({
       <Polygon
         coordinates={polygonToCoords(polygon)}
         holes={polygonToHoles(polygon)}
-        fillColor={FILL_COLOR}
-        strokeColor={STROKE_COLOR}
+        fillColor={fillColor}
+        strokeColor={strokeColor}
         strokeWidth={STROKE_WIDTH}
         zIndex={Z_INDEX}
       />
@@ -41,8 +47,8 @@ export const ExclusionOverlay = React.memo(function ExclusionOverlay({
             key={i}
             coordinates={part.coordinates}
             holes={part.holes}
-            fillColor={FILL_COLOR}
-            strokeColor={STROKE_COLOR}
+            fillColor={fillColor}
+            strokeColor={strokeColor}
             strokeWidth={STROKE_WIDTH}
             zIndex={Z_INDEX}
           />

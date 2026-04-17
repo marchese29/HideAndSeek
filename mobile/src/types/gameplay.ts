@@ -104,6 +104,11 @@ export type SeekerGameState = S['SeekerGameStateResponse'];
 
 export type TentaclePOIPreviewResponse = S['TentaclePOIPreviewResponse'];
 
+// ── Endgame Exclusions ─────────────────────────────────────────────────────
+
+export type EndgameExclusionsResponse = S['EndgameExclusionsResponse'];
+export type EndgameExclusionEntryResponse = S['EndgameExclusionEntryResponse'];
+
 // ── Question Preview (mobile-only UI state) ─────────────────────────────────
 
 export interface PreviewQuestion {

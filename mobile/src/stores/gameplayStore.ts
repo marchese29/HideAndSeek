@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import type {
   GamePlayer,
+  GeoJSONGeometry,
   GeoJSONPoint,
   HiderActiveQuestion,
   HiderGameState,
@@ -17,6 +18,14 @@ import type {
   SeekerQuestionHistoryEntry,
   StationElectionDelta,
 } from '@/types/gameplay';
+
+export interface EndgameView {
+  stationId: string;
+  afterQuestion: number;
+  hidingZone: GeoJSONGeometry;
+  safeZone: GeoJSONGeometry;
+  totalExclusion: GeoJSONGeometry | null;
+}
 
 interface SelfLocation {
   coordinates: GeoJSONPoint;
@@ -48,20 +57,26 @@ interface GameplayActions {
   removePlayer: (playerId: string) => void;
   setHostPlayerId: (hostPlayerId: string) => void;
   applyHidingZoneExpanded: () => void;
+  setEndgameView: (view: EndgameView) => void;
+  clearEndgameView: () => void;
+  updateEndgameView: (safeZone: GeoJSONGeometry, totalExclusion: GeoJSONGeometry | null) => void;
 }
 
 type GameplayStore = GameplayData & {
   selfLocation: SelfLocation | null;
   previewQuestion: PreviewQuestion | null;
+  endgameView: EndgameView | null;
 } & GameplayActions;
 
 const initialState: GameplayData & {
   selfLocation: SelfLocation | null;
   previewQuestion: PreviewQuestion | null;
+  endgameView: EndgameView | null;
 } = {
   status: 'connecting',
   selfLocation: null,
   previewQuestion: null,
+  endgameView: null,
 };
 
 /** Shallow-compare two string arrays (or nulls). */
@@ -118,7 +133,7 @@ function buildHiderHistoryEntry(
 ): HiderQuestionHistoryEntry {
   return {
     question_id: delta.question_id,
-    sequence: 0, // Not available from deltas; corrected on next hydrate
+    sequence: delta.sequence,
     question_type: delta.question_type,
     status: delta.status,
     ask_count: 0, // Not available from deltas; corrected on next hydrate
@@ -142,15 +157,21 @@ function buildSeekerHistoryEntry(
   asked: SeekerActiveQuestion,
   delta: SeekerQuestionAnsweredDelta,
 ): SeekerQuestionHistoryEntry {
+  // Event params and response params have different shapes for matching/measuring,
+  // but the display-relevant fields (type, radius, min_travel, category) overlap.
+  // Force cast is safe for display; next hydrate provides the canonical value.
+  const parameters = (asked.parameters ??
+    ({ type: 'radar', radius: 0 } as unknown)) as SeekerQuestionHistoryEntry['parameters'];
   return {
     question_id: delta.question_id,
-    sequence: 0,
+    sequence: delta.sequence,
     question_type: delta.question_type,
     status: delta.status,
     ask_count: 0,
     asked_by: delta.asked_by,
     asked_at: '',
     slot_index: delta.slot_index,
+    parameters,
     answer: delta.answer,
     exclusion: delta.exclusion,
     total_exclusion: delta.total_exclusion,
@@ -172,6 +193,9 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         }
       }
 
+      // Preserve endgameView across SSE reconnects (phone-local state)
+      const { endgameView } = prev;
+
       if (role === 'hider') {
         return {
           status: 'connected',
@@ -179,6 +203,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           state: data as HiderGameState,
           selfLocation,
           previewQuestion: null,
+          endgameView: null,
         };
       }
       return {
@@ -187,6 +212,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         state: data as SeekerGameState,
         selfLocation,
         previewQuestion: null,
+        endgameView,
       };
     });
   },
@@ -469,6 +495,21 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         return { ...prev, state: { ...prev.state, hiding_zone_expanded: true } };
       }
       return { ...prev, state: { ...prev.state, hiding_zone_expanded: true } };
+    });
+  },
+
+  setEndgameView: (view) => {
+    set({ endgameView: view });
+  },
+
+  clearEndgameView: () => {
+    set({ endgameView: null });
+  },
+
+  updateEndgameView: (safeZone, totalExclusion) => {
+    set((prev) => {
+      if (!prev.endgameView) return prev;
+      return { ...prev, endgameView: { ...prev.endgameView, safeZone, totalExclusion } };
     });
   },
 }));

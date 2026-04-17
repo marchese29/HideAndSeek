@@ -6,12 +6,14 @@ import { api } from '@/api/client';
 import { expandHidingZone } from '@/api/powers';
 import { useQuestionSelection } from '@/hooks/useQuestionSelection';
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { GameInfo, HiderGameState, SeekerGameState } from '@/types/gameplay';
+import type { GameInfo, HiderGameState, SeekerGameState, StopResponse } from '@/types/gameplay';
 
 import { BeltActions } from './BeltActions';
 import { BeltUtilities } from './BeltUtilities';
 import { CandidateStatus } from './CandidateStatus';
 import { CustomDistanceInput } from './CustomDistanceInput';
+import { EndgameBeltCenter } from './EndgameBeltCenter';
+import { EndgameStationPicker } from './EndgameStationPicker';
 import { GameTimer } from './GameTimer';
 import { ParamPicker } from './ParamPicker';
 import { QuestionTypeBar } from './QuestionTypeBar';
@@ -25,6 +27,12 @@ interface UtilityBeltProps {
   gameId: string;
   highlightedStopId: string | null;
   onHighlightStop: (stopId: string | null) => void;
+  endgameStationPicking?: boolean;
+  endgameHighlightedStopId?: string | null;
+  endgameCandidateStations?: StopResponse[];
+  onEndgame?: () => void;
+  onEndgameStationSelect?: () => void;
+  onEndgameCancel?: () => void;
 }
 
 export const UtilityBelt = memo(function UtilityBelt({
@@ -35,11 +43,19 @@ export const UtilityBelt = memo(function UtilityBelt({
   gameId,
   highlightedStopId,
   onHighlightStop,
+  endgameStationPicking,
+  endgameHighlightedStopId,
+  endgameCandidateStations,
+  onEndgame,
+  onEndgameStationSelect,
+  onEndgameCancel,
 }: UtilityBeltProps) {
   const stationElectionStatus =
     role === 'hider' ? (state as HiderGameState).station_election_status : undefined;
   const candidateStations = role === 'hider' ? (state as HiderGameState).candidate_stations : null;
   const disabled = !connected;
+
+  const endgameView = useGameplayStore((s) => s.endgameView);
 
   const isSeekerSeeking = role === 'seeker' && state.phase === 'seeking';
   const isHiderSeeking = role === 'hider' && state.phase === 'seeking';
@@ -142,8 +158,70 @@ export const UtilityBelt = memo(function UtilityBelt({
     ]);
   }, [gameId, hiderState?.hiding_zone_expanded]);
 
+  const handleLongGame = useCallback(() => {
+    useGameplayStore.getState().clearEndgameView();
+  }, []);
+
   // "Set Stop" is pressable only when a candidate is highlighted
   const canSetStop = isStopSelectionActive && highlightedStopId !== null;
+
+  // ── Seeker belt center content ──────────────────────────────────────────
+  const renderSeekerCenter = () => {
+    // Question selection always takes priority
+    if (selection.state.step === 'type') {
+      return (
+        <QuestionTypeBar
+          onSelectType={selection.selectType}
+          selectedType={selectedType}
+          disabled={disabled}
+          availableTypes={availableTypes}
+        />
+      );
+    }
+    if (selection.state.step === 'param') {
+      return (
+        <ParamPicker
+          slots={selection.slotsForType}
+          convention={gameInfo.distance_convention}
+          questionType={selection.state.questionType}
+          selectedSlotIndex={selection.selectedSlotIndex}
+          onSelectSlot={selection.selectSlot}
+          onCustomPress={selection.openCustom}
+          disabled={disabled}
+        />
+      );
+    }
+    if (selection.state.step === 'custom') {
+      return (
+        <CustomDistanceInput
+          onSubmit={selection.submitCustom}
+          onCancel={() =>
+            selection.selectType(
+              selection.state.step === 'custom' ? selection.state.questionType : '',
+            )
+          }
+          convention={gameInfo.distance_convention}
+        />
+      );
+    }
+
+    // Closed state: endgame view → station picking → default utilities
+    if (endgameView) {
+      return <EndgameBeltCenter disabled={disabled} onLongGame={handleLongGame} />;
+    }
+    if (endgameStationPicking) {
+      return (
+        <EndgameStationPicker
+          highlightedStopId={endgameHighlightedStopId ?? null}
+          stops={endgameCandidateStations ?? []}
+          disabled={disabled}
+          onSelect={onEndgameStationSelect ?? (() => {})}
+          onCancel={onEndgameCancel ?? (() => {})}
+        />
+      );
+    }
+    return <BeltUtilities disabled={disabled} onEndgame={onEndgame ?? (() => {})} />;
+  };
 
   return (
     <View style={styles.container}>
@@ -186,39 +264,7 @@ export const UtilityBelt = memo(function UtilityBelt({
             highlightedStopId={highlightedStopId}
           />
         )}
-        {isSeekerSeeking && selection.state.step === 'closed' && (
-          <BeltUtilities disabled={disabled} />
-        )}
-        {isSeekerSeeking && selection.state.step === 'type' && (
-          <QuestionTypeBar
-            onSelectType={selection.selectType}
-            selectedType={selectedType}
-            disabled={disabled}
-            availableTypes={availableTypes}
-          />
-        )}
-        {isSeekerSeeking && selection.state.step === 'param' && (
-          <ParamPicker
-            slots={selection.slotsForType}
-            convention={gameInfo.distance_convention}
-            questionType={selection.state.questionType}
-            selectedSlotIndex={selection.selectedSlotIndex}
-            onSelectSlot={selection.selectSlot}
-            onCustomPress={selection.openCustom}
-            disabled={disabled}
-          />
-        )}
-        {isSeekerSeeking && selection.state.step === 'custom' && (
-          <CustomDistanceInput
-            onSubmit={selection.submitCustom}
-            onCancel={() =>
-              selection.selectType(
-                selection.state.step === 'custom' ? selection.state.questionType : '',
-              )
-            }
-            convention={gameInfo.distance_convention}
-          />
-        )}
+        {isSeekerSeeking && renderSeekerCenter()}
       </View>
 
       {/* Right: More button */}

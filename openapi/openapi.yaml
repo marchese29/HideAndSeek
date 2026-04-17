@@ -2889,242 +2889,6 @@ components:
       - msg
       - type
       title: ValidationError
-    ProximityTier:
-      enum:
-      - none
-      - approaching
-      - near
-      - entered
-      title: ProximityTier
-      type: string
-    ProximityDeescalatedEvent:
-      description: "All seekers pulled back \u2014 hider channel only."
-      properties:
-        proximity_tier:
-          $ref: '#/components/schemas/ProximityTier'
-      required:
-      - proximity_tier
-      title: ProximityDeescalatedEvent
-      type: object
-    QuestionStatus:
-      enum:
-      - asked
-      - in_progress
-      - answerable
-      - answered
-      - vetoed
-      - abandoned
-      - randomized
-      title: QuestionStatus
-      type: string
-    HiderQuestionAnsweredEvent:
-      description: "A question was answered \u2014 hider channel only.\n\nCarries\
-        \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
-        \ Includes hider-privileged data: location\nand feature resolution."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        answer:
-          title: Answer
-          type: string
-        slot_index:
-          title: Slot Index
-          type: integer
-        asked_by:
-          format: uuid
-          title: Asked By
-          type: string
-        answered_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Answered At
-        hider_location:
-          anyOf:
-          - $ref: '#/components/schemas/Point'
-          - type: 'null'
-        hider_feature_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hider Feature Id
-        hider_feature_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hider Feature Name
-        hider_distance:
-          anyOf:
-          - type: number
-          - type: 'null'
-          title: Hider Distance
-      required:
-      - question_id
-      - question_type
-      - status
-      - answer
-      - slot_index
-      - asked_by
-      - answered_at
-      - hider_location
-      - hider_feature_id
-      - hider_feature_name
-      - hider_distance
-      title: HiderQuestionAnsweredEvent
-      type: object
-    PlayerLocationEvent:
-      properties:
-        player_id:
-          format: uuid
-          title: Player Id
-          type: string
-        name:
-          title: Name
-          type: string
-        color:
-          $ref: '#/components/schemas/PlayerColor'
-        role:
-          $ref: '#/components/schemas/PlayerRole'
-        coordinates:
-          $ref: '#/components/schemas/Point'
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
-        candidate_stations:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Candidate Stations
-        not_in_zone:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Not In Zone
-        computed_answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          title: Computed Answer
-        freeze_departed:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Freeze Departed
-      required:
-      - player_id
-      - name
-      - color
-      - role
-      - coordinates
-      - timestamp
-      title: PlayerLocationEvent
-      type: object
-    SeekerQuestionAnsweredEvent:
-      description: "A question was answered \u2014 seeker channel only (with exclusion\
-        \ geometry).\n\nCarries answer-time delta fields only. No hider-privileged\
-        \ data\n(no hider_location, no hider feature resolution)."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        answer:
-          title: Answer
-          type: string
-        slot_index:
-          title: Slot Index
-          type: integer
-        asked_by:
-          format: uuid
-          title: Asked By
-          type: string
-        exclusion:
-          anyOf:
-          - discriminator:
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-              propertyName: type
-            oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-          - type: 'null'
-          title: Exclusion
-        total_exclusion:
-          anyOf:
-          - discriminator:
-              mapping:
-                GeometryCollection: '#/components/schemas/GeometryCollection'
-                LineString: '#/components/schemas/LineString'
-                MultiLineString: '#/components/schemas/MultiLineString'
-                MultiPoint: '#/components/schemas/MultiPoint'
-                MultiPolygon: '#/components/schemas/MultiPolygon'
-                Point: '#/components/schemas/Point'
-                Polygon: '#/components/schemas/Polygon'
-              propertyName: type
-            oneOf:
-            - $ref: '#/components/schemas/Point'
-            - $ref: '#/components/schemas/MultiPoint'
-            - $ref: '#/components/schemas/LineString'
-            - $ref: '#/components/schemas/MultiLineString'
-            - $ref: '#/components/schemas/Polygon'
-            - $ref: '#/components/schemas/MultiPolygon'
-            - $ref: '#/components/schemas/GeometryCollection'
-          - type: 'null'
-          title: Total Exclusion
-        answered_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Answered At
-      required:
-      - question_id
-      - question_type
-      - status
-      - answer
-      - slot_index
-      - asked_by
-      - exclusion
-      - total_exclusion
-      - answered_at
-      title: SeekerQuestionAnsweredEvent
-      type: object
     FeatureEventParams:
       description: Matching/measuring question parameters (seeker resolution only).
       properties:
@@ -3162,6 +2926,17 @@ components:
       - seeker_distance
       title: FeatureEventParams
       type: object
+    QuestionStatus:
+      enum:
+      - asked
+      - in_progress
+      - answerable
+      - answered
+      - vetoed
+      - abandoned
+      - randomized
+      title: QuestionStatus
+      type: string
     RadarEventParams:
       description: Radar question parameters.
       properties:
@@ -3292,6 +3067,67 @@ components:
       - question_deadline
       title: QuestionAskedEvent
       type: object
+    PlayerLocationEvent:
+      properties:
+        player_id:
+          format: uuid
+          title: Player Id
+          type: string
+        name:
+          title: Name
+          type: string
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        role:
+          $ref: '#/components/schemas/PlayerRole'
+        coordinates:
+          $ref: '#/components/schemas/Point'
+        timestamp:
+          format: date-time
+          title: Timestamp
+          type: string
+        candidate_stations:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Candidate Stations
+        not_in_zone:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Not In Zone
+        computed_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Computed Answer
+        freeze_departed:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Freeze Departed
+      required:
+      - player_id
+      - name
+      - color
+      - role
+      - coordinates
+      - timestamp
+      title: PlayerLocationEvent
+      type: object
     QuestionAnswerableEvent:
       description: "A thermometer question was locked in \u2014 both channels."
       properties:
@@ -3316,6 +3152,161 @@ components:
       - seeker_location_end
       - question_deadline
       title: QuestionAnswerableEvent
+      type: object
+    HiderQuestionAnsweredEvent:
+      description: "A question was answered \u2014 hider channel only.\n\nCarries\
+        \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
+        \ Includes hider-privileged data: location\nand feature resolution."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          title: Sequence
+          type: integer
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        answer:
+          title: Answer
+          type: string
+        slot_index:
+          title: Slot Index
+          type: integer
+        asked_by:
+          format: uuid
+          title: Asked By
+          type: string
+        answered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Answered At
+        hider_location:
+          anyOf:
+          - $ref: '#/components/schemas/Point'
+          - type: 'null'
+        hider_feature_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hider Feature Id
+        hider_feature_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hider Feature Name
+        hider_distance:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Hider Distance
+      required:
+      - question_id
+      - sequence
+      - question_type
+      - status
+      - answer
+      - slot_index
+      - asked_by
+      - answered_at
+      - hider_location
+      - hider_feature_id
+      - hider_feature_name
+      - hider_distance
+      title: HiderQuestionAnsweredEvent
+      type: object
+    SeekerQuestionAnsweredEvent:
+      description: "A question was answered \u2014 seeker channel only (with exclusion\
+        \ geometry).\n\nCarries answer-time delta fields only. No hider-privileged\
+        \ data\n(no hider_location, no hider feature resolution)."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          title: Sequence
+          type: integer
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        answer:
+          title: Answer
+          type: string
+        slot_index:
+          title: Slot Index
+          type: integer
+        asked_by:
+          format: uuid
+          title: Asked By
+          type: string
+        exclusion:
+          anyOf:
+          - discriminator:
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+              propertyName: type
+            oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+          - type: 'null'
+          title: Exclusion
+        total_exclusion:
+          anyOf:
+          - discriminator:
+              mapping:
+                GeometryCollection: '#/components/schemas/GeometryCollection'
+                LineString: '#/components/schemas/LineString'
+                MultiLineString: '#/components/schemas/MultiLineString'
+                MultiPoint: '#/components/schemas/MultiPoint'
+                MultiPolygon: '#/components/schemas/MultiPolygon'
+                Point: '#/components/schemas/Point'
+                Polygon: '#/components/schemas/Polygon'
+              propertyName: type
+            oneOf:
+            - $ref: '#/components/schemas/Point'
+            - $ref: '#/components/schemas/MultiPoint'
+            - $ref: '#/components/schemas/LineString'
+            - $ref: '#/components/schemas/MultiLineString'
+            - $ref: '#/components/schemas/Polygon'
+            - $ref: '#/components/schemas/MultiPolygon'
+            - $ref: '#/components/schemas/GeometryCollection'
+          - type: 'null'
+          title: Total Exclusion
+        answered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Answered At
+      required:
+      - question_id
+      - sequence
+      - question_type
+      - status
+      - answer
+      - slot_index
+      - asked_by
+      - exclusion
+      - total_exclusion
+      - answered_at
+      title: SeekerQuestionAnsweredEvent
       type: object
     QuestionVetoedEvent:
       description: "A question was vetoed \u2014 both channels."
@@ -3451,6 +3442,14 @@ components:
       - effective_radius
       title: HidingZoneExpandedEvent
       type: object
+    ProximityTier:
+      enum:
+      - none
+      - approaching
+      - near
+      - entered
+      title: ProximityTier
+      type: string
     ProximityEscalatedEvent:
       description: "Seekers moved closer \u2014 hider channel only."
       properties:
@@ -3459,6 +3458,15 @@ components:
       required:
       - proximity_tier
       title: ProximityEscalatedEvent
+      type: object
+    ProximityDeescalatedEvent:
+      description: "All seekers pulled back \u2014 hider channel only."
+      properties:
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+      required:
+      - proximity_tier
+      title: ProximityDeescalatedEvent
       type: object
     FeatureParamsResponse:
       description: Parameters for a matching or measuring question.
@@ -4048,6 +4056,14 @@ components:
           description: Inventory slot used.
           title: Slot Index
           type: integer
+        parameters:
+          anyOf:
+          - $ref: '#/components/schemas/RadarParamsResponse'
+          - $ref: '#/components/schemas/ThermometerParamsResponse'
+          - $ref: '#/components/schemas/FeatureParamsResponse'
+          - $ref: '#/components/schemas/TentacleParamsResponse'
+          description: Type-specific question parameters.
+          title: Parameters
         answer:
           anyOf:
           - type: string
@@ -4120,6 +4136,7 @@ components:
       - asked_by
       - asked_at
       - slot_index
+      - parameters
       title: SeekerQuestionHistoryEntry
       type: object
     SeekerGameStateResponse:

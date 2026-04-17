@@ -229,6 +229,7 @@ class HiderQuestionAnsweredEvent(GameplayEventSchema):
     """
 
     question_id: uuid.UUID
+    sequence: int
     question_type: QuestionType
     status: QuestionStatus
     answer: str
@@ -265,6 +266,7 @@ class HiderQuestionAnsweredEvent(GameplayEventSchema):
         return HiderQuestionAnsweredEvent(
             game_id=question.game_id,
             question_id=question.id,
+            sequence=question.sequence,
             question_type=question.question_type,
             status=question.status,
             answer=question.answer,
@@ -286,6 +288,7 @@ class SeekerQuestionAnsweredEvent(GameplayEventSchema):
     """
 
     question_id: uuid.UUID
+    sequence: int
     question_type: QuestionType
     status: QuestionStatus
     answer: str
@@ -301,6 +304,7 @@ class SeekerQuestionAnsweredEvent(GameplayEventSchema):
         return SeekerQuestionAnsweredEvent(
             game_id=question.game_id,
             question_id=question.id,
+            sequence=question.sequence,
             question_type=question.question_type,
             status=question.status,
             answer=question.answer,

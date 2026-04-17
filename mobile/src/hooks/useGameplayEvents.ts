@@ -212,6 +212,10 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           const data = parseData<SeekerQuestionAnsweredDelta>(event);
           if (data) {
             useGameplayStore.getState().applyQuestionAnswered(data);
+            // Re-fetch endgame exclusions if endgame view is active
+            if (useGameplayStore.getState().endgameView) {
+              void queryClient.invalidateQueries({ queryKey: ['endgame-exclusions'] });
+            }
           }
         }
       });

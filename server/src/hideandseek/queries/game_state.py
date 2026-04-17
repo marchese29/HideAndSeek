@@ -266,6 +266,7 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
             asked_by=q.asked_by,
             asked_at=q.asked_at,
             slot_index=q.slot_index,
+            parameters=build_question_params(q),
             answer=q.answer,
             exclusion=geom_or_none(q.exclusion),
             total_exclusion=geom_or_none(q.total_exclusion),

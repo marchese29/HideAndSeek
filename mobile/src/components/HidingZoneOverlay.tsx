@@ -14,15 +14,17 @@ const Z_INDEX = 450;
 interface HidingZoneOverlayProps {
   hidingZone: GeoJSONGeometry | null;
   proximityEntered?: boolean;
+  strokeOnly?: boolean;
 }
 
 export const HidingZoneOverlay = React.memo(function HidingZoneOverlay({
   hidingZone,
   proximityEntered,
+  strokeOnly,
 }: HidingZoneOverlayProps) {
   if (!hidingZone) return null;
 
-  const fillColor = proximityEntered ? AMBER_FILL : BLUE_FILL;
+  const fillColor = strokeOnly ? 'transparent' : proximityEntered ? AMBER_FILL : BLUE_FILL;
   const strokeColor = proximityEntered ? AMBER_STROKE : BLUE_STROKE;
 
   if (hidingZone.type === 'Polygon') {

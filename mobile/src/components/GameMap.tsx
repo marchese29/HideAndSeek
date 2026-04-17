@@ -7,6 +7,7 @@ import { ExclusionOverlay } from '@/components/ExclusionOverlay';
 import { HidingZoneOverlay } from '@/components/HidingZoneOverlay';
 import { PlayerPin } from '@/components/PlayerPin';
 import { PreviewBoundaryOverlay } from '@/components/PreviewBoundaryOverlay';
+import { SafeZoneOverlay } from '@/components/SafeZoneOverlay';
 import { TentaclePOIOverlay } from '@/components/TentaclePOIOverlay';
 import { TransitRoute } from '@/components/TransitRoute';
 import { useActiveQuestionBoundary } from '@/hooks/useActiveQuestionBoundary';
@@ -21,6 +22,7 @@ import type {
   GeoJSONPolygon,
   HiderGameState,
   SeekerGameState,
+  StopResponse,
 } from '@/types/gameplay';
 import { regionFromBoundary, regionFromPolygon } from '@/utils/geo';
 
@@ -41,6 +43,10 @@ interface GameMapProps {
   highlightedStopId?: string | null;
   onCandidateStopPress?: (stopId: string) => void;
   onMapPress?: () => void;
+  endgameStationPicking?: boolean;
+  endgameCandidateStations?: StopResponse[];
+  endgameHighlightedStopId?: string | null;
+  onEndgameCandidatePress?: (stopId: string) => void;
 }
 
 interface PlayerEntry {
@@ -56,11 +62,17 @@ export function GameMap({
   highlightedStopId,
   onCandidateStopPress,
   onMapPress,
+  endgameStationPicking,
+  endgameCandidateStations,
+  endgameHighlightedStopId,
+  onEndgameCandidatePress,
 }: GameMapProps) {
   const mapRef = useRef<MapView>(null);
   const hasAnimatedToZone = useRef(false);
+  const hasAnimatedToEndgame = useRef(false);
   const initialRegion = useMemo(() => regionFromBoundary(gameInfo.boundary), [gameInfo.boundary]);
   const selfLocation = useGameplayStore((s) => s.selfLocation);
+  const endgameView = useGameplayStore((s) => s.endgameView);
   const {
     boundary: previewBoundary,
     questionType: previewQuestionType,
@@ -74,7 +86,12 @@ export function GameMap({
   const hiderStationId = role === 'hider' ? (state as HiderGameState).hider_station_id : null;
 
   // Hiding zone: preview (pre-election highlight) or permanent (post-election)
-  const { hidingZone } = useHidingZone(highlightedStopId ?? hiderStationId);
+  // For seekers in endgame station picking, also show the highlighted station's zone
+  const hiderZoneStationId = highlightedStopId ?? hiderStationId;
+  const endgamePreviewStationId =
+    endgameStationPicking && !endgameView ? (endgameHighlightedStopId ?? null) : null;
+  const { hidingZone: hiderHidingZone } = useHidingZone(hiderZoneStationId);
+  const { hidingZone: endgamePreviewZone } = useHidingZone(endgamePreviewStationId);
 
   // Proximity tier from hider state (drives amber zone color)
   const proximityTier = role === 'hider' ? (state as HiderGameState).proximity_tier : null;
@@ -82,11 +99,22 @@ export function GameMap({
   // Candidate stations from hider state
   const candidateStations = role === 'hider' ? (state as HiderGameState).candidate_stations : null;
 
-  // Hide candidate stops from TransitRoute so they don't fight for z-index
-  const hiddenStopIds = useMemo(
-    () => (candidateStations ? new Set(candidateStations) : undefined),
-    [candidateStations],
+  // Endgame candidate station IDs for overlay rendering
+  const endgameCandidateIds = useMemo(
+    () => (endgameCandidateStations ?? []).map((s) => s.id),
+    [endgameCandidateStations],
   );
+
+  // Hide candidate stops from TransitRoute so they don't fight for z-index
+  const hiddenStopIds = useMemo(() => {
+    const hiderIds = candidateStations ? new Set(candidateStations) : new Set<string>();
+    if (endgameStationPicking && endgameCandidateStations) {
+      for (const s of endgameCandidateStations) {
+        hiderIds.add(s.id);
+      }
+    }
+    return hiderIds.size > 0 ? hiderIds : undefined;
+  }, [candidateStations, endgameStationPicking, endgameCandidateStations]);
 
   // Periodic tick forces the players memo to recompute staleness
   const [staleTick, setStaleTick] = useState(0);
@@ -97,12 +125,28 @@ export function GameMap({
 
   // Animate camera to hiding zone centroid once after election
   useEffect(() => {
-    if (!hiderStationId || !hidingZone || hasAnimatedToZone.current) return;
-    if (hidingZone.type !== 'Polygon' && hidingZone.type !== 'MultiPolygon') return;
+    if (!hiderStationId || !hiderHidingZone || hasAnimatedToZone.current) return;
+    if (hiderHidingZone.type !== 'Polygon' && hiderHidingZone.type !== 'MultiPolygon') return;
     hasAnimatedToZone.current = true;
-    const region = regionFromPolygon(hidingZone as unknown as GeoJSONPolygon | GeoJSONMultiPolygon);
+    const region = regionFromPolygon(
+      hiderHidingZone as unknown as GeoJSONPolygon | GeoJSONMultiPolygon,
+    );
     mapRef.current?.animateToRegion(region, 1000);
-  }, [hiderStationId, hidingZone]);
+  }, [hiderStationId, hiderHidingZone]);
+
+  // Animate camera to endgame hiding zone when endgame view activates
+  useEffect(() => {
+    if (!endgameView) {
+      hasAnimatedToEndgame.current = false;
+      return;
+    }
+    if (hasAnimatedToEndgame.current) return;
+    const hz = endgameView.hidingZone;
+    if (hz.type !== 'Polygon' && hz.type !== 'MultiPolygon') return;
+    hasAnimatedToEndgame.current = true;
+    const region = regionFromPolygon(hz as unknown as GeoJSONPolygon | GeoJSONMultiPolygon);
+    mapRef.current?.animateToRegion(region, 1000);
+  }, [endgameView]);
 
   const hiders = useMemo(
     () => (role === 'hider' ? (state as HiderGameState).hiders : []),
@@ -161,6 +205,11 @@ export function GameMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- staleTick forces periodic staleness recheck
   }, [state.seekers, state.self_player_id, hiders, selfLocation, staleTick]);
 
+  // Determine which overlays to show based on endgame state
+  const showEndgameOverlays = endgameView !== null;
+  const showEndgameCandidates =
+    endgameStationPicking && !showEndgameOverlays && endgameCandidateIds.length > 0;
+
   return (
     <MapView ref={mapRef} style={{ flex: 1 }} initialRegion={initialRegion} onPress={onMapPress}>
       <BoundaryOverlay boundary={gameInfo.boundary} />
@@ -180,7 +229,32 @@ export function GameMap({
           onStopPress={onCandidateStopPress}
         />
       )}
-      <HidingZoneOverlay hidingZone={hidingZone} proximityEntered={proximityTier === 'entered'} />
+      {/* Endgame candidate stations (seeker station picking) */}
+      {showEndgameCandidates && onEndgameCandidatePress && (
+        <CandidateStopOverlay
+          candidateStationIds={endgameCandidateIds}
+          stops={endgameCandidateStations ?? []}
+          highlightedStopId={endgameHighlightedStopId ?? null}
+          onStopPress={onEndgameCandidatePress}
+        />
+      )}
+      {/* Endgame station picking: show hiding zone preview for highlighted station */}
+      {showEndgameCandidates && <HidingZoneOverlay hidingZone={endgamePreviewZone} />}
+      {/* Endgame active: stroke-only hiding zone + safe zone + endgame exclusion */}
+      {showEndgameOverlays && (
+        <>
+          <HidingZoneOverlay hidingZone={endgameView.hidingZone} strokeOnly />
+          <SafeZoneOverlay safeZone={endgameView.safeZone} />
+          <ExclusionOverlay exclusion={endgameView.totalExclusion} />
+        </>
+      )}
+      {/* Normal hiding zone (hider or seeker not in endgame) */}
+      {!showEndgameOverlays && !showEndgameCandidates && (
+        <HidingZoneOverlay
+          hidingZone={hiderHidingZone}
+          proximityEntered={proximityTier === 'entered'}
+        />
+      )}
       {players.map(({ player, isSelf, isHider, isStale, index, stackCount }) => (
         <PlayerPin
           key={player.id}
@@ -192,8 +266,12 @@ export function GameMap({
           stackCount={stackCount}
         />
       ))}
+      {/* Long-game exclusion (invisible during endgame view — kept mounted to avoid Apple Maps ghost polygon) */}
       {role === 'seeker' && state.phase === 'seeking' && (
-        <ExclusionOverlay exclusion={(state as SeekerGameState).total_exclusion} />
+        <ExclusionOverlay
+          exclusion={(state as SeekerGameState).total_exclusion}
+          visible={!showEndgameOverlays}
+        />
       )}
       {role === 'seeker' && (
         <PreviewBoundaryOverlay

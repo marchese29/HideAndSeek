@@ -599,6 +599,7 @@ class SeekerQuestionHistoryEntry(BaseModel):
     asked_by: uuid.UUID = Field(description='Seeker who asked.')
     asked_at: datetime = Field(description='When the question was asked.')
     slot_index: int = Field(description='Inventory slot used.')
+    parameters: QuestionParamsResponse = Field(description='Type-specific question parameters.')
     answer: str | None = Field(
         default=None, description='yes/no/closer/farther or null if vetoed/abandoned.'
     )

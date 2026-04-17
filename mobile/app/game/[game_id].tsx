@@ -8,12 +8,15 @@ import { FreezeWarningBanner } from '@/components/FreezeWarningBanner';
 import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
 import { QuestionBanner } from '@/components/question-banner';
+import { QuestionCutoffModal } from '@/components/QuestionCutoffModal';
 import { UtilityBelt } from '@/components/utility-belt';
+import { useCandidateStations } from '@/hooks/useCandidateStations';
+import { useEndgameExclusions } from '@/hooks/useEndgameExclusions';
 import { useGameInfo } from '@/hooks/useGameInfo';
 import { useGameplayEvents } from '@/hooks/useGameplayEvents';
 import { useLocationTracking } from '@/hooks/useLocationTracking';
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { GamePlayer } from '@/types/gameplay';
+import type { GamePlayer, SeekerGameState } from '@/types/gameplay';
 
 export default function GameplayScreen() {
   const { game_id } = useLocalSearchParams<{ game_id: string }>();
@@ -57,11 +60,10 @@ export default function GameplayScreen() {
     }
   }, [stationElectionStatus, hiderStationId, gameInfo?.stops]);
 
-  // Highlighted candidate stop — bridges UtilityBelt and GameMap
+  // ── Hider candidate stop selection ────────────────────────────────────────
   const [highlightedStopId, setHighlightedStopId] = useState<string | null>(null);
 
   // Guard: marker onPress and MapView onPress both fire on the same tap on Apple Maps.
-  // The ref prevents the map press from immediately clearing what the marker press just set.
   const markerPressedRef = useRef(false);
 
   const handleHighlightStop = useCallback((stopId: string | null) => {
@@ -73,25 +75,92 @@ export default function GameplayScreen() {
     setHighlightedStopId(stopId);
   }, []);
 
+  // ── Endgame flow state ────────────────────────────────────────────────────
+  const [endgameStationPicking, setEndgameStationPicking] = useState(false);
+  const [endgameHighlightedStopId, setEndgameHighlightedStopId] = useState<string | null>(null);
+  const [cutoffModalVisible, setCutoffModalVisible] = useState(false);
+  const [pendingStationId, setPendingStationId] = useState<string | null>(null);
+  const [pendingAfterQuestion, setPendingAfterQuestion] = useState<number | null>(null);
+
+  const { stations: endgameCandidateStations } = useCandidateStations(endgameStationPicking);
+  useEndgameExclusions(pendingStationId, pendingAfterQuestion);
+
+  const handleEndgame = useCallback(() => {
+    setEndgameStationPicking(true);
+    setEndgameHighlightedStopId(null);
+  }, []);
+
+  const handleEndgameCandidatePress = useCallback((stopId: string) => {
+    markerPressedRef.current = true;
+    setEndgameHighlightedStopId(stopId);
+  }, []);
+
+  const handleEndgameStationSelect = useCallback(() => {
+    setCutoffModalVisible(true);
+  }, []);
+
+  const handleEndgameCancel = useCallback(() => {
+    setEndgameStationPicking(false);
+    setEndgameHighlightedStopId(null);
+  }, []);
+
+  const handleCutoffSelect = useCallback(
+    (afterQuestion: number) => {
+      setPendingStationId(endgameHighlightedStopId);
+      setPendingAfterQuestion(afterQuestion);
+      setEndgameStationPicking(false);
+      setEndgameHighlightedStopId(null);
+    },
+    [endgameHighlightedStopId],
+  );
+
   const handleMapPress = useCallback(() => {
     if (markerPressedRef.current) {
       markerPressedRef.current = false;
       return;
     }
+    // Clear hider candidate highlight
     setHighlightedStopId(null);
+    // Clear endgame candidate highlight (stay in picking mode)
+    setEndgameHighlightedStopId(null);
   }, []);
 
   // Clear candidate selection when phase transitions (e.g. hiding → seeking)
   const phase = state?.phase;
   useEffect(() => {
     setHighlightedStopId(null);
+    setEndgameStationPicking(false);
+    setEndgameHighlightedStopId(null);
   }, [phase]);
+
+  // Clear endgame picking state when endgame view activates (hook set the store)
+  const endgameView = useGameplayStore((s) => s.endgameView);
+  useEffect(() => {
+    if (endgameView) {
+      setEndgameStationPicking(false);
+      setEndgameHighlightedStopId(null);
+    }
+  }, [endgameView]);
+
+  // Clear endgame pending params when endgame view is cleared (Long Game pressed)
+  const prevEndgameView = useRef(endgameView);
+  useEffect(() => {
+    if (prevEndgameView.current && !endgameView) {
+      setPendingStationId(null);
+      setPendingAfterQuestion(null);
+    }
+    prevEndgameView.current = endgameView;
+  }, [endgameView]);
 
   // Suppress Android hardware back button
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => sub.remove();
   }, []);
+
+  // Seeker question history for cutoff modal
+  const seekerQuestionHistory =
+    status === 'connected' && role === 'seeker' ? (state as SeekerGameState).question_history : [];
 
   const ready = status === 'connected' && role && state && gameInfo;
 
@@ -110,6 +179,10 @@ export default function GameplayScreen() {
             highlightedStopId={highlightedStopId}
             onCandidateStopPress={handleCandidateStopPress}
             onMapPress={handleMapPress}
+            endgameStationPicking={endgameStationPicking}
+            endgameCandidateStations={endgameCandidateStations}
+            endgameHighlightedStopId={endgameHighlightedStopId}
+            onEndgameCandidatePress={handleEndgameCandidatePress}
           />
         )}
         {freezeDeparted && freezeDeparted.length > 0 ? (
@@ -134,9 +207,23 @@ export default function GameplayScreen() {
             gameId={game_id}
             highlightedStopId={highlightedStopId}
             onHighlightStop={handleHighlightStop}
+            endgameStationPicking={endgameStationPicking}
+            endgameHighlightedStopId={endgameHighlightedStopId}
+            endgameCandidateStations={endgameCandidateStations}
+            onEndgame={handleEndgame}
+            onEndgameStationSelect={handleEndgameStationSelect}
+            onEndgameCancel={handleEndgameCancel}
           />
         </View>
       )}
+
+      <QuestionCutoffModal
+        visible={cutoffModalVisible}
+        onClose={() => setCutoffModalVisible(false)}
+        onSelect={handleCutoffSelect}
+        questions={seekerQuestionHistory}
+        convention={gameInfo?.distance_convention ?? 'imperial'}
+      />
     </SafeAreaView>
   );
 }
