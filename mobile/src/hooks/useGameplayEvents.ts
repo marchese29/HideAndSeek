@@ -324,12 +324,13 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         seq.wrap((event) => {
           const data = parseData<GameDissolvedDelta>(event);
           if (data) {
-            Alert.alert('Game Over', 'The game has ended.');
-            useAppStore.getState().clearSession();
             closedRef.current = true;
             es.close();
             if (router.canDismiss()) router.dismissAll();
-            router.replace('/');
+            router.replace({
+              pathname: '/recap',
+              params: { reason: data.reason, role: role ?? 'hider' },
+            });
           }
         }),
       );
@@ -339,12 +340,13 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         seq.wrap((event) => {
           const data = parseData<GameEndedDelta>(event);
           if (data) {
-            Alert.alert('Game Over', 'The host has ended the game.');
-            useAppStore.getState().clearSession();
             closedRef.current = true;
             es.close();
             if (router.canDismiss()) router.dismissAll();
-            router.replace('/');
+            router.replace({
+              pathname: '/recap',
+              params: { reason: data.reason, role: role ?? 'hider' },
+            });
           }
         }),
       );

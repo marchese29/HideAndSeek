@@ -35,6 +35,10 @@ export default function RootLayout() {
           name="game/[game_id]"
           options={{ title: 'Game', headerShown: false, gestureEnabled: false }}
         />
+        <Stack.Screen
+          name="recap"
+          options={{ title: 'Game Over', headerBackVisible: false, gestureEnabled: false }}
+        />
       </Stack>
     </QueryClientProvider>
   );

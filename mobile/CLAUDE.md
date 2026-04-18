@@ -30,6 +30,7 @@ app/                           # expo-router file-based routes (stack navigator)
     [game_id].tsx              # Lobby screen
   game/
     [game_id].tsx              # Gameplay screen (full-screen, no header)
+  recap.tsx                    # Game Over recap screen — role-aware reason line + Home button
 src/
   api/
     schema.d.ts                # Auto-generated from OpenAPI — DO NOT EDIT
@@ -230,8 +231,8 @@ Both hooks:
 - **`question_vetoed`** / **`question_abandoned`**: Terminal — `clearActiveQuestion()` sets `active_question = null`.
 - **`player_left`**: Player removed — `removePlayer()` filters player from `hiders`/`seekers` arrays. If the removed `player_id` matches the current player (kicked by host), shows alert, clears session, and navigates home.
 - **`host_changed`**: Host transferred — `setHostPlayerId()` updates `host_player_id` on state.
-- **`game_dissolved`**: Game ended (last hider/seeker left) — shows alert, clears session, navigates home.
-- **`game_ended`**: Host ended the game for all players — shows alert ("The host has ended the game"), clears session, navigates home.
+- **`game_dissolved`**: Game ended (last hider/seeker left) — navigates to the recap screen with `reason` (`last_player` / `no_hiders_remaining` / `no_seekers_remaining`) and `role` as params. Session credentials are cleared when the user taps Home on the recap.
+- **`game_ended`**: Host ended the game or seekers found the hiders — navigates to the recap screen with `reason` (`host_ended` / `found`) and `role` as params. Session credentials are cleared when the user taps Home on the recap.
 - **`hiding_zone_expanded`**: Hider expanded the hiding zone — sets `hiding_zone_expanded = true` on state, invalidates `['hiding-zone']` TanStack Query cache (forces re-fetch of larger polygon), shows alert to seekers.
 - **`proximity_escalated`** / **`proximity_deescalated`**: Seeker distance ring changed — `updateProximityTier()` on state. Drives amber hiding zone color. Hider channel only.
 - **`found_claim`**: Seeker claimed found — `setFoundClaimPending(seekerPlayerId)` opens the `FoundClaimModal`. Hider channel only.
