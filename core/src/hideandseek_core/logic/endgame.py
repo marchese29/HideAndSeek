@@ -22,6 +22,8 @@ from hideandseek_models.game import Game, Player
 from hideandseek_models.transit import Stop
 from hideandseek_models.types import EndReason, GameStatus
 
+FOUND_CLAIM_TIMEOUT_SECONDS = 120
+
 
 def effective_hiding_zone_radius_m(game: Game) -> float:
     """Compute effective hiding zone radius in meters for a game.

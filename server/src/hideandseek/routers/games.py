@@ -78,7 +78,7 @@ from hideandseek_core.queries.games import (
 )
 from hideandseek_core.queries.location import create_location_update
 from hideandseek_core.queries.maps import get_map
-from hideandseek_core.queries.questions import get_active_question, get_inventory_slots
+from hideandseek_core.queries.questions import get_inventory_slots
 from hideandseek_core.queries.stops import get_stops_near_point, validate_stop_playable
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import (
@@ -89,8 +89,6 @@ from hideandseek_models.types import (
     PushEventType,
     StationElectionStatus,
 )
-from hideandseek_worker.celery_app import app as celery_app
-from hideandseek_worker.tasks.game_timers import transition_hiding_to_seeking
 from hideandseek_worker.tasks.push import send_push
 
 router = APIRouter(prefix='/games', tags=['games'], dependencies=[Depends(session_dependency)])
@@ -282,9 +280,6 @@ def remove_player(
 
     if result.game_dissolved:
         if was_active:
-            # Revoke pending timers — game is over
-            if not celery_app.conf.task_always_eager:
-                celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
             emit_gameplay(
                 GameDissolvedEvent(
                     game_id=game.id,
@@ -328,14 +323,6 @@ def start_game(
 
     game = update_game_status(game, GameStatus.hiding)
 
-    # Schedule hiding→seeking transition
-    hiding_minutes = game.hiding_time_min
-    transition_hiding_to_seeking.apply_async(  # type: ignore[attr-defined]
-        args=[str(game.id)],
-        countdown=hiding_minutes * 60,
-        task_id=f'hiding_timer:{game.id}',
-    )
-
     emit(GameStartedEvent(game=game))
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
@@ -360,12 +347,6 @@ def end_game(
             status_code=409,
             detail=f'Cannot end game in {game.status} state.',
         )
-
-    if not celery_app.conf.task_always_eager:
-        celery_app.control.revoke(f'hiding_timer:{game.id}', terminate=False)
-        active_question = get_active_question(game)
-        if active_question:
-            celery_app.control.revoke(f'answer_deadline:{active_question.id}', terminate=False)
 
     game.end_reason = EndReason.host_ended
     update_game_status(game, GameStatus.finished)

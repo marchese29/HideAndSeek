@@ -17,6 +17,10 @@
 !worker/pyproject.toml
 !worker/src/
 
+# Reconciler package
+!reconciler/pyproject.toml
+!reconciler/src/
+
 # Server package
 !server/pyproject.toml
 !server/src/

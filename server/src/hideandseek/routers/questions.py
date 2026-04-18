@@ -68,22 +68,11 @@ from hideandseek_models.types import (
     QuestionStatus,
     QuestionType,
 )
-from hideandseek_worker.celery_app import app as celery_app
-from hideandseek_worker.tasks.game_timers import auto_answer_question
 from hideandseek_worker.tasks.push import send_push
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['questions'], dependencies=[Depends(session_dependency)]
 )
-
-
-def _schedule_auto_answer(game: Game, question_id: uuid.UUID) -> None:
-    delay_minutes = game.base_question_delay_min
-    auto_answer_question.apply_async(  # type: ignore[attr-defined]
-        args=[str(question_id)],
-        countdown=delay_minutes * 60,
-        task_id=f'answer_deadline:{question_id}',
-    )
 
 
 def _validate_can_ask(game: Game) -> None:
@@ -121,7 +110,6 @@ def ask_radar_question(
 
     slot = validate_slot_request(body.slot_index, body.custom_distance, game, QuestionType.radar)
     question = ask_radar(game, player, seeker_location, slot, body.custom_distance)
-    _schedule_auto_answer(game, question.id)
 
     rp = question.radar_params
     assert rp is not None
@@ -195,8 +183,6 @@ def ask_matching_question(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    _schedule_auto_answer(game, question.id)
-
     fp = question.feature_params
     assert fp is not None
     send_push.delay(  # type: ignore[attr-defined]
@@ -236,8 +222,6 @@ def ask_measuring_question(
         question = ask_measuring(game, player, seeker_location, slot)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-
-    _schedule_auto_answer(game, question.id)
 
     fp = question.feature_params
     assert fp is not None
@@ -279,8 +263,6 @@ def ask_tentacles_question(
         question = ask_tentacles(game, player, seeker_location, slot)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-
-    _schedule_auto_answer(game, question.id)
 
     tp = question.tentacle_params
     assert tp is not None
@@ -398,8 +380,6 @@ def lock_in_question(
 
     lock_in_thermometer(question, seeker_end)
 
-    _schedule_auto_answer(game, question.id)
-
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.question_answerable,
@@ -426,10 +406,6 @@ def answer_question(
 ) -> None:
     """Hider answers a question — snapshot location, compute answer and exclusion."""
     question, hider_location = validate_answer_request(question_id, game, player)
-
-    # Revoke the auto-answer deadline
-    if not celery_app.conf.task_always_eager:
-        celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
 
     # Set hider location, compute answer + exclusion, persist
     question.hider_location = hider_location
@@ -488,10 +464,6 @@ def veto_question(
         schedule_veto(question)
         return
 
-    # Immediate veto — revoke auto-answer and mark vetoed now
-    if not celery_app.conf.task_always_eager:
-        celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
-
     veto_immediate(question)
 
     send_push.delay(  # type: ignore[attr-defined]
@@ -520,10 +492,6 @@ def abandon_question_endpoint(
 ) -> None:
     """Seeker abandons a question — no answer, no exclusion zone."""
     question = validate_abandon_request(question_id, game, player)
-
-    # Revoke auto-answer timer if one exists (answerable questions have one)
-    if question.status == QuestionStatus.answerable and not celery_app.conf.task_always_eager:
-        celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
 
     abandon_question(question)
 
@@ -563,16 +531,7 @@ def randomize_question_endpoint(
     if not eligible:
         raise HTTPException(status_code=409, detail='No eligible replacement slots available.')
 
-    # Revoke auto-answer timer on the original question
-    if not celery_app.conf.task_always_eager:
-        celery_app.control.revoke(f'answer_deadline:{question.id}', terminate=False)
-
     replacement = randomize_question(question, game)
-
-    # Schedule auto-answer timer for non-thermometer replacements
-    # (thermometer waits for lock-in before scheduling)
-    if replacement.question_type != QuestionType.thermometer:
-        _schedule_auto_answer(game, replacement.id)
 
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),

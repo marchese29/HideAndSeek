@@ -32,7 +32,7 @@ Two modes — both serve on `localhost:8000`, both use PostgreSQL:
 | Start | `docker compose up --build` | `docker compose up -d postgres redis` then `scripts/dev.sh` |
 | Database | PostGIS (PostgreSQL 16) | PostGIS via docker-compose |
 | Celery | Redis + worker container | Redis via docker-compose + worker process |
-| Timers | Real (countdown delays) | Real (countdown delays) |
+| Timers | Real (reconciler polls every 1s) | Real (reconciler polls every 1s) |
 | Reset DB | `docker compose down -v` | `docker compose down -v` |
 | `ENV` | `development` | `local` (default) |
 
@@ -154,10 +154,11 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/radar \
 curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
   -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
 # → answer: "yes" (hider inside radius) or "no" (outside)
-# → auto-answer timer is revoked (check: docker logs hideandseek-worker-1 | grep revoke)
+# → question.status flips to "answered"; the reconciler's overdue query filters it out (no revoke needed)
 
-# If hider doesn't answer, auto-answer fires after the timer expires
-# (check: docker logs hideandseek-worker-1 | grep auto_answer)
+# If hider doesn't answer, the reconciler enqueues auto_answer_question once the deadline passes
+# (check: docker logs hideandseek-reconciler-1 | grep reconcile_enqueue_auto_answer
+#         docker logs hideandseek-worker-1 | grep auto_answer)
 
 # Veto (hider) — refuse to answer, no exclusion zone generated
 curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/veto \
@@ -309,8 +310,11 @@ docker exec hideandseek-postgres-1 psql -U hideandseek -c \
    FROM location_update lu JOIN player p ON p.id = lu.player_id
    WHERE p.game_id = '<game_id>' ORDER BY lu.id;"
 
-# Worker logs (timers, auto-answer, push)
-docker logs hideandseek-worker-1 2>&1 | grep -iE 'transition|auto_answer|revoke|push'
+# Worker logs (executed tasks — transitions, auto-answer, push)
+docker logs hideandseek-worker-1 2>&1 | grep -iE 'transition|auto_answer|found_claim|push'
+
+# Reconciler logs (overdue enqueue decisions)
+docker logs hideandseek-reconciler-1 2>&1 | grep -iE 'reconcile_enqueue|reconciler_tick'
 ```
 
 ## Project Structure
@@ -351,10 +355,11 @@ Business logic, queries, DB infra, geo math, push, and redis live in the `hidean
 - **Transactional boundaries**: `session_dependency()` is an async generator that commits once after the handler succeeds and sets a `ContextVar` so `db.get_session()` works everywhere. Must be async so the ContextVar is set in the event-loop context (sync handler threads copy that context). If the handler raises, commit is never called and `Session.__exit__` rolls back. All writes in a request succeed or fail together.
 - **ContextVar session access**: A `ContextVar[Session]` (`_session_var`) is set by `session_dependency()` (for requests) or `session_scope()` (for background tasks). All query and logic functions call `db.get_session()` as their first line to get the active session. No decorators, no session parameters — functions just call `session = get_session()`.
 - **Router-level session dependency**: Each router uses `dependencies=[Depends(session_dependency)]` to ensure the ContextVar is always set for every route. Handlers never declare `session` in their signatures.
-- **Four-package architecture**: `hideandseek-models` (ORM) ← `hideandseek-core` (business logic, queries, DB, geo, push, redis, gameplay broadcast) ← `hideandseek-worker` (Celery tasks: game timers, push delivery) ← `hideandseek` (server: routers, schemas, lobby broadcast). Core owns gameplay event production and Redis publishing. Worker owns background task execution. Server owns lobby events (Pydantic serialization), SSE subscriptions, and HTTP routing. Server imports worker tasks for `.delay()` / `.apply_async()` calls.
+- **Five-package architecture**: `hideandseek-models` (ORM) ← `hideandseek-core` (business logic, queries, DB, geo, push, redis, gameplay broadcast, overdue-timer queries) ← `hideandseek-worker` (Celery task bodies: game timers, push delivery) ← `hideandseek-reconciler` (polls Postgres, enqueues Celery tasks) / `hideandseek` (server: routers, schemas, lobby broadcast). Core owns gameplay event production and Redis publishing. Worker owns background task execution. Reconciler owns timer scheduling. Server owns lobby events (Pydantic serialization), SSE subscriptions, and HTTP routing. Server imports worker tasks for `.delay()` calls (push only — it no longer schedules game timers).
 - **Query layer**: `hideandseek_core.queries` package (one module per domain) handles all DB reads and writes. Exception: `hideandseek.queries.game_state` stays in server (builds Pydantic response objects). Routers never call `session.add/commit/refresh` directly. Query functions return SQLAlchemy model objects; routers transform them via `from_model()`. Import directly from submodules (e.g., `from hideandseek_core.queries.games import create_game`), not from the package root. Query functions accept ORM objects (not raw UUIDs) — e.g., `create_game(game_map=game_map, ...)`, `get_latest_location_for_player(player, game)`. Raw IDs are only used at system boundaries (dependency injection from URL params, Celery task signatures, logging/push serialization). Write functions call `session.flush()` after mutations to make changes visible to subsequent queries in the same request.
-- **Background jobs (Celery + Redis)**: All push delivery and game timers go through Celery tasks in the `hideandseek-worker` package. Broker resolution: (1) `CELERY_BROKER_URL` env var if set, (2) auto-detect Redis on `localhost:6379`, (3) eager mode (tasks run synchronously in-process). Set `CELERY_BROKER_URL=''` to force eager mode when Redis is running. Routers call `.delay()` or `.apply_async()` on worker tasks instead of `BackgroundTasks`. Worker tasks use `session_scope()` to get a DB session with ContextVar — all query functions using `db.get_session()` work naturally inside the `with session_scope():` block. Import tasks from worker: `from hideandseek_worker.tasks.push import send_push`, `from hideandseek_worker.tasks.game_timers import auto_answer_question`. Celery app: `from hideandseek_worker.celery_app import app`.
-- **Task ID convention**: Deterministic IDs (`hiding_timer:{game_id}`, `answer_deadline:{question_id}`) so the API can revoke tasks without storing IDs in the DB.
+- **Background jobs (Celery + Redis)**: Push delivery goes through the `send_push` Celery task in the `hideandseek-worker` package. Game timer task bodies also live in worker but are **not scheduled by the API** — they are enqueued by the reconciler (see below). Broker resolution: (1) `CELERY_BROKER_URL` env var if set, (2) auto-detect Redis on `localhost:6379`, (3) eager mode (tasks run synchronously in-process). Set `CELERY_BROKER_URL=''` to force eager mode when Redis is running. Routers call `.delay()` on `send_push` only — they do **not** call `.apply_async(countdown=...)` or `.revoke()` anywhere. Worker tasks use `session_scope()` to get a DB session with ContextVar — all query functions using `db.get_session()` work naturally inside the `with session_scope():` block.
+- **Game timers — reconciler-driven**: The `hideandseek-reconciler` process polls Postgres every second for overdue fire-times and enqueues the corresponding worker tasks for immediate execution. Authoritative fire-times live in DB columns (`Game.hiding_started_at + hiding_time_min`, `Question.answerable_at + base_question_delay_min`, `Game.found_claim_at + 120s`). Overdue queries in `hideandseek_core.logic.timers`. Router cancellation happens implicitly: when state advances (game ends, question answered, found-claim resolved), the reconciler's query filters on `Game.status` / `Question.status` / `found_claim_at IS NOT NULL` skip those rows — no explicit `revoke()` needed. Task bodies retain their own status guards as a safety net for enqueue-during-execution races.
+- **Task ID convention**: Deterministic IDs (`hiding_timer:{game_id}`, `answer_deadline:{question_id}`, `found_claim:{game_id}`) set by the reconciler on `apply_async(task_id=...)`. Purpose is log-grep observability, not revocation.
 - **Push notifications**: `PushService` orchestrates delivery across APNs (`ApnsProvider` wrapping `aioapns`) and FCM (`FcmProvider` wrapping `firebase-admin`). Each provider constructs its own wire format from a shared data dict. No-ops silently when env vars are missing (dev/test). All push delivery goes through the `send_push` Celery task (with retry). The task extracts `(token, provider)` pairs from `DeviceToken` and dispatches by provider. Event types are defined by `PushEventType` enum. `TokenProvider` enum (`apns`/`fcm`) on `DeviceToken` determines routing. See `design/push-notifications.md` for payload specs.
 - **Broadcast — two layers**: Event broadcast is split between core (domain) and server (presentation):
   - **Core** (`hideandseek_core.broadcast`): Gameplay event Pydantic models (`events.py`) + `emit_gameplay()` (`emit.py`). Events auto-register via `GameplayEventSchema` base class for OpenAPI injection. Also provides `publish_sse()` (low-level Redis publish) and channel name helpers (`lobby_channel`, `hider_channel`, `seeker_channel`). Both routers and tasks import `emit_gameplay` from here.

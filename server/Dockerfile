@@ -7,21 +7,25 @@ COPY pyproject.toml uv.lock ./
 COPY models/pyproject.toml models/pyproject.toml
 COPY core/pyproject.toml core/pyproject.toml
 COPY worker/pyproject.toml worker/pyproject.toml
+COPY reconciler/pyproject.toml reconciler/pyproject.toml
 COPY server/pyproject.toml server/pyproject.toml
 
 # Install third-party deps (cached layer — only changes when pyproject.toml or lockfile change)
-WORKDIR /app/server
+WORKDIR /app
 RUN uv sync --frozen --no-dev --no-install-project --no-install-workspace
 
 # Copy source for all packages
 COPY models/src/ /app/models/src/
 COPY core/src/ /app/core/src/
 COPY worker/src/ /app/worker/src/
-COPY server/src/ src/
-COPY server/scripts/ scripts/
+COPY reconciler/src/ /app/reconciler/src/
+COPY server/src/ /app/server/src/
+COPY server/scripts/ /app/server/scripts/
 
-# Install workspace packages
-RUN uv sync --frozen --no-dev
+# Install all workspace packages (server, worker, reconciler, core, models)
+RUN uv sync --frozen --no-dev --all-packages
+
+WORKDIR /app/server
 
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "hideandseek.main:app", "--host", "0.0.0.0"]

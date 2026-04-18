@@ -12,6 +12,7 @@ members = [
     "hideandseek",
     "hideandseek-core",
     "hideandseek-models",
+    "hideandseek-reconciler",
     "hideandseek-worker",
     "hideandseek-workspace",
 ]
@@ -837,6 +838,35 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0" },
     { name = "shapely", specifier = ">=2.1.2" },
     { name = "sqlalchemy", specifier = ">=2.0.46" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pyright", specifier = ">=1.1.0" },
+    { name = "ruff", specifier = ">=0.11.0" },
+]
+
+[[package]]
+name = "hideandseek-reconciler"
+version = "0.1.0"
+source = { editable = "reconciler" }
+dependencies = [
+    { name = "hideandseek-core" },
+    { name = "hideandseek-worker" },
+    { name = "structlog" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pyright" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "hideandseek-core", editable = "core" },
+    { name = "hideandseek-worker", editable = "worker" },
+    { name = "structlog", specifier = ">=25.5.0" },
 ]
 
 [package.metadata.requires-dev]

@@ -41,6 +41,7 @@ services:
     volumes:
       - ./server/src:/app/server/src
       - ./worker/src:/app/worker/src
+      - ./reconciler/src:/app/reconciler/src
       - ./models/src:/app/models/src
       - ./core/src:/app/core/src
     depends_on:
@@ -59,7 +60,7 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
-    command: uv run celery -A hideandseek_worker.celery_app worker --loglevel=info --beat
+    command: uv run celery -A hideandseek_worker.celery_app worker --loglevel=info
     environment:
       DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -67,6 +68,28 @@ services:
     volumes:
       - ./server/src:/app/server/src
       - ./worker/src:/app/worker/src
+      - ./reconciler/src:/app/reconciler/src
+      - ./models/src:/app/models/src
+      - ./core/src:/app/core/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  reconciler:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    command: uv run python -m hideandseek_reconciler
+    environment:
+      DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
+      CELERY_BROKER_URL: redis://redis:6379/0
+      ENV: development
+    volumes:
+      - ./server/src:/app/server/src
+      - ./worker/src:/app/worker/src
+      - ./reconciler/src:/app/reconciler/src
       - ./models/src:/app/models/src
       - ./core/src:/app/core/src
     depends_on:

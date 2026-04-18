@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-commit hook: models → core → server → openapi → api-types → mobile
+# Pre-commit hook: models → core → worker → reconciler → server → openapi → api-types → mobile
 #
 # Uses cached hashes of staged content so steps are skipped when
 # nothing has changed since the last successful run.
@@ -75,6 +75,13 @@ run_if_changed "worker-checks" \
     "Worker code changed — running checks..." \
     hooks/worker-checks.sh \
     "worker/" "core/" "models/" || exit 1
+
+# --- Reconciler checks (also triggered by models/core/worker changes — reconciler depends on all three) ---
+run_if_changed "reconciler-checks" \
+    "Reconciler checks passed on this content — skipping." \
+    "Reconciler code changed — running checks..." \
+    hooks/reconciler-checks.sh \
+    "reconciler/" "worker/" "core/" "models/" || exit 1
 
 # --- Server checks (also triggered by models/core/worker changes — server depends on all three) ---
 run_if_changed "server-checks" \
