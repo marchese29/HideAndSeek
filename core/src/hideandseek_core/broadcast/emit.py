@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
+from typing import NamedTuple
 
 import structlog
 
@@ -35,27 +37,70 @@ from hideandseek_models.types import GameplayEventType, PlayerRole
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
-def lobby_channel(game_id: uuid.UUID) -> str:
-    """Redis channel name for lobby events."""
-    return f'game:{game_id}:lobby:events'
+class SseChannel(NamedTuple):
+    """Pair of Redis keys for one SSE channel: pub/sub channel name + monotonic seq counter."""
+
+    pubsub: str
+    seq: str
 
 
-def hider_channel(game_id: uuid.UUID) -> str:
-    """Redis channel name for hider gameplay events."""
-    return f'game:{game_id}:hider-events'
+def lobby_channel(game_id: uuid.UUID) -> SseChannel:
+    """Redis keys for lobby events (pub/sub channel + sequence counter)."""
+    return SseChannel(
+        pubsub=f'game:{game_id}:lobby:events',
+        seq=f'game:{game_id}:lobby:seq',
+    )
 
 
-def seeker_channel(game_id: uuid.UUID) -> str:
-    """Redis channel name for seeker gameplay events."""
-    return f'game:{game_id}:seeker-events'
+def hider_channel(game_id: uuid.UUID) -> SseChannel:
+    """Redis keys for hider gameplay events."""
+    return SseChannel(
+        pubsub=f'game:{game_id}:hider-events',
+        seq=f'game:{game_id}:hider:seq',
+    )
 
 
-def publish_sse(channel: str, event_type: str, data: dict, *, required: bool) -> None:
-    """Publish a serialized event to a Redis SSE channel.
+def seeker_channel(game_id: uuid.UUID) -> SseChannel:
+    """Redis keys for seeker gameplay events."""
+    return SseChannel(
+        pubsub=f'game:{game_id}:seeker-events',
+        seq=f'game:{game_id}:seeker:seq',
+    )
+
+
+# Lua: atomically increment the per-channel sequence and publish an envelope
+# that carries the sequence alongside event type + pre-serialized data JSON.
+# Keeping INCR + PUBLISH in one round-trip guarantees the sequence embedded in
+# the message matches its pub/sub delivery order even when multiple publishers
+# contend on the same channel.
+_INCR_AND_PUBLISH_LUA = """
+local seq = redis.call('INCR', KEYS[1])
+local msg = '{"sequence":' .. seq .. ',"event":"' .. ARGV[1] .. '","data":' .. ARGV[2] .. '}'
+redis.call('PUBLISH', KEYS[2], msg)
+return seq
+"""
+
+# event_type values come from our own enums (GameplayEventType, LobbyEventType).
+# Validate here as defense in depth since the Lua script splices them as-is.
+_EVENT_TYPE_RE = re.compile(r'^[a-z][a-z0-9_]*$')
+
+
+def publish_sse(
+    channel: SseChannel,
+    event_type: str,
+    data: dict,
+    *,
+    required: bool,
+) -> None:
+    """Atomically increment the channel's sequence counter and publish an event.
 
     required=True: exception propagates (no fallback).
     required=False: log and swallow (dual-channel events — push still delivers).
     """
+    if not _EVENT_TYPE_RE.match(event_type):
+        msg = f'invalid SSE event_type: {event_type!r}'
+        raise ValueError(msg)
+
     client = get_sync_redis()
     if client is None:
         if required:
@@ -64,13 +109,13 @@ def publish_sse(channel: str, event_type: str, data: dict, *, required: bool) ->
         logger.warning('sse_publish_skipped', event_type=event_type, reason='redis_unavailable')
         return
 
-    message = json.dumps({'event': event_type, 'data': data})
+    data_json = json.dumps(data)
     try:
-        client.publish(channel, message)
+        client.eval(_INCR_AND_PUBLISH_LUA, 2, channel.seq, channel.pubsub, event_type, data_json)
     except Exception:
         if required:
             raise
-        logger.exception('sse_publish_failed', event_type=event_type, channel=channel)
+        logger.exception('sse_publish_failed', event_type=event_type, channel=channel.pubsub)
 
 
 def _both_channels(game_id: uuid.UUID, event_type: str, data: dict) -> None:

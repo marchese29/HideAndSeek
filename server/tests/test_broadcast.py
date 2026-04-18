@@ -22,7 +22,13 @@ from hideandseek.broadcast.events import (
     PlayerLeftEvent,
     PlayerUpdatedEvent,
 )
-from hideandseek_core.broadcast.emit import emit_gameplay, lobby_channel
+from hideandseek_core.broadcast.emit import (
+    emit_gameplay,
+    hider_channel,
+    lobby_channel,
+    publish_sse,
+    seeker_channel,
+)
 from hideandseek_core.broadcast.events import PlayerLocationEvent
 from hideandseek_models.types import GameplayEventType, LobbyEventType, PlayerColor, PlayerRole
 from tests.conftest import create_game, create_player
@@ -56,7 +62,7 @@ class TestEmitPlayerJoined:
 
         # Subscribe before emit
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
 
         emit(PlayerJoinedEvent(game=game, player=player))
 
@@ -92,7 +98,7 @@ class TestEmitPlayerUpdated:
         player = create_player(session, game.id, name='Bob')
 
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
 
         emit(PlayerUpdatedEvent(game=game, player=player))
 
@@ -119,7 +125,7 @@ class TestEmitPlayerLeft:
         player_id = uuid.uuid4()
 
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
 
         emit(PlayerLeftEvent(game=game, player_id=player_id))
 
@@ -146,7 +152,7 @@ class TestEmitHostChanged:
         new_host_id = uuid.uuid4()
 
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
 
         emit(HostChangedEvent(game=game, new_host_player_id=new_host_id))
 
@@ -172,7 +178,7 @@ class TestEmitGameStarted:
         game = create_game(session)
 
         pubsub = fake_sync_redis.pubsub()
-        pubsub.subscribe(lobby_channel(game.id))
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
 
         emit(GameStartedEvent(game=game))
 
@@ -324,3 +330,138 @@ class TestEmitGameplayLocationRedisUnavailable:
         game = create_game(session)
         with pytest.raises(RuntimeError, match='Redis unavailable'):
             emit_gameplay(_location_event(game.id))
+
+
+# ── Per-channel sequence numbering ──────────────────────────────────────────
+
+
+def _seq_counter(redis: fakeredis.FakeRedis, key: str) -> int:
+    """Read a sync fakeredis counter, normalizing bytes/None/int responses."""
+    value: Any = redis.get(key)
+    if value is None:
+        return 0
+    if isinstance(value, bytes):
+        return int(value.decode())
+    return int(value)
+
+
+class TestSequenceNumbering:
+    """Every publish attaches a monotonic per-channel sequence number."""
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_lobby_sequence_increments_per_emit(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        game = create_game(session)
+        player = create_player(session, game.id, name='Alice')
+
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
+
+        emit(PlayerJoinedEvent(game=game, player=player))
+        emit(PlayerUpdatedEvent(game=game, player=player))
+        emit(PlayerLeftEvent(game=game, player_id=player.id))
+
+        messages = []
+        for _ in range(20):
+            msg = pubsub.get_message()
+            if msg is None:
+                break
+            if msg['type'] == 'message':
+                messages.append(json.loads(msg['data']))
+
+        assert [m['sequence'] for m in messages] == [1, 2, 3]
+        # Counter is also readable directly
+        assert _seq_counter(fake_sync_redis, lobby_channel(game.id).seq) == 3
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_hider_and_seeker_channels_have_independent_sequences(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        game = create_game(session)
+        hider_ch = hider_channel(game.id)
+        seeker_ch = seeker_channel(game.id)
+
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(hider_ch.pubsub, seeker_ch.pubsub)
+
+        # Hider-only event (goes only to hider channel)
+        emit_gameplay(_location_event(game.id, role=PlayerRole.hider))
+        # Seeker event (goes to both channels)
+        emit_gameplay(_location_event(game.id, role=PlayerRole.seeker))
+
+        msgs = _drain_channel_messages(pubsub, [hider_ch.pubsub, seeker_ch.pubsub])
+        # Hider got two events (its own + the seeker-broadcast one)
+        assert [m['sequence'] for m in msgs[hider_ch.pubsub]] == [1, 2]
+        # Seeker got only the seeker event — its own sequence starts at 1
+        assert [m['sequence'] for m in msgs[seeker_ch.pubsub]] == [1]
+        assert _seq_counter(fake_sync_redis, hider_ch.seq) == 2
+        assert _seq_counter(fake_sync_redis, seeker_ch.seq) == 1
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_envelope_carries_sequence_event_and_data(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        game = create_game(session)
+        player = create_player(session, game.id, name='Alice')
+
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
+
+        emit(PlayerJoinedEvent(game=game, player=player))
+
+        envelope: dict | None = None
+        for _ in range(10):
+            msg = pubsub.get_message()
+            if msg and msg['type'] == 'message':
+                envelope = json.loads(msg['data'])
+                break
+        assert envelope is not None
+        assert envelope.keys() == {'sequence', 'event', 'data'}
+        assert envelope['sequence'] == 1
+        assert envelope['event'] == LobbyEventType.player_joined
+        assert envelope['data']['name'] == 'Alice'
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_invalid_event_type_rejected(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        """publish_sse validates event_type against a strict allowlist."""
+        game = create_game(session)
+        channel = lobby_channel(game.id)
+        with pytest.raises(ValueError, match='invalid SSE event_type'):
+            publish_sse(channel, 'bad event"; DROP TABLE', {}, required=True)
+
+
+# ── Forwarding filter ───────────────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_forward_messages_filters_pre_snapshot_and_sets_id() -> None:
+    """_forward_messages drops events with seq <= snap_seq and yields id: seq frames."""
+    from hideandseek.broadcast.subscribe import _forward_messages  # noqa: PLC0415
+
+    redis = fakeredis.FakeAsyncRedis()
+    pubsub = redis.pubsub()
+    channel = 'test-channel'
+    await pubsub.subscribe(channel)
+
+    # Three events, like those the Lua script would publish.
+    for i in (1, 2, 3):
+        envelope = {'sequence': i, 'event': 'test_event', 'data': {'n': i}}
+        await redis.publish(channel, json.dumps(envelope))
+
+    frames: list[dict] = []
+    # snap_seq=2 — client already reflects events 1 and 2 in its snapshot.
+    async for frame in _forward_messages(pubsub, snap_seq=2):
+        frames.append(frame)
+        if len(frames) >= 1:
+            break
+
+    assert len(frames) == 1
+    assert frames[0]['event'] == 'test_event'
+    assert frames[0]['id'] == '3'
+    assert json.loads(frames[0]['data']) == {'n': 3}
+
+    await pubsub.aclose()
+    await redis.aclose()

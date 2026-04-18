@@ -28,6 +28,7 @@ import type {
   SeekerQuestionAnsweredDelta,
   StationElectionDelta,
 } from '@/types/gameplay';
+import { createSequenceTracker } from '@/utils/sseSequencing';
 
 type GameplayEventType =
   | 'game_state'
@@ -121,198 +122,273 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
       });
       esRef.current = es;
 
+      const seq = createSequenceTracker({
+        onGap: ({ expected, got }) => {
+          console.warn('[gameplay SSE] gap detected', { expected, got });
+          useGameplayStore.getState().reset();
+          scheduleReconnect();
+        },
+        onInvalid: ({ lastEventId }) => {
+          console.warn('[gameplay SSE] missing/invalid lastEventId', { lastEventId });
+          useGameplayStore.getState().reset();
+          scheduleReconnect();
+        },
+        onStale: ({ last, got }) => {
+          console.warn('[gameplay SSE] stale event dropped', { last, got });
+        },
+      });
+
       es.addEventListener('open', () => {
         setConnected(true);
+        seq.reset();
         retriesRef.current = 0;
       });
 
       es.addEventListener('error', () => {
         setConnected(false);
+        seq.reset();
         useGameplayStore.getState().reset();
         if (closedRef.current) return;
         scheduleReconnect();
       });
 
-      es.addEventListener('game_state', (event) => {
-        const data = parseData<HiderGameState | SeekerGameState>(event);
-        if (data) {
-          useGameplayStore.getState().hydrate(role!, data);
-        }
-      });
-
-      es.addEventListener('phase_changed', (event) => {
-        const data = parseData<PhaseChangedDelta>(event);
-        if (data) {
-          useGameplayStore.getState().applyPhaseChanged(data);
-        }
-      });
-
-      es.addEventListener('player_location', (event) => {
-        const data = parseData<PlayerLocationDelta>(event);
-        if (data) {
-          const store = useGameplayStore.getState();
-          store.updatePlayerLocation(data.player_id, data.coordinates, data.timestamp);
-          if (data.candidate_stations !== undefined) {
-            store.updateCandidateStations(data.candidate_stations);
-          }
-          if (data.not_in_zone !== undefined) {
-            store.updateNotInZone(data.not_in_zone);
-          }
-          if (data.computed_answer !== undefined) {
-            store.updateComputedAnswer(data.computed_answer);
-          }
-          if (data.freeze_departed !== undefined) {
-            store.updateFreezeDeparted(data.freeze_departed);
-          }
-        }
-      });
-
-      es.addEventListener('proximity_escalated', (event) => {
-        const data = parseData<ProximityEscalatedDelta>(event);
-        if (data) {
-          useGameplayStore.getState().updateProximityTier(data.proximity_tier);
-          const message = proximityEscalationMessage(data.proximity_tier);
-          if (message) Alert.alert('Seekers Approaching', message);
-        }
-      });
-
-      es.addEventListener('proximity_deescalated', (event) => {
-        const data = parseData<ProximityDeescalatedDelta>(event);
-        if (data) {
-          useGameplayStore.getState().updateProximityTier(data.proximity_tier);
-          const message = proximityDeescalationMessage(data.proximity_tier);
-          if (message) Alert.alert('Seekers Pulling Back', message);
-        }
-      });
-
-      es.addEventListener('station_election', (event) => {
-        const data = parseData<StationElectionDelta>(event);
-        if (data) {
-          useGameplayStore.getState().applyStationElection(data);
-        }
-      });
-
-      es.addEventListener('question_asked', (event) => {
-        const data = parseData<QuestionAskedDelta>(event);
-        if (data) {
-          useGameplayStore.getState().setActiveQuestion(data);
-        }
-      });
-
-      es.addEventListener('question_answerable', (event) => {
-        const data = parseData<QuestionAnswerableDelta>(event);
-        if (data) {
-          useGameplayStore.getState().updateQuestionAnswerable(data);
-        }
-      });
-
-      es.addEventListener('question_answered', (event) => {
-        if (role === 'hider') {
-          const data = parseData<HiderQuestionAnsweredDelta>(event);
+      es.addEventListener(
+        'game_state',
+        seq.wrap((event) => {
+          const data = parseData<HiderGameState | SeekerGameState>(event);
           if (data) {
-            useGameplayStore.getState().applyQuestionAnswered(data);
+            useGameplayStore.getState().hydrate(role!, data);
           }
-        } else {
-          const data = parseData<SeekerQuestionAnsweredDelta>(event);
+        }),
+      );
+
+      es.addEventListener(
+        'phase_changed',
+        seq.wrap((event) => {
+          const data = parseData<PhaseChangedDelta>(event);
           if (data) {
-            useGameplayStore.getState().applyQuestionAnswered(data);
-            // Re-fetch endgame exclusions if endgame view is active
-            if (useGameplayStore.getState().endgameView) {
-              void queryClient.invalidateQueries({ queryKey: ['endgame-exclusions'] });
+            useGameplayStore.getState().applyPhaseChanged(data);
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'player_location',
+        seq.wrap((event) => {
+          const data = parseData<PlayerLocationDelta>(event);
+          if (data) {
+            const store = useGameplayStore.getState();
+            store.updatePlayerLocation(data.player_id, data.coordinates, data.timestamp);
+            if (data.candidate_stations !== undefined) {
+              store.updateCandidateStations(data.candidate_stations);
+            }
+            if (data.not_in_zone !== undefined) {
+              store.updateNotInZone(data.not_in_zone);
+            }
+            if (data.computed_answer !== undefined) {
+              store.updateComputedAnswer(data.computed_answer);
+            }
+            if (data.freeze_departed !== undefined) {
+              store.updateFreezeDeparted(data.freeze_departed);
             }
           }
-        }
-      });
+        }),
+      );
 
-      es.addEventListener('question_vetoed', (event) => {
-        const data = parseData<QuestionVetoedDelta>(event);
-        if (data) {
-          useGameplayStore.getState().clearActiveQuestion();
-        }
-      });
-
-      es.addEventListener('question_abandoned', (event) => {
-        const data = parseData<QuestionAbandonedDelta>(event);
-        if (data) {
-          useGameplayStore.getState().clearActiveQuestion();
-        }
-      });
-
-      es.addEventListener('player_left', (event) => {
-        const data = parseData<PlayerLeftDelta>(event);
-        if (!data) return;
-        if (data.player_id === playerId) {
-          // Kicked by host
-          Alert.alert('Removed', 'You were removed from the game.');
-          useAppStore.getState().clearSession();
-          closedRef.current = true;
-          es.close();
-          if (router.canDismiss()) router.dismissAll();
-          router.replace('/');
-        } else {
-          useGameplayStore.getState().removePlayer(data.player_id);
-        }
-      });
-
-      es.addEventListener('host_changed', (event) => {
-        const data = parseData<HostChangedDelta>(event);
-        if (data) {
-          useGameplayStore.getState().setHostPlayerId(data.new_host_player_id);
-        }
-      });
-
-      es.addEventListener('game_dissolved', (event) => {
-        const data = parseData<GameDissolvedDelta>(event);
-        if (data) {
-          Alert.alert('Game Over', 'The game has ended.');
-          useAppStore.getState().clearSession();
-          closedRef.current = true;
-          es.close();
-          if (router.canDismiss()) router.dismissAll();
-          router.replace('/');
-        }
-      });
-
-      es.addEventListener('game_ended', (event) => {
-        const data = parseData<GameEndedDelta>(event);
-        if (data) {
-          Alert.alert('Game Over', 'The host has ended the game.');
-          useAppStore.getState().clearSession();
-          closedRef.current = true;
-          es.close();
-          if (router.canDismiss()) router.dismissAll();
-          router.replace('/');
-        }
-      });
-
-      es.addEventListener('hiding_zone_expanded', (event) => {
-        const data = parseData<HidingZoneExpandedDelta>(event);
-        if (data) {
-          useGameplayStore.getState().applyHidingZoneExpanded();
-          void queryClient.invalidateQueries({ queryKey: ['hiding-zone'] });
-          if (role === 'seeker') {
-            Alert.alert('Hiding Zone Expanded', 'The hider has expanded the hiding zone!');
+      es.addEventListener(
+        'proximity_escalated',
+        seq.wrap((event) => {
+          const data = parseData<ProximityEscalatedDelta>(event);
+          if (data) {
+            useGameplayStore.getState().updateProximityTier(data.proximity_tier);
+            const message = proximityEscalationMessage(data.proximity_tier);
+            if (message) Alert.alert('Seekers Approaching', message);
           }
-        }
-      });
+        }),
+      );
 
-      es.addEventListener('found_claim', (event) => {
-        const data = parseData<FoundClaimDelta>(event);
-        if (data && role === 'hider') {
-          useGameplayStore.getState().setFoundClaimPending(data.seeker_player_id);
-        }
-      });
+      es.addEventListener(
+        'proximity_deescalated',
+        seq.wrap((event) => {
+          const data = parseData<ProximityDeescalatedDelta>(event);
+          if (data) {
+            useGameplayStore.getState().updateProximityTier(data.proximity_tier);
+            const message = proximityDeescalationMessage(data.proximity_tier);
+            if (message) Alert.alert('Seekers Pulling Back', message);
+          }
+        }),
+      );
 
-      es.addEventListener('found_claim_rejected', () => {
-        if (role === 'seeker') {
-          Alert.alert('Claim Rejected', 'The hiders rejected your found claim.');
-        }
-      });
+      es.addEventListener(
+        'station_election',
+        seq.wrap((event) => {
+          const data = parseData<StationElectionDelta>(event);
+          if (data) {
+            useGameplayStore.getState().applyStationElection(data);
+          }
+        }),
+      );
 
-      es.addEventListener('found_claim_expired', () => {
-        useGameplayStore.getState().clearFoundClaim();
-        Alert.alert('Claim Expired', 'The found claim timed out.');
-      });
+      es.addEventListener(
+        'question_asked',
+        seq.wrap((event) => {
+          const data = parseData<QuestionAskedDelta>(event);
+          if (data) {
+            useGameplayStore.getState().setActiveQuestion(data);
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'question_answerable',
+        seq.wrap((event) => {
+          const data = parseData<QuestionAnswerableDelta>(event);
+          if (data) {
+            useGameplayStore.getState().updateQuestionAnswerable(data);
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'question_answered',
+        seq.wrap((event) => {
+          if (role === 'hider') {
+            const data = parseData<HiderQuestionAnsweredDelta>(event);
+            if (data) {
+              useGameplayStore.getState().applyQuestionAnswered(data);
+            }
+          } else {
+            const data = parseData<SeekerQuestionAnsweredDelta>(event);
+            if (data) {
+              useGameplayStore.getState().applyQuestionAnswered(data);
+              // Re-fetch endgame exclusions if endgame view is active
+              if (useGameplayStore.getState().endgameView) {
+                void queryClient.invalidateQueries({ queryKey: ['endgame-exclusions'] });
+              }
+            }
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'question_vetoed',
+        seq.wrap((event) => {
+          const data = parseData<QuestionVetoedDelta>(event);
+          if (data) {
+            useGameplayStore.getState().clearActiveQuestion();
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'question_abandoned',
+        seq.wrap((event) => {
+          const data = parseData<QuestionAbandonedDelta>(event);
+          if (data) {
+            useGameplayStore.getState().clearActiveQuestion();
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'player_left',
+        seq.wrap((event) => {
+          const data = parseData<PlayerLeftDelta>(event);
+          if (!data) return;
+          if (data.player_id === playerId) {
+            // Kicked by host
+            Alert.alert('Removed', 'You were removed from the game.');
+            useAppStore.getState().clearSession();
+            closedRef.current = true;
+            es.close();
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/');
+          } else {
+            useGameplayStore.getState().removePlayer(data.player_id);
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'host_changed',
+        seq.wrap((event) => {
+          const data = parseData<HostChangedDelta>(event);
+          if (data) {
+            useGameplayStore.getState().setHostPlayerId(data.new_host_player_id);
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'game_dissolved',
+        seq.wrap((event) => {
+          const data = parseData<GameDissolvedDelta>(event);
+          if (data) {
+            Alert.alert('Game Over', 'The game has ended.');
+            useAppStore.getState().clearSession();
+            closedRef.current = true;
+            es.close();
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/');
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'game_ended',
+        seq.wrap((event) => {
+          const data = parseData<GameEndedDelta>(event);
+          if (data) {
+            Alert.alert('Game Over', 'The host has ended the game.');
+            useAppStore.getState().clearSession();
+            closedRef.current = true;
+            es.close();
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/');
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'hiding_zone_expanded',
+        seq.wrap((event) => {
+          const data = parseData<HidingZoneExpandedDelta>(event);
+          if (data) {
+            useGameplayStore.getState().applyHidingZoneExpanded();
+            void queryClient.invalidateQueries({ queryKey: ['hiding-zone'] });
+            if (role === 'seeker') {
+              Alert.alert('Hiding Zone Expanded', 'The hider has expanded the hiding zone!');
+            }
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'found_claim',
+        seq.wrap((event) => {
+          const data = parseData<FoundClaimDelta>(event);
+          if (data && role === 'hider') {
+            useGameplayStore.getState().setFoundClaimPending(data.seeker_player_id);
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'found_claim_rejected',
+        seq.wrap(() => {
+          if (role === 'seeker') {
+            Alert.alert('Claim Rejected', 'The hiders rejected your found claim.');
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'found_claim_expired',
+        seq.wrap(() => {
+          useGameplayStore.getState().clearFoundClaim();
+          Alert.alert('Claim Expired', 'The found claim timed out.');
+        }),
+      );
     }
 
     function scheduleReconnect() {

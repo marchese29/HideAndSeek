@@ -7,6 +7,7 @@ import EventSource, { type EventSourceEvent } from 'react-native-sse';
 import { API_BASE_URL } from '@/api/client';
 import type { components } from '@/api/schema';
 import { useAppStore } from '@/store';
+import { createSequenceTracker } from '@/utils/sseSequencing';
 
 type GameResponse = components['schemas']['GameResponse'];
 type PlayerResponse = components['schemas']['PlayerResponse'];
@@ -65,9 +66,23 @@ export function useLobbyEvents(gameId: string): { connected: boolean } {
       esRef.current = es;
 
       const queryKey = ['game', gameId];
+      const seq = createSequenceTracker({
+        onGap: ({ expected, got }) => {
+          console.warn('[lobby SSE] gap detected', { expected, got });
+          scheduleReconnect();
+        },
+        onInvalid: ({ lastEventId }) => {
+          console.warn('[lobby SSE] missing/invalid lastEventId', { lastEventId });
+          scheduleReconnect();
+        },
+        onStale: ({ last, got }) => {
+          console.warn('[lobby SSE] stale event dropped', { last, got });
+        },
+      });
 
       es.addEventListener('open', () => {
         setConnected(true);
+        seq.reset();
         // If this was a reconnect, re-fetch to catch any missed events
         if (retriesRef.current > 0) {
           void refetchGame();
@@ -77,80 +92,99 @@ export function useLobbyEvents(gameId: string): { connected: boolean } {
 
       es.addEventListener('error', () => {
         setConnected(false);
+        seq.reset();
         if (closedRef.current) return;
         scheduleReconnect();
       });
 
-      es.addEventListener('game_state', (event) => {
-        const game = parseData<GameResponse>(event);
-        if (game) queryClient.setQueryData(queryKey, game);
-      });
+      es.addEventListener(
+        'game_state',
+        seq.wrap((event) => {
+          const game = parseData<GameResponse>(event);
+          if (game) queryClient.setQueryData(queryKey, game);
+        }),
+      );
 
-      es.addEventListener('player_joined', (event) => {
-        const player = parseData<PlayerResponse>(event);
-        if (!player) return;
-        queryClient.setQueryData<GameResponse>(queryKey, (old) => {
-          if (!old) return old;
-          const exists = old.players.some((p) => p.id === player.id);
-          if (exists) return old;
-          return { ...old, players: [...old.players, player] };
-        });
-      });
+      es.addEventListener(
+        'player_joined',
+        seq.wrap((event) => {
+          const player = parseData<PlayerResponse>(event);
+          if (!player) return;
+          queryClient.setQueryData<GameResponse>(queryKey, (old) => {
+            if (!old) return old;
+            const exists = old.players.some((p) => p.id === player.id);
+            if (exists) return old;
+            return { ...old, players: [...old.players, player] };
+          });
+        }),
+      );
 
-      es.addEventListener('player_updated', (event) => {
-        const player = parseData<PlayerResponse>(event);
-        if (!player) return;
-        queryClient.setQueryData<GameResponse>(queryKey, (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            players: old.players.map((p) => (p.id === player.id ? player : p)),
-          };
-        });
-      });
+      es.addEventListener(
+        'player_updated',
+        seq.wrap((event) => {
+          const player = parseData<PlayerResponse>(event);
+          if (!player) return;
+          queryClient.setQueryData<GameResponse>(queryKey, (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              players: old.players.map((p) => (p.id === player.id ? player : p)),
+            };
+          });
+        }),
+      );
 
-      es.addEventListener('player_left', (event) => {
-        const data = parseData<{ player_id: string }>(event);
-        if (!data) return;
-        if (data.player_id === playerId) {
-          Alert.alert('Removed', 'You were removed from the game.');
-          useAppStore.getState().clearSession();
-          es.close();
-          if (router.canDismiss()) router.dismissAll();
-          router.replace('/');
-          return;
-        }
-        queryClient.setQueryData<GameResponse>(queryKey, (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            players: old.players.filter((p) => p.id !== data.player_id),
-          };
-        });
-      });
+      es.addEventListener(
+        'player_left',
+        seq.wrap((event) => {
+          const data = parseData<{ player_id: string }>(event);
+          if (!data) return;
+          if (data.player_id === playerId) {
+            Alert.alert('Removed', 'You were removed from the game.');
+            useAppStore.getState().clearSession();
+            es.close();
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/');
+            return;
+          }
+          queryClient.setQueryData<GameResponse>(queryKey, (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              players: old.players.filter((p) => p.id !== data.player_id),
+            };
+          });
+        }),
+      );
 
-      es.addEventListener('host_changed', (event) => {
-        const data = parseData<{ new_host_player_id: string }>(event);
-        if (!data) return;
-        queryClient.setQueryData<GameResponse>(queryKey, (old) => {
-          if (!old) return old;
-          return { ...old, host_player_id: data.new_host_player_id };
-        });
-      });
+      es.addEventListener(
+        'host_changed',
+        seq.wrap((event) => {
+          const data = parseData<{ new_host_player_id: string }>(event);
+          if (!data) return;
+          queryClient.setQueryData<GameResponse>(queryKey, (old) => {
+            if (!old) return old;
+            return { ...old, host_player_id: data.new_host_player_id };
+          });
+        }),
+      );
 
-      es.addEventListener('game_started', (event) => {
-        const game = parseData<GameResponse>(event);
-        if (!game) return;
-        queryClient.setQueryData(queryKey, game);
+      es.addEventListener(
+        'game_started',
+        seq.wrap((event) => {
+          const game = parseData<GameResponse>(event);
+          if (!game) return;
+          queryClient.setQueryData(queryKey, game);
 
-        // Persist role before navigating to gameplay
-        const myId = useAppStore.getState().playerId;
-        const me = game.players.find((p) => p.id === myId);
-        if (me?.role) {
-          useAppStore.getState().setRole(me.role);
-        }
-        router.replace(`/game/${gameId}`);
-      });
+          // Persist role before navigating to gameplay
+          const myId = useAppStore.getState().playerId;
+          const me = game.players.find((p) => p.id === myId);
+          if (me?.role) {
+            useAppStore.getState().setRole(me.role);
+          }
+          router.replace(`/game/${gameId}`);
+        }),
+      );
     }
 
     function scheduleReconnect() {

@@ -177,6 +177,7 @@ Both hooks:
 - **Lobby** uses `ConnectionDot` (green/red dot) for connection status.
 - **Gameplay** uses the utility belt timer background color instead: orange (hiding), green (seeking), gray (disconnected). All belt actions are disabled while disconnected; the map remains interactive.
 - Lobby and gameplay screens both suppress back navigation (`gestureEnabled: false`, `BackHandler` on Android).
+- **Gap detection** (`src/utils/sseSequencing.ts`): each SSE event carries a per-channel monotonic sequence in the `id:` field. Both hooks wrap every `addEventListener` with `createSequenceTracker().wrap(...)` — the first event of a connection establishes the baseline (the `game_state` snapshot's id), subsequent events must equal `last + 1`. A gap (`got > expected + 1`), a missing/non-numeric `lastEventId`, or either of the connection reset events (`open`/`error`) clears the baseline and triggers the standard reconnect path; the fresh snapshot on reconnect is the resync. Stale events (`got <= last`) are logged and dropped — they shouldn't normally occur because the server already filters pre-snapshot events in the stream.
 
 ## Push Notifications
 
