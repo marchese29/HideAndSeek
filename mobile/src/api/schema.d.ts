@@ -1743,6 +1743,25 @@ export interface components {
          */
         QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned" | "randomized";
         /**
+         * QuestionAnswerableEvent
+         * @description A thermometer question was locked in — both channels.
+         */
+        QuestionAnswerableEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            seeker_location_end: components["schemas"]["Point"];
+            /**
+             * Question Deadline
+             * Format: date-time
+             */
+            question_deadline: string;
+        };
+        /**
          * SeekerQuestionAnsweredEvent
          * @description A question was answered — seeker channel only (with exclusion geometry).
          *
@@ -1776,25 +1795,6 @@ export interface components {
             answered_at: string | null;
         };
         /**
-         * QuestionAnswerableEvent
-         * @description A thermometer question was locked in — both channels.
-         */
-        QuestionAnswerableEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            seeker_location_end: components["schemas"]["Point"];
-            /**
-             * Question Deadline
-             * Format: date-time
-             */
-            question_deadline: string;
-        };
-        /**
          * QuestionAbandonedEvent
          * @description A question was abandoned — both channels.
          */
@@ -1821,6 +1821,18 @@ export interface components {
             station_election_status: components["schemas"]["StationElectionStatus"];
             /** Hider Station Id */
             hider_station_id: string | null;
+        };
+        /**
+         * ProximityTier
+         * @enum {string}
+         */
+        ProximityTier: "none" | "approaching" | "near" | "entered";
+        /**
+         * ProximityEscalatedEvent
+         * @description Seekers moved closer — hider channel only.
+         */
+        ProximityEscalatedEvent: {
+            proximity_tier: components["schemas"]["ProximityTier"];
         };
         /**
          * FoundClaimEvent
@@ -1862,60 +1874,15 @@ export interface components {
             reason: components["schemas"]["EndReason"];
         };
         /**
-         * ProximityTier
-         * @enum {string}
+         * HidingZoneExpandedEvent
+         * @description Hiding zone expanded by the hider — both channels.
          */
-        ProximityTier: "none" | "approaching" | "near" | "entered";
-        /**
-         * ProximityEscalatedEvent
-         * @description Seekers moved closer — hider channel only.
-         */
-        ProximityEscalatedEvent: {
-            proximity_tier: components["schemas"]["ProximityTier"];
-        };
-        /**
-         * ProximityDeescalatedEvent
-         * @description All seekers pulled back — hider channel only.
-         */
-        ProximityDeescalatedEvent: {
-            proximity_tier: components["schemas"]["ProximityTier"];
-        };
-        /**
-         * HiderQuestionAnsweredEvent
-         * @description A question was answered — hider channel only.
-         *
-         *     Carries answer-time delta fields only (ask-time fields were sent
-         *     with QuestionAskedEvent). Includes hider-privileged data: location
-         *     and feature resolution.
-         */
-        HiderQuestionAnsweredEvent: {
+        HidingZoneExpandedEvent: {
             /**
-             * Question Id
-             * Format: uuid
+             * Effective Radius
+             * @description New effective hiding zone radius in convention units.
              */
-            question_id: string;
-            /** Sequence */
-            sequence: number;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
-            /**
-             * Asked By
-             * Format: uuid
-             */
-            asked_by: string;
-            /** Answered At */
-            answered_at: string | null;
-            hider_location: components["schemas"]["Point"] | null;
-            /** Hider Feature Id */
-            hider_feature_id: string | null;
-            /** Hider Feature Name */
-            hider_feature_name: string | null;
-            /** Hider Distance */
-            hider_distance: number | null;
+            effective_radius: number;
         };
         /**
          * FeatureEventParams
@@ -2032,6 +1999,43 @@ export interface components {
             question_deadline: string | null;
         };
         /**
+         * HiderQuestionAnsweredEvent
+         * @description A question was answered — hider channel only.
+         *
+         *     Carries answer-time delta fields only (ask-time fields were sent
+         *     with QuestionAskedEvent). Includes hider-privileged data: location
+         *     and feature resolution.
+         */
+        HiderQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Sequence */
+            sequence: number;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Answered At */
+            answered_at: string | null;
+            hider_location: components["schemas"]["Point"] | null;
+            /** Hider Feature Id */
+            hider_feature_id: string | null;
+            /** Hider Feature Name */
+            hider_feature_name: string | null;
+            /** Hider Distance */
+            hider_distance: number | null;
+        };
+        /**
          * QuestionVetoedEvent
          * @description A question was vetoed — both channels.
          */
@@ -2073,6 +2077,13 @@ export interface components {
             player_id: string;
         };
         /**
+         * ProximityDeescalatedEvent
+         * @description All seekers pulled back — hider channel only.
+         */
+        ProximityDeescalatedEvent: {
+            proximity_tier: components["schemas"]["ProximityTier"];
+        };
+        /**
          * FoundClaimRejectedEvent
          * @description Hiders rejected the found claim — seeker channel only.
          */
@@ -2084,17 +2095,6 @@ export interface components {
         GameDissolvedEvent: {
             /** Reason */
             reason: string;
-        };
-        /**
-         * HidingZoneExpandedEvent
-         * @description Hiding zone expanded by the hider — both channels.
-         */
-        HidingZoneExpandedEvent: {
-            /**
-             * Effective Radius
-             * @description New effective hiding zone radius in convention units.
-             */
-            effective_radius: number;
         };
         /**
          * FeatureParamsResponse
