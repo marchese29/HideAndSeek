@@ -96,7 +96,7 @@ Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×
 - `reject_found_claim(game)` — clears claim state; game keeps seeking.
 - `expire_found_claim(game) -> bool` — called by the worker's `auto_dismiss_found_claim` task; returns True if a live claim was cleared (no-op if already resolved or game not active).
 
-Routers set `end_reason` directly on confirm. 7kw.7 retrofits the host-end and dissolution paths to set `end_reason = host_ended` / `dissolved` and adds `reason` to `GameEndedEvent`.
+**`end_reason` is set at every terminal transition.** `confirm_found_claim()` sets `found`; `end_game()` in `routers/games.py` sets `host_ended`; `remove_player()` in `logic/lobby.py` sets `dissolved` at each dissolution site. `GameEndedEvent.reason: EndReason` carries the value on the wire (values: `found`, `host_ended`) so clients can distinguish completion reasons without a follow-up GET. `GameDissolvedEvent.reason: str` stays granular (`last_player` / `no_hiders_remaining` / `no_seekers_remaining`) — orthogonal to the coarse-grained `EndReason.dissolved` stored on the game.
 
 ## Conventions
 

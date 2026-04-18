@@ -32,7 +32,7 @@ from hideandseek_core.logic.endgame import (
 )
 from hideandseek_core.queries.questions import get_active_question
 from hideandseek_models.game import Game, Player
-from hideandseek_models.types import PushEventType
+from hideandseek_models.types import EndReason, PushEventType
 from hideandseek_worker.celery_app import app as celery_app
 from hideandseek_worker.tasks.game_timers import auto_dismiss_found_claim
 from hideandseek_worker.tasks.push import send_push
@@ -105,7 +105,7 @@ def confirm_found(
             celery_app.control.revoke(f'answer_deadline:{active.id}', terminate=False)
 
     confirm_found_claim(game)
-    emit_gameplay(GameEndedEvent(game_id=game.id))
+    emit_gameplay(GameEndedEvent(game_id=game.id, reason=EndReason.found))
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.game_ended,

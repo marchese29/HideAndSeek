@@ -13,6 +13,7 @@ from hideandseek_models.game_map import GameMap
 from hideandseek_models.location import LocationUpdate
 from hideandseek_models.transit import Route, RouteStop, Stop
 from hideandseek_models.types import (
+    EndReason,
     GameStatus,
     PlayerColor,
     PlayerRole,
@@ -382,6 +383,9 @@ def test_end_game(client: TestClient, session: Session):
         headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 204
+    session.expire(game)
+    assert game.status == GameStatus.finished
+    assert game.end_reason == EndReason.host_ended
 
 
 def test_end_game_from_hiding(client: TestClient, session: Session):
@@ -391,6 +395,8 @@ def test_end_game_from_hiding(client: TestClient, session: Session):
         headers=_headers(game.host_player_id),
     )
     assert resp.status_code == 204
+    session.expire(game)
+    assert game.end_reason == EndReason.host_ended
 
 
 def test_end_game_from_lobby(client: TestClient, session: Session):
@@ -756,6 +762,7 @@ def test_remove_host_only_player_dissolves(client: TestClient, session: Session)
     assert resp.status_code == 204
     session.expire(game)
     assert game.status == GameStatus.dissolved
+    assert game.end_reason == EndReason.dissolved
 
 
 def test_remove_host_requires_new_host_422(client: TestClient, session: Session):
@@ -865,6 +872,7 @@ def test_remove_player_active_last_hider_dissolves(client: TestClient, session: 
     assert resp.status_code == 204
     session.expire(game)
     assert game.status == GameStatus.dissolved
+    assert game.end_reason == EndReason.dissolved
 
 
 def test_remove_player_active_last_seeker_dissolves(client: TestClient, session: Session):
@@ -882,6 +890,7 @@ def test_remove_player_active_last_seeker_dissolves(client: TestClient, session:
     assert resp.status_code == 204
     session.expire(game)
     assert game.status == GameStatus.dissolved
+    assert game.end_reason == EndReason.dissolved
 
 
 def test_remove_player_active_host_transfers(client: TestClient, session: Session):

@@ -10,7 +10,14 @@ from hideandseek_core.queries.games import create_game as query_create_game
 from hideandseek_core.queries.location import delete_player_locations
 from hideandseek_models.game import Game, Player
 from hideandseek_models.game_map import GameMap
-from hideandseek_models.types import MAX_PLAYERS, GameStatus, MapSize, PlayerColor, PlayerRole
+from hideandseek_models.types import (
+    MAX_PLAYERS,
+    EndReason,
+    GameStatus,
+    MapSize,
+    PlayerColor,
+    PlayerRole,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +138,7 @@ def remove_player(
 
     # Sole player — dissolve regardless of phase
     if len(game.players) == 1:
+        game.end_reason = EndReason.dissolved
         update_game_status(game, GameStatus.dissolved)
         delete_player(player)
         return RemovalResult(
@@ -146,6 +154,7 @@ def remove_player(
             p for p in game.players if p.role == player.role and p.id != player.id
         ]
         if not same_role_remaining:
+            game.end_reason = EndReason.dissolved
             update_game_status(game, GameStatus.dissolved)
             delete_player(player)
             return RemovalResult(

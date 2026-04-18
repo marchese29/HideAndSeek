@@ -82,6 +82,7 @@ from hideandseek_core.queries.questions import get_active_question, get_inventor
 from hideandseek_core.queries.stops import get_stops_near_point, validate_stop_playable
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import (
+    EndReason,
     GameStatus,
     MapSize,
     PlayerRole,
@@ -366,8 +367,9 @@ def end_game(
         if active_question:
             celery_app.control.revoke(f'answer_deadline:{active_question.id}', terminate=False)
 
+    game.end_reason = EndReason.host_ended
     update_game_status(game, GameStatus.finished)
-    emit_gameplay(GameEndedEvent(game_id=game.id))
+    emit_gameplay(GameEndedEvent(game_id=game.id, reason=EndReason.host_ended))
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.game_ended,

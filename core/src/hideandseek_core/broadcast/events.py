@@ -21,6 +21,7 @@ from shapely.geometry import mapping
 from hideandseek_core.conventions import resolve_tentacle_distance
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_models.types import (
+    EndReason,
     PlayerColor,
     PlayerRole,
     ProximityTier,
@@ -385,7 +386,9 @@ class GameDissolvedEvent(GameplayEventSchema):
 
 
 class GameEndedEvent(GameplayEventSchema):
-    """Host ended the game for all players — both channels."""
+    """Game finished — host ended it or seekers found the hiders. Both channels."""
+
+    reason: EndReason
 
 
 class HidingZoneExpandedEvent(GameplayEventSchema):

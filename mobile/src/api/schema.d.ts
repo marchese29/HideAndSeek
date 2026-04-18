@@ -1700,6 +1700,48 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * QuestionStatus
+         * @enum {string}
+         */
+        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned" | "randomized";
+        /**
+         * HiderQuestionAnsweredEvent
+         * @description A question was answered — hider channel only.
+         *
+         *     Carries answer-time delta fields only (ask-time fields were sent
+         *     with QuestionAskedEvent). Includes hider-privileged data: location
+         *     and feature resolution.
+         */
+        HiderQuestionAnsweredEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Sequence */
+            sequence: number;
+            question_type: components["schemas"]["QuestionType"];
+            status: components["schemas"]["QuestionStatus"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
+            /**
+             * Asked By
+             * Format: uuid
+             */
+            asked_by: string;
+            /** Answered At */
+            answered_at: string | null;
+            hider_location: components["schemas"]["Point"] | null;
+            /** Hider Feature Id */
+            hider_feature_id: string | null;
+            /** Hider Feature Name */
+            hider_feature_name: string | null;
+            /** Hider Distance */
+            hider_distance: number | null;
+        };
+        /**
          * FeatureEventParams
          * @description Matching/measuring question parameters (seeker resolution only).
          */
@@ -1722,11 +1764,6 @@ export interface components {
             /** Seeker Distance */
             seeker_distance: number;
         };
-        /**
-         * QuestionStatus
-         * @enum {string}
-         */
-        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned" | "randomized";
         /**
          * RadarEventParams
          * @description Radar question parameters.
@@ -1819,43 +1856,6 @@ export interface components {
             question_deadline: string | null;
         };
         /**
-         * HiderQuestionAnsweredEvent
-         * @description A question was answered — hider channel only.
-         *
-         *     Carries answer-time delta fields only (ask-time fields were sent
-         *     with QuestionAskedEvent). Includes hider-privileged data: location
-         *     and feature resolution.
-         */
-        HiderQuestionAnsweredEvent: {
-            /**
-             * Question Id
-             * Format: uuid
-             */
-            question_id: string;
-            /** Sequence */
-            sequence: number;
-            question_type: components["schemas"]["QuestionType"];
-            status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
-            /**
-             * Asked By
-             * Format: uuid
-             */
-            asked_by: string;
-            /** Answered At */
-            answered_at: string | null;
-            hider_location: components["schemas"]["Point"] | null;
-            /** Hider Feature Id */
-            hider_feature_id: string | null;
-            /** Hider Feature Name */
-            hider_feature_name: string | null;
-            /** Hider Distance */
-            hider_distance: number | null;
-        };
-        /**
          * QuestionVetoedEvent
          * @description A question was vetoed — both channels.
          */
@@ -1902,6 +1902,18 @@ export interface components {
             player_id: string;
         };
         /**
+         * ProximityTier
+         * @enum {string}
+         */
+        ProximityTier: "none" | "approaching" | "near" | "entered";
+        /**
+         * ProximityDeescalatedEvent
+         * @description All seekers pulled back — hider channel only.
+         */
+        ProximityDeescalatedEvent: {
+            proximity_tier: components["schemas"]["ProximityTier"];
+        };
+        /**
          * FoundClaimRejectedEvent
          * @description Hiders rejected the found claim — seeker channel only.
          */
@@ -1926,60 +1938,30 @@ export interface components {
             effective_radius: number;
         };
         /**
-         * ProximityTier
-         * @enum {string}
+         * ProximityEscalatedEvent
+         * @description Seekers moved closer — hider channel only.
          */
-        ProximityTier: "none" | "approaching" | "near" | "entered";
-        /**
-         * ProximityDeescalatedEvent
-         * @description All seekers pulled back — hider channel only.
-         */
-        ProximityDeescalatedEvent: {
+        ProximityEscalatedEvent: {
             proximity_tier: components["schemas"]["ProximityTier"];
         };
         /**
-         * FoundClaimEvent
-         * @description A seeker claims to have found the hiders — hider channel only.
+         * QuestionAnswerableEvent
+         * @description A thermometer question was locked in — both channels.
          */
-        FoundClaimEvent: {
-            /**
-             * Seeker Player Id
-             * Format: uuid
-             */
-            seeker_player_id: string;
-        };
-        /**
-         * SeekerQuestionAnsweredEvent
-         * @description A question was answered — seeker channel only (with exclusion geometry).
-         *
-         *     Carries answer-time delta fields only. No hider-privileged data
-         *     (no hider_location, no hider feature resolution).
-         */
-        SeekerQuestionAnsweredEvent: {
+        QuestionAnswerableEvent: {
             /**
              * Question Id
              * Format: uuid
              */
             question_id: string;
-            /** Sequence */
-            sequence: number;
             question_type: components["schemas"]["QuestionType"];
             status: components["schemas"]["QuestionStatus"];
-            /** Answer */
-            answer: string;
-            /** Slot Index */
-            slot_index: number;
+            seeker_location_end: components["schemas"]["Point"];
             /**
-             * Asked By
-             * Format: uuid
+             * Question Deadline
+             * Format: date-time
              */
-            asked_by: string;
-            /** Exclusion */
-            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-            /** Total Exclusion */
-            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
-            /** Answered At */
-            answered_at: string | null;
+            question_deadline: string;
         };
         /** PlayerLocationEvent */
         PlayerLocationEvent: {
@@ -2020,23 +2002,37 @@ export interface components {
             freeze_departed: string[] | null;
         };
         /**
-         * QuestionAnswerableEvent
-         * @description A thermometer question was locked in — both channels.
+         * SeekerQuestionAnsweredEvent
+         * @description A question was answered — seeker channel only (with exclusion geometry).
+         *
+         *     Carries answer-time delta fields only. No hider-privileged data
+         *     (no hider_location, no hider feature resolution).
          */
-        QuestionAnswerableEvent: {
+        SeekerQuestionAnsweredEvent: {
             /**
              * Question Id
              * Format: uuid
              */
             question_id: string;
+            /** Sequence */
+            sequence: number;
             question_type: components["schemas"]["QuestionType"];
             status: components["schemas"]["QuestionStatus"];
-            seeker_location_end: components["schemas"]["Point"];
+            /** Answer */
+            answer: string;
+            /** Slot Index */
+            slot_index: number;
             /**
-             * Question Deadline
-             * Format: date-time
+             * Asked By
+             * Format: uuid
              */
-            question_deadline: string;
+            asked_by: string;
+            /** Exclusion */
+            exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Total Exclusion */
+            total_exclusion: (components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"]) | null;
+            /** Answered At */
+            answered_at: string | null;
         };
         /**
          * QuestionAbandonedEvent
@@ -2062,6 +2058,17 @@ export interface components {
             hider_station_id: string | null;
         };
         /**
+         * FoundClaimEvent
+         * @description A seeker claims to have found the hiders — hider channel only.
+         */
+        FoundClaimEvent: {
+            /**
+             * Seeker Player Id
+             * Format: uuid
+             */
+            seeker_player_id: string;
+        };
+        /**
          * FoundClaimExpiredEvent
          * @description Found claim timed out — both channels.
          */
@@ -2078,16 +2085,16 @@ export interface components {
             new_host_player_id: string;
         };
         /**
-         * GameEndedEvent
-         * @description Host ended the game for all players — both channels.
+         * EndReason
+         * @enum {string}
          */
-        GameEndedEvent: Record<string, never>;
+        EndReason: "found" | "host_ended" | "dissolved";
         /**
-         * ProximityEscalatedEvent
-         * @description Seekers moved closer — hider channel only.
+         * GameEndedEvent
+         * @description Game finished — host ended it or seekers found the hiders. Both channels.
          */
-        ProximityEscalatedEvent: {
-            proximity_tier: components["schemas"]["ProximityTier"];
+        GameEndedEvent: {
+            reason: components["schemas"]["EndReason"];
         };
         /**
          * FeatureParamsResponse

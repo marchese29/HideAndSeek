@@ -3001,6 +3001,83 @@ components:
       - msg
       - type
       title: ValidationError
+    QuestionStatus:
+      enum:
+      - asked
+      - in_progress
+      - answerable
+      - answered
+      - vetoed
+      - abandoned
+      - randomized
+      title: QuestionStatus
+      type: string
+    HiderQuestionAnsweredEvent:
+      description: "A question was answered \u2014 hider channel only.\n\nCarries\
+        \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
+        \ Includes hider-privileged data: location\nand feature resolution."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          title: Sequence
+          type: integer
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        answer:
+          title: Answer
+          type: string
+        slot_index:
+          title: Slot Index
+          type: integer
+        asked_by:
+          format: uuid
+          title: Asked By
+          type: string
+        answered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Answered At
+        hider_location:
+          anyOf:
+          - $ref: '#/components/schemas/Point'
+          - type: 'null'
+        hider_feature_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hider Feature Id
+        hider_feature_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hider Feature Name
+        hider_distance:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Hider Distance
+      required:
+      - question_id
+      - sequence
+      - question_type
+      - status
+      - answer
+      - slot_index
+      - asked_by
+      - answered_at
+      - hider_location
+      - hider_feature_id
+      - hider_feature_name
+      - hider_distance
+      title: HiderQuestionAnsweredEvent
+      type: object
     FeatureEventParams:
       description: Matching/measuring question parameters (seeker resolution only).
       properties:
@@ -3038,17 +3115,6 @@ components:
       - seeker_distance
       title: FeatureEventParams
       type: object
-    QuestionStatus:
-      enum:
-      - asked
-      - in_progress
-      - answerable
-      - answered
-      - vetoed
-      - abandoned
-      - randomized
-      title: QuestionStatus
-      type: string
     RadarEventParams:
       description: Radar question parameters.
       properties:
@@ -3179,72 +3245,6 @@ components:
       - question_deadline
       title: QuestionAskedEvent
       type: object
-    HiderQuestionAnsweredEvent:
-      description: "A question was answered \u2014 hider channel only.\n\nCarries\
-        \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
-        \ Includes hider-privileged data: location\nand feature resolution."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        sequence:
-          title: Sequence
-          type: integer
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        answer:
-          title: Answer
-          type: string
-        slot_index:
-          title: Slot Index
-          type: integer
-        asked_by:
-          format: uuid
-          title: Asked By
-          type: string
-        answered_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Answered At
-        hider_location:
-          anyOf:
-          - $ref: '#/components/schemas/Point'
-          - type: 'null'
-        hider_feature_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hider Feature Id
-        hider_feature_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hider Feature Name
-        hider_distance:
-          anyOf:
-          - type: number
-          - type: 'null'
-          title: Hider Distance
-      required:
-      - question_id
-      - sequence
-      - question_type
-      - status
-      - answer
-      - slot_index
-      - asked_by
-      - answered_at
-      - hider_location
-      - hider_feature_id
-      - hider_feature_name
-      - hider_distance
-      title: HiderQuestionAnsweredEvent
-      type: object
     QuestionVetoedEvent:
       description: "A question was vetoed \u2014 both channels."
       properties:
@@ -3307,6 +3307,23 @@ components:
       - player_id
       title: GamePlayerLeftEvent
       type: object
+    ProximityTier:
+      enum:
+      - none
+      - approaching
+      - near
+      - entered
+      title: ProximityTier
+      type: string
+    ProximityDeescalatedEvent:
+      description: "All seekers pulled back \u2014 hider channel only."
+      properties:
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+      required:
+      - proximity_tier
+      title: ProximityDeescalatedEvent
+      type: object
     FoundClaimRejectedEvent:
       description: "Hiders rejected the found claim \u2014 seeker channel only."
       properties: {}
@@ -3334,34 +3351,100 @@ components:
       - effective_radius
       title: HidingZoneExpandedEvent
       type: object
-    ProximityTier:
-      enum:
-      - none
-      - approaching
-      - near
-      - entered
-      title: ProximityTier
-      type: string
-    ProximityDeescalatedEvent:
-      description: "All seekers pulled back \u2014 hider channel only."
+    ProximityEscalatedEvent:
+      description: "Seekers moved closer \u2014 hider channel only."
       properties:
         proximity_tier:
           $ref: '#/components/schemas/ProximityTier'
       required:
       - proximity_tier
-      title: ProximityDeescalatedEvent
+      title: ProximityEscalatedEvent
       type: object
-    FoundClaimEvent:
-      description: "A seeker claims to have found the hiders \u2014 hider channel\
-        \ only."
+    QuestionAnswerableEvent:
+      description: "A thermometer question was locked in \u2014 both channels."
       properties:
-        seeker_player_id:
+        question_id:
           format: uuid
-          title: Seeker Player Id
+          title: Question Id
+          type: string
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        seeker_location_end:
+          $ref: '#/components/schemas/Point'
+        question_deadline:
+          format: date-time
+          title: Question Deadline
           type: string
       required:
-      - seeker_player_id
-      title: FoundClaimEvent
+      - question_id
+      - question_type
+      - status
+      - seeker_location_end
+      - question_deadline
+      title: QuestionAnswerableEvent
+      type: object
+    PlayerLocationEvent:
+      properties:
+        player_id:
+          format: uuid
+          title: Player Id
+          type: string
+        name:
+          title: Name
+          type: string
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        role:
+          $ref: '#/components/schemas/PlayerRole'
+        coordinates:
+          $ref: '#/components/schemas/Point'
+        timestamp:
+          format: date-time
+          title: Timestamp
+          type: string
+        candidate_stations:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Candidate Stations
+        not_in_zone:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Not In Zone
+        computed_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Computed Answer
+        freeze_departed:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Freeze Departed
+      required:
+      - player_id
+      - name
+      - color
+      - role
+      - coordinates
+      - timestamp
+      title: PlayerLocationEvent
       type: object
     SeekerQuestionAnsweredEvent:
       description: "A question was answered \u2014 seeker channel only (with exclusion\
@@ -3452,92 +3535,6 @@ components:
       - answered_at
       title: SeekerQuestionAnsweredEvent
       type: object
-    PlayerLocationEvent:
-      properties:
-        player_id:
-          format: uuid
-          title: Player Id
-          type: string
-        name:
-          title: Name
-          type: string
-        color:
-          $ref: '#/components/schemas/PlayerColor'
-        role:
-          $ref: '#/components/schemas/PlayerRole'
-        coordinates:
-          $ref: '#/components/schemas/Point'
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
-        candidate_stations:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Candidate Stations
-        not_in_zone:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Not In Zone
-        computed_answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          title: Computed Answer
-        freeze_departed:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          title: Freeze Departed
-      required:
-      - player_id
-      - name
-      - color
-      - role
-      - coordinates
-      - timestamp
-      title: PlayerLocationEvent
-      type: object
-    QuestionAnswerableEvent:
-      description: "A thermometer question was locked in \u2014 both channels."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        seeker_location_end:
-          $ref: '#/components/schemas/Point'
-        question_deadline:
-          format: date-time
-          title: Question Deadline
-          type: string
-      required:
-      - question_id
-      - question_type
-      - status
-      - seeker_location_end
-      - question_deadline
-      title: QuestionAnswerableEvent
-      type: object
     QuestionAbandonedEvent:
       description: "A question was abandoned \u2014 both channels."
       properties:
@@ -3572,6 +3569,18 @@ components:
       - hider_station_id
       title: StationElectionEvent
       type: object
+    FoundClaimEvent:
+      description: "A seeker claims to have found the hiders \u2014 hider channel\
+        \ only."
+      properties:
+        seeker_player_id:
+          format: uuid
+          title: Seeker Player Id
+          type: string
+      required:
+      - seeker_player_id
+      title: FoundClaimEvent
+      type: object
     FoundClaimExpiredEvent:
       description: "Found claim timed out \u2014 both channels."
       properties: {}
@@ -3589,20 +3598,22 @@ components:
       - new_host_player_id
       title: GameHostChangedEvent
       type: object
+    EndReason:
+      enum:
+      - found
+      - host_ended
+      - dissolved
+      title: EndReason
+      type: string
     GameEndedEvent:
-      description: "Host ended the game for all players \u2014 both channels."
-      properties: {}
-      required: []
-      title: GameEndedEvent
-      type: object
-    ProximityEscalatedEvent:
-      description: "Seekers moved closer \u2014 hider channel only."
+      description: "Game finished \u2014 host ended it or seekers found the hiders.\
+        \ Both channels."
       properties:
-        proximity_tier:
-          $ref: '#/components/schemas/ProximityTier'
+        reason:
+          $ref: '#/components/schemas/EndReason'
       required:
-      - proximity_tier
-      title: ProximityEscalatedEvent
+      - reason
+      title: GameEndedEvent
       type: object
     FeatureParamsResponse:
       description: Parameters for a matching or measuring question.
