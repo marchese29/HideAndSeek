@@ -21,7 +21,9 @@ src/hideandseek_worker/
   tasks/
     game_timers.py     # Phase transition (hiding→seeking), auto-answer deadline,
                        # auto-dismiss found claim
-    push.py            # Push notification delivery (APNs + FCM) with retry
+    push.py            # Push notification delivery (SNS Mobile Push) with retry.
+                       #   After publish, deletes DeviceToken rows whose endpoint ARNs
+                       #   SNS reported as disabled/invalid (inline dead-token cleanup).
 ```
 
 ## Game Timer Tasks

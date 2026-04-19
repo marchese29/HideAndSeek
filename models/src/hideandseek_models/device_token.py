@@ -28,6 +28,7 @@ class DeviceToken(Base):
     )
     token: Mapped[str]
     provider: Mapped[TokenProvider] = mapped_column(default=TokenProvider.apns)
+    endpoint_arn: Mapped[str | None] = mapped_column(default=None)
     updated_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(UTC),
     )

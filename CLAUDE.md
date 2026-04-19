@@ -15,7 +15,8 @@ UV workspace with a root `pyproject.toml` and five Python packages (`models/`, `
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.
 - `design/` — AI-generated design artifacts. See `design/CLAUDE.md`.
 - `hooks/` — Git hooks (symlinked into `.git/hooks/`; see Setup below).
-- `docker-compose.yml` — Docker Compose (PostGIS + Redis + API server + Celery worker + reconciler).
+- `infra/localstack/init-aws.sh` — LocalStack ready.d hook; bootstraps the APNs/FCM SNS platform applications so local dev matches prod.
+- `docker-compose.yml` — Docker Compose (PostGIS + Redis + LocalStack + API server + Celery worker + reconciler). LocalStack emulates AWS SNS for local push delivery. Because there is no Alembic yet, DB schema changes (e.g. the `DeviceToken.endpoint_arn` column) require `docker compose down -v` to recreate the dev database.
 - `scripts/dev.sh` — Local dev launcher (uvicorn + Celery worker with Redis).
 - `scripts/manual-test.sh` — End-to-end metric game flow against a running Docker server (seeds data, exercises all endpoints).
 - `scripts/manual-test-imperial.sh` — End-to-end imperial convention game flow with assertions (run after `manual-test.sh`).

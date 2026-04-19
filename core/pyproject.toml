@@ -17,8 +17,7 @@ dependencies = [
     "psycopg[binary]>=3.3.2",
     "redis>=7.2.0",
     "structlog>=25.5.0",
-    "aioapns>=4.0",
-    "firebase-admin>=7.3.0",
+    "boto3>=1.34",
 ]
 
 [tool.uv.sources]
@@ -28,6 +27,8 @@ hideandseek-models = { workspace = true }
 dev = [
     "ruff>=0.11.0",
     "pyright>=1.1.0",
+    "boto3-stubs[sns]>=1.34",
+    "botocore-stubs>=1.34",
 ]
 
 [tool.ruff]

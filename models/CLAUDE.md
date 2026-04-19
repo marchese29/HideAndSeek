@@ -29,7 +29,7 @@ src/hideandseek_models/
   question.py              # Question
   question_params.py       # RadarParams, ThermometerParams, FeatureQuestionParams, TentacleQuestionParams
   transit.py               # TransitDataset, Stop, Route, RouteStop
-  device_token.py          # DeviceToken
+  device_token.py          # DeviceToken (token + endpoint_arn for SNS Mobile Push)
 ```
 
 ## Dependencies

@@ -3229,24 +3229,6 @@ components:
       - hider_station_id
       title: StationElectionEvent
       type: object
-    FoundClaimEvent:
-      description: "A seeker claims to have found the hiders \u2014 hider channel\
-        \ only."
-      properties:
-        seeker_player_id:
-          format: uuid
-          title: Seeker Player Id
-          type: string
-      required:
-      - seeker_player_id
-      title: FoundClaimEvent
-      type: object
-    FoundClaimExpiredEvent:
-      description: "Found claim timed out \u2014 both channels."
-      properties: {}
-      required: []
-      title: FoundClaimExpiredEvent
-      type: object
     GameHostChangedEvent:
       description: "Host transferred during active gameplay \u2014 both channels."
       properties:
@@ -3292,14 +3274,23 @@ components:
       - proximity_tier
       title: ProximityEscalatedEvent
       type: object
-    ProximityDeescalatedEvent:
-      description: "All seekers pulled back \u2014 hider channel only."
+    FoundClaimEvent:
+      description: "A seeker claims to have found the hiders \u2014 hider channel\
+        \ only."
       properties:
-        proximity_tier:
-          $ref: '#/components/schemas/ProximityTier'
+        seeker_player_id:
+          format: uuid
+          title: Seeker Player Id
+          type: string
       required:
-      - proximity_tier
-      title: ProximityDeescalatedEvent
+      - seeker_player_id
+      title: FoundClaimEvent
+      type: object
+    FoundClaimExpiredEvent:
+      description: "Found claim timed out \u2014 both channels."
+      properties: {}
+      required: []
+      title: FoundClaimExpiredEvent
       type: object
     HiderQuestionAnsweredEvent:
       description: "A question was answered \u2014 hider channel only.\n\nCarries\
@@ -3588,12 +3579,6 @@ components:
       - player_id
       title: GamePlayerLeftEvent
       type: object
-    FoundClaimRejectedEvent:
-      description: "Hiders rejected the found claim \u2014 seeker channel only."
-      properties: {}
-      required: []
-      title: FoundClaimRejectedEvent
-      type: object
     GameDissolvedEvent:
       description: "Game dissolved during active gameplay \u2014 both channels."
       properties:
@@ -3614,6 +3599,21 @@ components:
       required:
       - effective_radius
       title: HidingZoneExpandedEvent
+      type: object
+    ProximityDeescalatedEvent:
+      description: "All seekers pulled back \u2014 hider channel only."
+      properties:
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+      required:
+      - proximity_tier
+      title: ProximityDeescalatedEvent
+      type: object
+    FoundClaimRejectedEvent:
+      description: "Hiders rejected the found claim \u2014 seeker channel only."
+      properties: {}
+      required: []
+      title: FoundClaimRejectedEvent
       type: object
     FeatureParamsResponse:
       description: Parameters for a matching or measuring question.

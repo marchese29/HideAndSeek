@@ -7,50 +7,31 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class PushConfig:
-    """APNS credentials and settings."""
+class SnsConfig:
+    """AWS SNS Mobile Push configuration.
 
-    key_path: str
-    key_id: str
-    team_id: str
-    topic: str
-    use_sandbox: bool
+    `endpoint_url` is set in local dev (pointing at LocalStack) and left
+    None in prod so boto3 resolves the regional endpoint.
+    """
 
-
-@dataclass(frozen=True)
-class FcmConfig:
-    """Firebase Cloud Messaging credentials."""
-
-    credentials_path: str
+    region: str
+    apns_app_arn: str
+    fcm_app_arn: str
+    endpoint_url: str | None
 
 
-def load_push_config() -> PushConfig | None:
-    """Load APNS config from env vars. Returns None when any required var is missing."""
-    key_path = os.environ.get('APNS_KEY_PATH')
-    key_id = os.environ.get('APNS_KEY_ID')
-    team_id = os.environ.get('APNS_TEAM_ID')
-    topic = os.environ.get('APNS_TOPIC')
+def load_sns_config() -> SnsConfig | None:
+    """Load SNS config from env vars. Returns None when a required var is missing."""
+    region = os.environ.get('AWS_REGION')
+    apns_app_arn = os.environ.get('SNS_APNS_APP_ARN')
+    fcm_app_arn = os.environ.get('SNS_FCM_APP_ARN')
 
-    if not all([key_path, key_id, team_id, topic]):
+    if not region or not apns_app_arn or not fcm_app_arn:
         return None
 
-    assert key_path is not None
-    assert key_id is not None
-    assert team_id is not None
-    assert topic is not None
-
-    return PushConfig(
-        key_path=key_path,
-        key_id=key_id,
-        team_id=team_id,
-        topic=topic,
-        use_sandbox=os.environ.get('APNS_USE_SANDBOX', '').lower() in ('1', 'true', 'yes'),
+    return SnsConfig(
+        region=region,
+        apns_app_arn=apns_app_arn,
+        fcm_app_arn=fcm_app_arn,
+        endpoint_url=os.environ.get('AWS_ENDPOINT_URL') or None,
     )
-
-
-def load_fcm_config() -> FcmConfig | None:
-    """Load FCM config from env vars. Returns None when the credential path is missing."""
-    credentials_path = os.environ.get('FCM_CREDENTIALS_PATH')
-    if not credentials_path:
-        return None
-    return FcmConfig(credentials_path=credentials_path)

@@ -18,6 +18,7 @@ def upsert_device_token(
     player_id: uuid.UUID,
     token: str,
     provider: str = 'apns',
+    endpoint_arn: str | None = None,
 ) -> DeviceToken:
     """Insert or update a device token for a player."""
     session = get_session()
@@ -26,6 +27,7 @@ def upsert_device_token(
     if existing:
         existing.token = token
         existing.provider = token_provider
+        existing.endpoint_arn = endpoint_arn
         existing.updated_at = datetime.now(UTC)
         session.add(existing)
         session.flush()
@@ -35,6 +37,7 @@ def upsert_device_token(
         player_id=player_id,
         token=token,
         provider=token_provider,
+        endpoint_arn=endpoint_arn,
     )
     session.add(dt)
     session.flush()
@@ -62,6 +65,21 @@ def delete_device_token(player_id: uuid.UUID) -> None:
     """Delete a device token by player_id (for stale token cleanup)."""
     session = get_session()
     dt = session.get(DeviceToken, player_id)
+    if dt:
+        session.delete(dt)
+        session.flush()
+
+
+def delete_device_token_by_endpoint(endpoint_arn: str) -> None:
+    """Delete the device token row bound to an SNS endpoint ARN.
+
+    Called from the worker after SNS reports the endpoint as disabled/invalid
+    during publish. No-op if no row matches (already cleaned up).
+    """
+    session = get_session()
+    dt = session.scalars(
+        select(DeviceToken).where(DeviceToken.endpoint_arn == endpoint_arn)
+    ).one_or_none()
     if dt:
         session.delete(dt)
         session.flush()

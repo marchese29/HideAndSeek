@@ -1,19 +1,23 @@
-"""Push notification service supporting APNs and FCM providers."""
+"""SNS Mobile Push notification service."""
 
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 import uuid
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import boto3
 import structlog
-from aioapns import APNs, NotificationRequest
-from firebase_admin import credentials, initialize_app, messaging
-from firebase_admin.exceptions import FirebaseError
+from botocore.exceptions import ClientError
 
-from hideandseek_core.config import FcmConfig, PushConfig
+from hideandseek_core.config import SnsConfig
 from hideandseek_models.types import PushEventType, TokenProvider
+
+if TYPE_CHECKING:
+    from mypy_boto3_sns import SNSClient
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -46,127 +50,151 @@ def _build_data(
     return data
 
 
-class ApnsProvider:
-    """Sends push notifications via Apple Push Notification service."""
+def _build_envelope(data: dict[str, Any], *, alert: str | None, silent: bool) -> str:
+    """Build the SNS MessageStructure='json' envelope carrying both APNS + FCM payloads.
 
-    def __init__(self, config: PushConfig) -> None:
-        self._client = APNs(
-            key=config.key_path,
-            key_id=config.key_id,
-            team_id=config.team_id,
-            topic=config.topic,
-            use_sandbox=config.use_sandbox,
+    SNS selects the APNs or GCM variant based on the target endpoint's parent
+    platform application, so we build both every time.
+    """
+    if silent:
+        apns_payload: dict[str, Any] = {
+            'aps': {'content-available': 1},
+            'data': data,
+        }
+    else:
+        aps: dict[str, Any] = {
+            'content-available': 1,
+            'interruption-level': 'time-sensitive',
+        }
+        if alert:
+            aps['alert'] = {'title': 'Hide & Seek', 'body': alert}
+            aps['sound'] = 'default'
+        apns_payload = {'aps': aps, 'data': data}
+
+    # FCM requires all data values to be strings.
+    fcm_data: dict[str, str] = {}
+    for k, v in data.items():
+        fcm_data[k] = v if isinstance(v, str) else json.dumps(v)
+
+    fcm_payload: dict[str, Any] = {'data': fcm_data, 'android': {'priority': 'high'}}
+    if not silent and alert:
+        fcm_payload['notification'] = {'title': 'Hide & Seek', 'body': alert}
+
+    envelope = {
+        'default': alert or '',
+        'APNS': json.dumps(apns_payload),
+        'APNS_SANDBOX': json.dumps(apns_payload),
+        'GCM': json.dumps(fcm_payload),
+    }
+    return json.dumps(envelope)
+
+
+def _make_client(config: SnsConfig) -> SNSClient:
+    return boto3.client(
+        'sns',
+        region_name=config.region,
+        endpoint_url=config.endpoint_url,
+    )
+
+
+# SNS reports "Endpoint arn:aws:sns:... already exists" when CreatePlatformEndpoint
+# sees the token already registered; we parse the ARN out to re-enable it.
+_EXISTING_ARN_RE = re.compile(r'arn:aws:sns:\S+')
+
+
+def create_platform_endpoint(
+    config: SnsConfig,
+    token: str,
+    provider: TokenProvider,
+) -> str:
+    """Create or re-enable an SNS platform endpoint for a device token.
+
+    Returns the endpoint ARN. When SNS reports the token already has an
+    endpoint, parse the existing ARN out of the error and re-enable it.
+    """
+    client = _make_client(config)
+    app_arn = config.apns_app_arn if provider == TokenProvider.apns else config.fcm_app_arn
+
+    try:
+        resp = client.create_platform_endpoint(
+            PlatformApplicationArn=app_arn,
+            Token=token,
         )
+        return resp['EndpointArn']
+    except client.exceptions.InvalidParameterException as e:
+        message = e.response.get('Error', {}).get('Message', '')
+        match = _EXISTING_ARN_RE.search(message)
+        if not match:
+            raise
+        existing_arn = match.group(0).rstrip('.,')
+        logger.info('sns_endpoint_reenable', arn=existing_arn, provider=provider.value)
+        client.set_endpoint_attributes(
+            EndpointArn=existing_arn,
+            Attributes={'Token': token, 'Enabled': 'true'},
+        )
+        return existing_arn
+
+
+_DEAD_ENDPOINT_CODES = frozenset({'EndpointDisabled', 'NotFound', 'InvalidParameter'})
+
+
+class SnsProvider:
+    """Publishes push notifications via AWS SNS Mobile Push."""
+
+    def __init__(self, config: SnsConfig) -> None:
+        self._client: SNSClient = _make_client(config)
 
     async def send(
         self,
-        tokens: list[str],
+        endpoint_arns: list[str],
         data: dict[str, Any],
         *,
         alert: str | None = None,
         silent: bool = False,
-    ) -> None:
-        """Send an APNs notification to the given tokens."""
-        if silent:
-            message: dict[str, Any] = {
-                'aps': {'content-available': 1},
-                'data': data,
-            }
-        else:
-            aps: dict[str, Any] = {
-                'content-available': 1,
-                'interruption-level': 'time-sensitive',
-            }
-            if alert:
-                aps['alert'] = {'title': 'Hide & Seek', 'body': alert}
-                aps['sound'] = 'default'
-            message = {'aps': aps, 'data': data}
+    ) -> list[str]:
+        """Publish to each endpoint; return ARNs SNS reported as disabled/invalid.
 
-        for token in tokens:
-            request = NotificationRequest(device_token=token, message=message)
+        Re-raises non-dead-endpoint ClientErrors so Celery can retry.
+        """
+        envelope = _build_envelope(data, alert=alert, silent=silent)
+        dead: list[str] = []
+
+        for arn in endpoint_arns:
             try:
-                response = await self._client.send_notification(request)
-                if not response.is_successful:
-                    logger.warning(
-                        'apns_error',
-                        token=f'{token[:8]}...{token[-4:]}',
-                        status=response.status,
-                        description=response.description,
-                    )
-            except Exception:
-                logger.exception(
-                    'push_send_failed',
-                    provider='apns',
-                    token=f'{token[:8]}...{token[-4:]}',
+                await asyncio.to_thread(
+                    self._client.publish,
+                    TargetArn=arn,
+                    MessageStructure='json',
+                    Message=envelope,
                 )
+            except ClientError as e:
+                code = e.response.get('Error', {}).get('Code', '')
+                if code in _DEAD_ENDPOINT_CODES:
+                    logger.warning('sns_endpoint_dead', arn=arn, code=code)
+                    dead.append(arn)
+                else:
+                    raise
 
-
-class FcmProvider:
-    """Sends push notifications via Firebase Cloud Messaging."""
-
-    def __init__(self, config: FcmConfig) -> None:
-        cred = credentials.Certificate(config.credentials_path)
-        self._app = initialize_app(cred, name='hideandseek-fcm')
-
-    async def send(
-        self,
-        tokens: list[str],
-        data: dict[str, Any],
-        *,
-        alert: str | None = None,
-        silent: bool = False,
-    ) -> None:
-        """Send an FCM notification to the given tokens."""
-        # FCM data values must be strings
-        str_data = {k: str(v) for k, v in data.items()}
-
-        notification = None
-        if not silent and alert:
-            notification = messaging.Notification(title='Hide & Seek', body=alert)
-
-        for token in tokens:
-            message = messaging.Message(
-                token=token,
-                data=str_data,
-                notification=notification,
-                android=messaging.AndroidConfig(priority='high'),
-            )
-            try:
-                await asyncio.to_thread(messaging.send, message, app=self._app)
-            except FirebaseError:
-                logger.exception(
-                    'push_send_failed',
-                    provider='fcm',
-                    token=f'{token[:8]}...{token[-4:]}',
-                )
+        return dead
 
 
 class PushService:
-    """Orchestrates push delivery across APNs and FCM providers.
+    """Orchestrates push delivery.
 
-    No-ops when neither provider is configured (dev/test).
+    No-op when SnsConfig is missing (dev/test without LocalStack).
     """
 
-    def __init__(
-        self,
-        apns_config: PushConfig | None,
-        fcm_config: FcmConfig | None,
-    ) -> None:
-        self._apns: ApnsProvider | None = None
-        self._fcm: FcmProvider | None = None
-
-        if apns_config:
-            self._apns = ApnsProvider(apns_config)
-            logger.info('push_provider_initialized', provider='apns')
-        if fcm_config:
-            self._fcm = FcmProvider(fcm_config)
-            logger.info('push_provider_initialized', provider='fcm')
-        if not apns_config and not fcm_config:
+    def __init__(self, sns_config: SnsConfig | None) -> None:
+        self._provider: SnsProvider | None = None
+        if sns_config is not None:
+            self._provider = SnsProvider(sns_config)
+            logger.info('push_provider_initialized', provider='sns')
+        else:
             logger.info('push_service_initialized', mode='noop')
 
     async def send_to_tokens(
         self,
-        token_pairs: Sequence[tuple[str, str | TokenProvider]],
+        endpoint_arns: Sequence[str],
         game_id: uuid.UUID,
         event_type: PushEventType,
         *,
@@ -177,23 +205,10 @@ class PushService:
         question_status: str | None = None,
         parameters: dict[str, Any] | None = None,
         answer: str | None = None,
-    ) -> None:
-        """Send push notifications to device tokens, dispatching by provider.
-
-        Args:
-            token_pairs: List of (token, provider) tuples extracted from DB.
-            game_id: The game this notification is about.
-            event_type: Event identifier (e.g. "game_started", "question_asked").
-            alert: Human-readable alert body. Omitted for silent pushes.
-            silent: If True, sends data-only (no alert/sound).
-            question_id: Optional question UUID for question events.
-            question_type: Optional question type (radar/thermometer).
-            question_status: Optional question status.
-            parameters: Optional question parameters dict.
-            answer: Optional question answer value.
-        """
-        if not token_pairs:
-            return
+    ) -> list[str]:
+        """Publish to the given endpoint ARNs; return disabled ARNs for caller cleanup."""
+        if not endpoint_arns:
+            return []
 
         data = _build_data(
             game_id,
@@ -205,43 +220,19 @@ class PushService:
             answer=answer,
         )
 
-        # Group tokens by provider
-        apns_tokens: list[str] = []
-        fcm_tokens: list[str] = []
-        for token, provider in token_pairs:
-            if provider == TokenProvider.fcm:
-                fcm_tokens.append(token)
-            else:
-                apns_tokens.append(token)
+        if self._provider is None:
+            for arn in endpoint_arns:
+                logger.info(
+                    'push_noop',
+                    event_type=event_type,
+                    game_id=str(game_id),
+                    arn=arn,
+                )
+            return []
 
-        # Dispatch to available providers
-        if apns_tokens:
-            if self._apns:
-                await self._apns.send(apns_tokens, data, alert=alert, silent=silent)
-            else:
-                for token in apns_tokens:
-                    logger.info(
-                        'push_noop',
-                        provider='apns',
-                        event_type=event_type,
-                        game_id=str(game_id),
-                        token=f'{token[:8]}...{token[-4:]}',
-                    )
-
-        if fcm_tokens:
-            if self._fcm:
-                await self._fcm.send(fcm_tokens, data, alert=alert, silent=silent)
-            else:
-                for token in fcm_tokens:
-                    logger.info(
-                        'push_noop',
-                        provider='fcm',
-                        event_type=event_type,
-                        game_id=str(game_id),
-                        token=f'{token[:8]}...{token[-4:]}',
-                    )
-
-    async def close(self) -> None:
-        """Clean up provider connections."""
-        self._apns = None
-        self._fcm = None
+        return await self._provider.send(
+            list(endpoint_arns),
+            data,
+            alert=alert,
+            silent=silent,
+        )

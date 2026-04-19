@@ -66,8 +66,8 @@ from hideandseek_core.logic.endgame import (
 from hideandseek_core.logic.lobby import create_game_with_host, validate_color_available
 from hideandseek_core.logic.lobby import join_game as lobby_join_game
 from hideandseek_core.logic.lobby import remove_player as lobby_remove_player
+from hideandseek_core.logic.push_registration import register_push_endpoint
 from hideandseek_core.logic.station import validate_station_election
-from hideandseek_core.queries.device_tokens import upsert_device_token
 from hideandseek_core.queries.effective_map import get_effective_map_data
 from hideandseek_core.queries.games import (
     find_game_by_join_code,
@@ -131,7 +131,7 @@ def create_game(
     )
 
     if body.device_token:
-        upsert_device_token(
+        register_push_endpoint(
             player_id=player.id,
             token=body.device_token,
             provider=body.device_token_provider,
@@ -165,7 +165,7 @@ def join_game(
     emit(PlayerJoinedEvent(game=game, player=player))
 
     if body.device_token:
-        upsert_device_token(
+        register_push_endpoint(
             player_id=player.id,
             token=body.device_token,
             provider=body.device_token_provider,
@@ -242,7 +242,7 @@ def patch_player(
     if 'role' in updates:
         player.role = updates['role']
     if updates.get('device_token'):
-        upsert_device_token(
+        register_push_endpoint(
             player_id=auth_player_id,
             token=updates['device_token'],
             provider=body.device_token_provider,

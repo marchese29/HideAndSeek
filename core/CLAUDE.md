@@ -18,8 +18,9 @@ No tests — core is exercised by the server test suite (`cd server && uv run py
 src/hideandseek_core/
   db.py                # Engine factory, session ContextVar, register(), session_scope()
   logging.py           # Shared setup_logging() for server / worker / reconciler
-  config.py            # Push config (APNs + FCM), env-var loading
-  push.py              # PushService, ApnsProvider, FcmProvider
+  config.py            # SnsConfig (region + APNs/FCM platform app ARNs + endpoint_url)
+  push.py              # SnsProvider (boto3 sns:Publish), create_platform_endpoint(),
+                       #   PushService (no-ops when SnsConfig is None)
   redis_client.py      # Redis client factory (sync + async)
   geo.py               # Pure geodesic distance functions (pyproj)
   geo_helpers.py       # Shapely-to-GeoJSON conversion helpers
@@ -31,6 +32,7 @@ src/hideandseek_core/
   queries/             # DB query functions by domain
   logic/               # Business logic (session-free, side-effect-free beyond DB)
     location.py        # process_location_update() — enrichment, proximity, freeze orchestration
+    push_registration.py  # register_push_endpoint() — inline CreatePlatformEndpoint + upsert
 ```
 
 ## Architecture Rules
@@ -105,6 +107,16 @@ Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×
 ## Logging
 
 `logging.py` provides `setup_logging()` — the single structlog/stdlib config used by all three services (server's lifespan, worker's `setup_logging` Celery signal, reconciler's `main()`). Handles root level, renderer (console vs JSON), `sqlalchemy.engine` routing, and third-party noise suppression. Server wraps this with its own `hideandseek.logging.setup_logging()` to additionally configure the `hideandseek.access` logger for request/response lines. Env vars: `ENV` (`local` / `development` / `production`), `LOG_FORMAT=json`, `SQL_ECHO=1|true|yes`.
+
+## Push Notifications — SNS Mobile Push
+
+Single-provider architecture on top of AWS SNS Mobile Push. `SnsProvider` calls `sns:Publish` against a per-device platform endpoint ARN; SNS routes to APNs or FCM based on the endpoint's parent platform application.
+
+- **`SnsConfig`** (`config.py`) — loaded from env vars: `AWS_REGION`, `SNS_APNS_APP_ARN`, `SNS_FCM_APP_ARN`, optional `AWS_ENDPOINT_URL` (LocalStack in dev). `load_sns_config()` returns `None` when any required var is missing — `PushService(None)` then no-ops. Dev without LocalStack works; tests don't need mocks for the config path.
+- **Typed client**: boto3 usage goes through `mypy_boto3_sns.SNSClient` (dev dep `boto3-stubs[sns]`). Typed exceptions (`client.exceptions.InvalidParameterException`) are used instead of string-matching on `Error.Code` — the one exception is parsing an existing-endpoint ARN out of the duplicate-registration error message, which AWS only exposes as free text.
+- **Envelope**: `_build_envelope()` assembles `{"default", "APNS", "APNS_SANDBOX", "GCM"}` every call and passes `MessageStructure='json'`. APNs payload carries `aps` (alert/sound on standard pushes, `content-available=1` for silent) + `data`. FCM payload carries stringified `data` (FCM requires string values) and optional `notification`.
+- **Registration** (`logic/push_registration.py → register_push_endpoint`): routers call this on device-token registration. Calls `sns:CreatePlatformEndpoint` inline, persists the ARN on `DeviceToken`. On the duplicate-endpoint error, parses the existing ARN out of the message and calls `set_endpoint_attributes(Enabled=true, Token=...)`.
+- **Dead-token cleanup** — synchronous, not async. When SNS flips an endpoint to disabled (APNs/FCM feedback), the next `sns:Publish` to that ARN raises `EndpointDisabled` (or `NotFound` / `InvalidParameter`). `SnsProvider.send()` collects those ARNs and returns them; the `send_push` worker task calls `delete_device_token_by_endpoint(arn)` inline. Lossy by one delivery — acceptable at hobby scale. A follow-up issue proposes EventBridge/Lambda for eager feedback.
 
 ## Conventions
 

@@ -1823,22 +1823,6 @@ export interface components {
             hider_station_id: string | null;
         };
         /**
-         * FoundClaimEvent
-         * @description A seeker claims to have found the hiders — hider channel only.
-         */
-        FoundClaimEvent: {
-            /**
-             * Seeker Player Id
-             * Format: uuid
-             */
-            seeker_player_id: string;
-        };
-        /**
-         * FoundClaimExpiredEvent
-         * @description Found claim timed out — both channels.
-         */
-        FoundClaimExpiredEvent: Record<string, never>;
-        /**
          * GameHostChangedEvent
          * @description Host transferred during active gameplay — both channels.
          */
@@ -1874,12 +1858,21 @@ export interface components {
             proximity_tier: components["schemas"]["ProximityTier"];
         };
         /**
-         * ProximityDeescalatedEvent
-         * @description All seekers pulled back — hider channel only.
+         * FoundClaimEvent
+         * @description A seeker claims to have found the hiders — hider channel only.
          */
-        ProximityDeescalatedEvent: {
-            proximity_tier: components["schemas"]["ProximityTier"];
+        FoundClaimEvent: {
+            /**
+             * Seeker Player Id
+             * Format: uuid
+             */
+            seeker_player_id: string;
         };
+        /**
+         * FoundClaimExpiredEvent
+         * @description Found claim timed out — both channels.
+         */
+        FoundClaimExpiredEvent: Record<string, never>;
         /**
          * HiderQuestionAnsweredEvent
          * @description A question was answered — hider channel only.
@@ -2073,11 +2066,6 @@ export interface components {
             player_id: string;
         };
         /**
-         * FoundClaimRejectedEvent
-         * @description Hiders rejected the found claim — seeker channel only.
-         */
-        FoundClaimRejectedEvent: Record<string, never>;
-        /**
          * GameDissolvedEvent
          * @description Game dissolved during active gameplay — both channels.
          */
@@ -2096,6 +2084,18 @@ export interface components {
              */
             effective_radius: number;
         };
+        /**
+         * ProximityDeescalatedEvent
+         * @description All seekers pulled back — hider channel only.
+         */
+        ProximityDeescalatedEvent: {
+            proximity_tier: components["schemas"]["ProximityTier"];
+        };
+        /**
+         * FoundClaimRejectedEvent
+         * @description Hiders rejected the found claim — seeker channel only.
+         */
+        FoundClaimRejectedEvent: Record<string, never>;
         /**
          * FeatureParamsResponse
          * @description Parameters for a matching or measuring question.
