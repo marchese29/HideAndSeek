@@ -15,6 +15,7 @@ UV workspace with a root `pyproject.toml` and five Python packages (`models/`, `
 - `openapi/` — Auto-generated OpenAPI spec from FastAPI. See `openapi/CLAUDE.md`.
 - `design/` — AI-generated design artifacts. See `design/CLAUDE.md`.
 - `hooks/` — Git hooks (symlinked into `.git/hooks/`; see Setup below).
+- `infra/cdk/` — AWS CDK app (TypeScript) for deploying the backend. Sibling of the uv workspace, **not** a uv member. No personal info (account IDs, domain names, hosted zone IDs) is committed — everything personal flows in via env vars or CDK context. See `infra/cdk/CLAUDE.md`.
 - `infra/localstack/init-aws.sh` — LocalStack ready.d hook; bootstraps the APNs/FCM SNS platform applications so local dev matches prod.
 - `docker-compose.yml` — Docker Compose (PostGIS + Redis + LocalStack + API server + Celery worker + reconciler). LocalStack emulates AWS SNS for local push delivery. Because there is no Alembic yet, DB schema changes (e.g. the `DeviceToken.endpoint_arn` column) require `docker compose down -v` to recreate the dev database.
 - `scripts/dev.sh` — Local dev launcher (uvicorn + Celery worker with Redis).
@@ -38,12 +39,13 @@ CLAUDE.md files exist at:
 - `server/CLAUDE.md` — server commands, style, conventions
 - `openapi/CLAUDE.md` — how the spec is generated and used
 - `design/CLAUDE.md` — design artifact conventions
+- `infra/cdk/CLAUDE.md` — CDK app conventions (including the no-personal-info rule)
 
 ## Conventions
 
 - Issue tracking: use `bd` (beads) CLI. Run `bd onboard` to get started.
 - Git hooks: `hooks/pre-commit` is the versioned pre-commit hook (server checks + OpenAPI regen + beads JSONL flush). It's symlinked into `.git/hooks/`. Beads installs its own shims for other hooks (`pre-push`, `post-merge`, `post-checkout`, `prepare-commit-msg`) directly in `.git/hooks/`. See Setup below.
-- The pre-commit hook runs in dependency order: models checks → core checks → worker checks → reconciler checks → server checks → OpenAPI regen → API types regen → mobile checks. Models changes cascade to core, worker, reconciler, server, and OpenAPI regen. Core changes cascade to worker, reconciler, server, and OpenAPI regen. Worker changes cascade to reconciler and server.
+- The pre-commit hook runs in dependency order: models checks → core checks → worker checks → reconciler checks → server checks → OpenAPI regen → API types regen → mobile checks → CDK checks. Models changes cascade to core, worker, reconciler, server, and OpenAPI regen. Core changes cascade to worker, reconciler, server, and OpenAPI regen. Worker changes cascade to reconciler and server. CDK checks are independent — no upstream cascade.
 - The OpenAPI regen step auto-stages the updated spec (`git add openapi/openapi.yaml`), so it's included in the commit automatically — no manual step needed.
 - Hook steps use `run_if_changed` with hash caching (`.git/hooks-cache/`) to skip work when staged content hasn't changed since the last successful run.
 - To add a new cached hook step: write a script in `hooks/`, then add a `run_if_changed` call in `hooks/pre-commit`. Signature: `run_if_changed <cache_key> <skip_msg> <run_msg> <command> <path...>` — paths are listed after the command, supporting multiple trigger paths.

@@ -110,3 +110,10 @@ run_if_changed "mobile-checks" \
     "Mobile code changed — running checks..." \
     hooks/mobile-checks.sh \
     "mobile/" || exit 1
+
+# --- CDK checks (independent of other packages) ---
+run_if_changed "cdk-checks" \
+    "CDK checks passed on this content — skipping." \
+    "CDK code changed — running checks..." \
+    hooks/cdk-checks.sh \
+    "infra/cdk/" || exit 1
