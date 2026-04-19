@@ -48,6 +48,7 @@ CLAUDE.md files exist at:
 - To add a new cached hook step: write a script in `hooks/`, then add a `run_if_changed` call in `hooks/pre-commit`. Signature: `run_if_changed <cache_key> <skip_msg> <run_msg> <command> <path...>` — paths are listed after the command, supporting multiple trigger paths.
 - OpenAPI spec is the contract between server and mobile app — never edit it directly.
 - SSE event types are auto-synced: gameplay events (core) and game state snapshots (server) are injected into the OpenAPI spec by `generate_openapi.py`, then `openapi-typescript` generates TypeScript types. New events auto-register via `GameplayEventSchema` base class (core) or `SSEExposed` mixin (server). `mobile/src/types/gameplay.ts` provides short aliases.
+- Logging: `hideandseek_core.logging.setup_logging()` is the single structlog config used by server (lifespan), worker (Celery `setup_logging` signal), and reconciler (`main()`). Env-driven: `ENV=local|development|production` controls level/renderer, `LOG_FORMAT=json` overrides, `SQL_ECHO=1` forces SQL visible. Server additionally owns the `hideandseek.access` logger for request/response lines.
 
 ## Beads (Issue Tracking)
 

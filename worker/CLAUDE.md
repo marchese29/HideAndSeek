@@ -53,8 +53,12 @@ All tasks are idempotent: they re-check preconditions inside `session_scope()` a
 docker compose up --build    # Worker runs alongside API, PostGIS, Redis
 
 # Local dev (requires: docker compose up -d postgres redis)
-cd server && uv run celery -A hideandseek_worker.celery_app worker --loglevel=info
+cd server && uv run celery -A hideandseek_worker.celery_app worker
 ```
+
+## Logging
+
+`celery_app.py` connects Celery's `setup_logging` signal to `hideandseek_core.logging.setup_logging()`, and `celery_config.py` sets `worker_hijack_root_logger = False` so Celery leaves our config alone. Level/format are driven by `ENV` (not `--loglevel`) — identical behavior to server and reconciler.
 
 ## Conventions
 

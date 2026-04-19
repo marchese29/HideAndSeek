@@ -39,3 +39,7 @@ result_serializer = 'json'
 accept_content = ['json']
 timezone = 'UTC'
 enable_utc = True
+
+# Let hideandseek_core.logging.setup_logging() own root-logger config —
+# the setup_logging signal handler in celery_app.py installs it.
+worker_hijack_root_logger = False

@@ -38,6 +38,15 @@ Two modes — both serve on `localhost:8000`, both use PostgreSQL:
 
 In production (`ENV=production`): INFO level, JSON renderer, stderr only.
 
+## Logging
+
+The generic structlog config (root level, renderer, `sqlalchemy.engine` routing, third-party noise suppression) lives in `hideandseek_core.logging.setup_logging()`, shared with the worker and reconciler. Server's `hideandseek.logging.setup_logging()` wraps that and additionally builds the `hideandseek.access` logger used by `AccessLogMiddleware` — writing to `server/logs/access.log` in `local` mode, stderr in all modes. Called once from the FastAPI lifespan in `main.py`.
+
+Env vars (shared across all three services):
+- `ENV=local|development|production` — `local`/`development` get DEBUG + console renderer, `production` gets INFO + JSON renderer.
+- `LOG_FORMAT=json` — force JSON regardless of `ENV`.
+- `SQL_ECHO=1|true|yes` — force `sqlalchemy.engine` to INFO (SQL visible). On by default in `local`.
+
 ## Verification
 
 Always verify server changes with **both** automated checks and manual API calls before committing.

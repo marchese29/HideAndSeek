@@ -25,6 +25,7 @@ from types import FrameType
 import structlog
 
 from hideandseek_core.db import session_scope
+from hideandseek_core.logging import setup_logging
 from hideandseek_core.logic.timers import (
     find_overdue_answerable_questions,
     find_overdue_found_claims,
@@ -88,6 +89,7 @@ def tick() -> None:
 
 
 def main() -> None:
+    setup_logging()
     signal.signal(signal.SIGTERM, _handle_shutdown)
     signal.signal(signal.SIGINT, _handle_shutdown)
     logger.info('reconciler_started', tick_seconds=TICK_SECONDS)

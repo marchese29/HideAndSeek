@@ -54,6 +54,10 @@ docker compose up --build          # reconciler runs alongside api, worker, post
 uv run python -m hideandseek_reconciler
 ```
 
+## Logging
+
+`main()` calls `hideandseek_core.logging.setup_logging()` before entering the poll loop. Level/format follow `ENV` (shared with server + worker).
+
 ## Conventions
 
 - Same style as server/core/worker: single quotes, `from __future__ import annotations`, ruff + pyright.

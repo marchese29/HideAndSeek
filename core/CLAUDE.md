@@ -17,6 +17,7 @@ No tests — core is exercised by the server test suite (`cd server && uv run py
 ```
 src/hideandseek_core/
   db.py                # Engine factory, session ContextVar, register(), session_scope()
+  logging.py           # Shared setup_logging() for server / worker / reconciler
   config.py            # Push config (APNs + FCM), env-var loading
   push.py              # PushService, ApnsProvider, FcmProvider
   redis_client.py      # Redis client factory (sync + async)
@@ -100,6 +101,10 @@ Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×
 - `expire_found_claim(game) -> bool` — called by the worker's `auto_dismiss_found_claim` task; returns True if a live claim was cleared (no-op if already resolved or game not active).
 
 **`end_reason` is set at every terminal transition.** `confirm_found_claim()` sets `found`; `end_game()` in `routers/games.py` sets `host_ended`; `remove_player()` in `logic/lobby.py` sets `dissolved` at each dissolution site. `GameEndedEvent.reason: EndReason` carries the value on the wire (values: `found`, `host_ended`) so clients can distinguish completion reasons without a follow-up GET. `GameDissolvedEvent.reason: str` stays granular (`last_player` / `no_hiders_remaining` / `no_seekers_remaining`) — orthogonal to the coarse-grained `EndReason.dissolved` stored on the game.
+
+## Logging
+
+`logging.py` provides `setup_logging()` — the single structlog/stdlib config used by all three services (server's lifespan, worker's `setup_logging` Celery signal, reconciler's `main()`). Handles root level, renderer (console vs JSON), `sqlalchemy.engine` routing, and third-party noise suppression. Server wraps this with its own `hideandseek.logging.setup_logging()` to additionally configure the `hideandseek.access` logger for request/response lines. Env vars: `ENV` (`local` / `development` / `production`), `LOG_FORMAT=json`, `SQL_ECHO=1|true|yes`.
 
 ## Conventions
 
