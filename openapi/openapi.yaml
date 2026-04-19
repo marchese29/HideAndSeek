@@ -1559,20 +1559,13 @@ paths:
                   type: string
                 type: object
                 title: Response Root  Get
-  /health:
+  /healthz:
     get:
-      summary: Health
-      operationId: health_health_get
+      summary: Healthz
+      operationId: healthz_healthz_get
       responses:
         '200':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  type: string
-                type: object
-                title: Response Health Health Get
 components:
   schemas:
     AskQuestionRequest:

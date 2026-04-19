@@ -717,15 +717,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/health": {
+    "/healthz": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Health */
-        get: operations["health_health_get"];
+        /** Healthz */
+        get: operations["healthz_healthz_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3930,7 +3930,7 @@ export interface operations {
             };
         };
     };
-    health_health_get: {
+    healthz_healthz_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3944,11 +3944,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
+                content?: never;
             };
         };
     };
