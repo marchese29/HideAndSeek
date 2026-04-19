@@ -7,10 +7,12 @@ import { API_BASE_URL } from '@/api/client';
 import { queryClient } from '@/api/queryClient';
 import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
+import { useToastStore } from '@/stores/toastStore';
 import type {
   FoundClaimDelta,
   GameDissolvedDelta,
   GameEndedDelta,
+  GameInfo,
   HiderGameState,
   HiderQuestionAnsweredDelta,
   HidingZoneExpandedDelta,
@@ -29,6 +31,20 @@ import type {
   StationElectionDelta,
 } from '@/types/gameplay';
 import { createSequenceTracker } from '@/utils/sseSequencing';
+
+function resolvePlayerName(playerId: string): string | undefined {
+  const gameplay = useGameplayStore.getState();
+  if (gameplay.status !== 'connected') return undefined;
+  const fromHiders = gameplay.state.hiders.find((p) => p.id === playerId);
+  if (fromHiders) return fromHiders.name;
+  return gameplay.state.seekers.find((p) => p.id === playerId)?.name;
+}
+
+function formatRadius(radius: number, convention: string | undefined): string {
+  const rounded = Math.round(radius * 10) / 10;
+  const unit = convention === 'metric' ? 'km' : convention === 'imperial' ? 'mi' : '';
+  return unit ? `${rounded} ${unit}` : `${rounded}`;
+}
 
 type GameplayEventType =
   | 'game_state'
@@ -202,7 +218,7 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           if (data) {
             useGameplayStore.getState().updateProximityTier(data.proximity_tier);
             const message = proximityEscalationMessage(data.proximity_tier);
-            if (message) Alert.alert('Seekers Approaching', message);
+            if (message) useToastStore.getState().push({ message, severity: 'warning' });
           }
         }),
       );
@@ -214,7 +230,7 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           if (data) {
             useGameplayStore.getState().updateProximityTier(data.proximity_tier);
             const message = proximityDeescalationMessage(data.proximity_tier);
-            if (message) Alert.alert('Seekers Pulling Back', message);
+            if (message) useToastStore.getState().push({ message, severity: 'info' });
           }
         }),
       );
@@ -296,7 +312,7 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
           const data = parseData<PlayerLeftDelta>(event);
           if (!data) return;
           if (data.player_id === playerId) {
-            // Kicked by host
+            // Kicked by host — blocking Alert gates navigation away from the game.
             Alert.alert('Removed', 'You were removed from the game.');
             useAppStore.getState().clearSession();
             closedRef.current = true;
@@ -304,7 +320,14 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
             if (router.canDismiss()) router.dismissAll();
             router.replace('/');
           } else {
+            // Resolve name BEFORE removePlayer() strips the player from the roster.
+            const name = resolvePlayerName(data.player_id);
             useGameplayStore.getState().removePlayer(data.player_id);
+            if (name) {
+              useToastStore
+                .getState()
+                .push({ message: `${name} has left the game`, severity: 'info' });
+            }
           }
         }),
       );
@@ -313,9 +336,18 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         'host_changed',
         seq.wrap((event) => {
           const data = parseData<HostChangedDelta>(event);
-          if (data) {
-            useGameplayStore.getState().setHostPlayerId(data.new_host_player_id);
+          if (!data) return;
+          if (data.new_host_player_id === playerId) {
+            useToastStore.getState().push({ message: 'You are the new host', severity: 'info' });
+          } else {
+            const name = resolvePlayerName(data.new_host_player_id);
+            if (name) {
+              useToastStore
+                .getState()
+                .push({ message: `${name} has been made the new host`, severity: 'info' });
+            }
           }
+          useGameplayStore.getState().setHostPlayerId(data.new_host_player_id);
         }),
       );
 
@@ -355,13 +387,15 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         'hiding_zone_expanded',
         seq.wrap((event) => {
           const data = parseData<HidingZoneExpandedDelta>(event);
-          if (data) {
-            useGameplayStore.getState().applyHidingZoneExpanded();
-            void queryClient.invalidateQueries({ queryKey: ['hiding-zone'] });
-            if (role === 'seeker') {
-              Alert.alert('Hiding Zone Expanded', 'The hider has expanded the hiding zone!');
-            }
-          }
+          if (!data) return;
+          useGameplayStore.getState().applyHidingZoneExpanded();
+          void queryClient.invalidateQueries({ queryKey: ['hiding-zone'] });
+          const gameInfo = queryClient.getQueryData<GameInfo>(['game-info', gameId]);
+          const radius = formatRadius(data.effective_radius, gameInfo?.distance_convention);
+          useToastStore.getState().push({
+            message: `The hiding zone has been expanded to ${radius}`,
+            severity: 'info',
+          });
         }),
       );
 
@@ -379,7 +413,10 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         'found_claim_rejected',
         seq.wrap(() => {
           if (role === 'seeker') {
-            Alert.alert('Claim Rejected', 'The hiders rejected your found claim.');
+            useToastStore.getState().push({
+              message: 'The hiders rejected your found claim',
+              severity: 'warning',
+            });
           }
         }),
       );
@@ -388,7 +425,10 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         'found_claim_expired',
         seq.wrap(() => {
           useGameplayStore.getState().clearFoundClaim();
-          Alert.alert('Claim Expired', 'The found claim timed out.');
+          useToastStore.getState().push({
+            message: 'The found claim timed out',
+            severity: 'warning',
+          });
         }),
       );
     }
@@ -417,6 +457,7 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
       esRef.current?.close();
       esRef.current = null;
       useGameplayStore.getState().reset();
+      useToastStore.getState().clear();
     };
   }, [gameId, playerId, playerSecret, role]);
 

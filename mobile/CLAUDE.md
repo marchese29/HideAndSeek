@@ -80,6 +80,7 @@ src/
     DepartureWarningBanner.tsx # Red warning banner when hiders leave the hiding zone (driven by not_in_zone field)
     FreezeWarningBanner.tsx # Red warning banner when hiders move during freeze (driven by freeze_departed field)
     LocationDeniedBanner.tsx   # Warning banner when location permission denied
+    ToastHost.tsx              # Top-of-screen toast banner for informational SSE events (slide-down + swipe-to-dismiss)
     ConnectionDot.tsx          # SSE connection status dot (green/red) — used in lobby
     question-banner/           # Question Banner (active question state for both roles)
       index.ts                 # Barrel export
@@ -146,6 +147,7 @@ Copy `.env.example` to `.env` and fill in values.
 
 - **Zustand — AppStore** (`src/store.ts`) — session context. `gameId`, `playerId`, `playerSecret`, `role` (all null initially; credentials set on create/join, role set on game start, all cleared on leave/kick). Also holds transient `pushToken` + `pushProvider` (not persisted to AsyncStorage — re-fetched each launch). Credentials are per-game and server-minted — returned in `JoinGameResponse`. Does NOT hold game data.
 - **Zustand — GameplayStore** (`src/stores/gameplayStore.ts`) — **dynamic** gameplay state hydrated from SSE. Not persisted — rebuilt from the SSE snapshot on every connection. Discriminated union: `{ status: 'connecting' }` or `{ status: 'connected', role, state }`. The `hydrate()` action replaces state from a `game_state` SSE event; `reset()` reverts to connecting. State includes `host_player_id` for leave/host-transfer UI. Does NOT include static map data (boundary, stops, routes, timing) — that's in TanStack Query via `useGameInfo`. Used by `useGameplayEvents` hook.
+- **Zustand — ToastStore** (`src/stores/toastStore.ts`) — in-app toast queue with `current` (displayed) + `queue` (unbounded FIFO). `push({ message, severity? })` sets `current` if empty, else appends to `queue`. `dismiss(id)` promotes the head of `queue` to `current`. `clear()` wipes both. Dispatched from SSE handlers in `useGameplayEvents` for informational gameplay events; rendered by `<ToastHost />`. `clear()` is called in the `useGameplayEvents` effect cleanup so toasts don't survive navigation away from the game screen.
 - **TanStack Query** (`src/api/queryClient.ts`) — server-owned data (lobby game state, maps, static game info). SSE events update the cache via `queryClient.setQueryData`. The query cache is the single source of truth for lobby game state and static game info (`useGameInfo` hook, `staleTime: Infinity`). Dynamic gameplay state uses the GameplayStore instead (SSE deltas mutate nested state that doesn't fit the query cache model).
 - `X-Player-Id` and `X-Player-Secret` headers are injected at runtime via `api.use()` middleware in `client.ts` (only when credentials exist). For endpoints where the OpenAPI spec declares these as required header parameters, also pass `header: authHeader()` in the `params` object to satisfy TypeScript types. Import `authHeader` from `@/api/auth`. `POST /games` and `POST /games/join` do not require auth headers (they mint fresh credentials).
 - API base URL is platform-aware: `localhost:8000` for iOS simulator, `10.0.2.2:8000` for Android emulator. Override via `EXPO_PUBLIC_API_BASE_URL`.
@@ -229,16 +231,29 @@ Both hooks:
 - **`question_answerable`**: Thermometer lock-in — `updateQuestionAnswerable()` updates status and sets `question_deadline`. Hider store also persists `seeker_location_end` for boundary preview.
 - **`question_answered`**: Terminal — `applyQuestionAnswered()` clears `active_question`, appends to `question_history`, updates `total_exclusion` (seeker). Payload differs by role (hider gets answer details, seeker gets exclusion geometry).
 - **`question_vetoed`** / **`question_abandoned`**: Terminal — `clearActiveQuestion()` sets `active_question = null`.
-- **`player_left`**: Player removed — `removePlayer()` filters player from `hiders`/`seekers` arrays. If the removed `player_id` matches the current player (kicked by host), shows alert, clears session, and navigates home.
-- **`host_changed`**: Host transferred — `setHostPlayerId()` updates `host_player_id` on state.
+- **`player_left`**: Player removed — `removePlayer()` filters player from `hiders`/`seekers` arrays. If the removed `player_id` matches the current player (kicked by host), shows `Alert`, clears session, and navigates home. Otherwise, resolves the player name from the store _before_ removal and pushes a toast (`"<Name> has left the game"`).
+- **`host_changed`**: Host transferred — `setHostPlayerId()` updates `host_player_id` on state. Pushes a toast: `"You are the new host"` if the new host is self, else `"<Name> has been made the new host"`.
 - **`game_dissolved`**: Game ended (last hider/seeker left) — navigates to the recap screen with `reason` (`last_player` / `no_hiders_remaining` / `no_seekers_remaining`) and `role` as params. Session credentials are cleared when the user taps Home on the recap.
 - **`game_ended`**: Host ended the game or seekers found the hiders — navigates to the recap screen with `reason` (`host_ended` / `found`) and `role` as params. Session credentials are cleared when the user taps Home on the recap.
-- **`hiding_zone_expanded`**: Hider expanded the hiding zone — sets `hiding_zone_expanded = true` on state, invalidates `['hiding-zone']` TanStack Query cache (forces re-fetch of larger polygon), shows alert to seekers.
-- **`proximity_escalated`** / **`proximity_deescalated`**: Seeker distance ring changed — `updateProximityTier()` on state. Drives amber hiding zone color. Hider channel only.
+- **`hiding_zone_expanded`**: Hider expanded the hiding zone — sets `hiding_zone_expanded = true` on state, invalidates `['hiding-zone']` TanStack Query cache (forces re-fetch of larger polygon), pushes a toast to all roles including the initiating hider: `"The hiding zone has been expanded to <N> <unit>"`. The radius comes from `delta.effective_radius` (already in convention units); the unit is `km`/`mi` from `useGameInfo().distance_convention`.
+- **`proximity_escalated`** / **`proximity_deescalated`**: Seeker distance ring changed — `updateProximityTier()` on state. Drives amber hiding zone color. Hider channel only. Pushes a toast via `proximityEscalationMessage` / `proximityDeescalationMessage` copy.
 - **`found_claim`**: Seeker claimed found — `setFoundClaimPending(seekerPlayerId)` opens the `FoundClaimModal`. Hider channel only.
-- **`found_claim_rejected`**: Hiders rejected a claim — seekers see a rejection alert. Seeker channel only.
-- **`found_claim_expired`**: Auto-dismiss fired — `clearFoundClaim()` closes the modal (hider), both roles see an expiration alert.
+- **`found_claim_rejected`**: Hiders rejected a claim — seekers see a rejection toast. Seeker channel only.
+- **`found_claim_expired`**: Auto-dismiss fired — `clearFoundClaim()` closes the modal (hider), both roles see an expiration toast.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
+
+## In-App Toasts
+
+- `<ToastHost />` (`src/components/ToastHost.tsx`) renders a single top-of-screen banner driven by `useToastStore`. Mounted as a sibling inside `SafeAreaView` in `app/game/[game_id].tsx` after `FoundClaimModal`.
+- **Animation**: built-in React Native `Animated` API (Reanimated is NOT installed — do not introduce it casually, it requires an Expo config plugin + native rebuild). Transforms + opacity with `useNativeDriver: true`. 250ms enter, 200ms exit, 5s hold.
+- **Dismissal**: `PanResponder` handles both swipe-up (threshold 30px) and tap (movement < 10px). No `GestureHandlerRootView` exists in the tree — `PanResponder` sidesteps that dependency.
+- **Positioning**: reads `useSafeAreaInsets().top` and offsets by `insets.top + 8`. `pointerEvents="box-none"` on the wrapper lets taps through around the banner.
+- **Queue policy**: `current` + unbounded FIFO `queue`. All pushes are preserved — each dismiss promotes the head of `queue` to `current`. Losing events was deemed worse than a brief backlog, even under bursty SSE activity.
+- **Lifecycle**: `useGameplayEvents` calls `useToastStore.getState().clear()` in its effect cleanup so toasts don't survive navigation away from the game screen. The store is NOT cleared on normal SSE reconnect — a visible toast persists across a momentary network blip.
+
+### Alert vs toast rule
+
+**Toast when the screen stays. Alert when the screen changes.** Self-kick still uses `Alert` because it gates navigation to the home screen. Confirmation-style `Alert.alert()` calls (veto / kick / end-game / set-stop / power-up confirms) and the `FoundClaimModal` stay as-is because they require user action. The station auto-assignment `Alert` in `app/game/[game_id].tsx` also stays modal (blocks the hider until acknowledged).
 
 ## Stop Selection (Hider Hiding Phase)
 
