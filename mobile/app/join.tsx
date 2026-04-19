@@ -66,9 +66,10 @@ export default function JoinGameScreen() {
         placeholder="Enter your name"
         placeholderTextColor="#aaa"
         maxLength={30}
+        textContentType="none"
+        autoComplete="off"
+        autoCorrect={false}
       />
-
-      {error && <Text style={styles.error}>{error}</Text>}
 
       <Pressable
         style={[styles.button, !canSubmit && styles.buttonDisabled]}
@@ -81,6 +82,8 @@ export default function JoinGameScreen() {
           <Text style={styles.buttonText}>Join Game</Text>
         )}
       </Pressable>
+
+      {error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
 }
