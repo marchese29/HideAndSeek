@@ -38,6 +38,12 @@ src/hideandseek_reconciler/
 - **Idempotency is in the tasks, not here**: The reconciler does not guard against double-enqueue; the task bodies check status on entry and no-op if state has advanced. A redundant enqueue during the brief task-execution window is harmless.
 - **Single replica**: Docker-compose runs one instance. Multiple replicas would duplicate enqueues (safe but wasteful). If we ever want redundancy, wrap each `tick()` in `pg_try_advisory_xact_lock`.
 
+## Shutdown
+
+SIGTERM and SIGINT are trapped in `__main__.py` and set a module-level `threading.Event` (`_shutdown`). The main loop checks the flag each iteration and `event.wait(TICK_SECONDS)` replaces `time.sleep`, so a signal wakes the sleep immediately. The three enqueue for-loops in `tick()` also poll the flag between iterations, bounding catch-up work after a long downtime.
+
+This is what makes the ECS deployment config (`minimumHealthyPercent: 0, maximumPercent: 100`, per `design/2026-04-19-aws-deployment.md` § Service Changes 3) safe: the old task drains within the default 30s stopTimeout before the new task starts, and the next poll picks up anything missed during the 30–60s deploy gap (overdue queries use `deadline <= now()` with no lower bound, so nothing is lost).
+
 ## Running
 
 ```bash
