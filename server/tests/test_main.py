@@ -9,7 +9,7 @@ def test_root(client: TestClient):
     assert response.json() == {'message': 'Hello, HideAndSeek!'}
 
 
-def test_health(client: TestClient):
-    response = client.get('/health')
+def test_healthz(client: TestClient):
+    response = client.get('/healthz')
     assert response.status_code == 200
-    assert response.json() == {'status': 'ok'}
+    assert response.content == b''

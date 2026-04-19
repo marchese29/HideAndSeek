@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 from hideandseek.logging import setup_logging
 from hideandseek.middleware import AccessLogMiddleware
@@ -40,6 +40,6 @@ async def root() -> dict[str, str]:
     return {'message': 'Hello, HideAndSeek!'}
 
 
-@app.get('/health')
-async def health() -> dict[str, str]:
-    return {'status': 'ok'}
+@app.get('/healthz', status_code=200, response_class=Response)
+async def healthz() -> Response:
+    return Response(status_code=200)

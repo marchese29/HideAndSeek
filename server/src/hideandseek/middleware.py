@@ -9,7 +9,7 @@ from typing import Any
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
-SKIP_PATHS = {'/health'}
+SKIP_PATHS = {'/healthz'}
 MAX_BODY_LOG_BYTES = 1024
 REDACTED_HEADERS = {'authorization', 'cookie'}
 
