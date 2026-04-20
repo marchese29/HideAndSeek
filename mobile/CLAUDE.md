@@ -237,9 +237,9 @@ Both hooks:
 - **`game_ended`**: Host ended the game or seekers found the hiders — navigates to the recap screen with `reason` (`host_ended` / `found`) and `role` as params. Session credentials are cleared when the user taps Home on the recap.
 - **`hiding_zone_expanded`**: Hider expanded the hiding zone — sets `hiding_zone_expanded = true` on state, invalidates `['hiding-zone']` TanStack Query cache (forces re-fetch of larger polygon), pushes a toast to all roles including the initiating hider: `"The hiding zone has been expanded to <N> <unit>"`. The radius comes from `delta.effective_radius` (already in convention units); the unit is `km`/`mi` from `useGameInfo().distance_convention`.
 - **`proximity_escalated`** / **`proximity_deescalated`**: Seeker distance ring changed — `updateProximityTier()` on state. Drives amber hiding zone color. Hider channel only. Pushes a toast via `proximityEscalationMessage` / `proximityDeescalationMessage` copy.
-- **`found_claim`**: Seeker claimed found — `setFoundClaimPending(seekerPlayerId)` opens the `FoundClaimModal`. Hider channel only.
-- **`found_claim_rejected`**: Hiders rejected a claim — seekers see a rejection toast. Seeker channel only.
-- **`found_claim_expired`**: Auto-dismiss fired — `clearFoundClaim()` closes the modal (hider), both roles see an expiration toast.
+- **`found_claim`**: A seeker claimed found — `setFoundClaimPending(seekerPlayerId, deadlineUtc)` opens `FoundClaimModal` for hiders and `SeekerFoundClaimWaitingModal` for the claiming seeker. Both channels carry the event with the same server-computed `deadline_utc`.
+- **`found_claim_rejected`**: Hiders rejected a claim — seekers see a rejection toast **and** `clearFoundClaim()` closes the seeker waiting modal. Seeker channel only.
+- **`found_claim_expired`**: Auto-dismiss fired — `clearFoundClaim()` closes the active modal for whichever role has one, both roles see an expiration toast.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 
 ## In-App Toasts
@@ -253,7 +253,7 @@ Both hooks:
 
 ### Alert vs toast rule
 
-**Toast when the screen stays. Alert when the screen changes.** Self-kick still uses `Alert` because it gates navigation to the home screen. Confirmation-style `Alert.alert()` calls (veto / kick / end-game / set-stop / power-up confirms) and the `FoundClaimModal` stay as-is because they require user action. The station auto-assignment `Alert` in `app/game/[game_id].tsx` also stays modal (blocks the hider until acknowledged).
+**Toast when the screen stays. Alert when the screen changes.** Self-kick still uses `Alert` because it gates navigation to the home screen. Confirmation-style `Alert.alert()` calls (veto / kick / end-game / set-stop / power-up confirms), the hider `FoundClaimModal`, and the seeker `SeekerFoundClaimWaitingModal` stay as-is because they block gameplay until either the user acts or the server resolves the two-party flow. The station auto-assignment `Alert` in `app/game/[game_id].tsx` also stays modal (blocks the hider until acknowledged).
 
 ## Stop Selection (Hider Hiding Phase)
 
@@ -281,11 +281,12 @@ Phone-local seeker mode for narrowing down hider location. Each seeker independe
 - **Camera animation**: Animates to endgame hiding zone on activation (same pattern as hider station election). Resets when exiting endgame view.
 - **Question selection**: Works normally during endgame — the type bar / param picker takes rendering priority over endgame belt center. Closing question selection returns to Long Game / Found Them buttons.
 
-## Two-Party Game Completion (Hider Confirm/Reject)
+## Two-Party Game Completion (Waiting Seeker + Confirming Hider)
 
-- **Store field**: `foundClaimPending: { seekerPlayerId: string } | null` on `GameplayStore`. Hider-only — ignored when `role !== 'hider'`. Preserved across SSE hider reconnects (cleared on hydrate for seekers).
-- **Modal**: `FoundClaimModal` (`src/components/FoundClaimModal.tsx`) — auto-presented at gameplay screen root when `foundClaimPending !== null` and `role === 'hider'`. `presentationStyle="pageSheet"`, `onRequestClose` is a no-op (Android back button cannot dismiss), no swipe-to-dismiss. Two buttons: **Confirm** → `POST /games/{id}/found/confirm` (game ends via subsequent `game_ended` SSE), **Reject** → `POST /games/{id}/found/reject` (clears claim locally and via the server). Either button on 409 clears local state with "Already Resolved" alert (covers the race where a second hider or the auto-dismiss timer beat this one).
-- **Backstop**: No SSE replay for missed `found_claim` events. The 2-minute server-side auto-dismiss is the backstop — if a hider's phone was offline when the claim arrived, the event expires silently and the modal never presents. The `found_claim_at` field is not exposed on `HiderGameStateResponse` (intentional, keeps scope tight).
+- **Store field**: `foundClaimPending: { seekerPlayerId: string; deadlineUtc: string } | null` on `GameplayStore`. Shared by both roles — rendering is role-gated by each modal's `visible` check. `deadlineUtc` comes from the server's `FoundClaimEvent.deadline_utc` so both modals share one authoritative countdown. Preserved across SSE reconnects for both roles (the SSE snapshot doesn't carry `found_claim` state, so losing it on hydrate would regress the UI).
+- **Hider modal**: `FoundClaimModal` (`src/components/FoundClaimModal.tsx`) — auto-presented at gameplay screen root when `foundClaimPending !== null` and `role === 'hider'`. `presentationStyle="pageSheet"`, `onRequestClose` is a no-op (Android back button cannot dismiss), no swipe-to-dismiss. Two buttons: **Confirm** → `POST /games/{id}/found/confirm` (game ends via subsequent `game_ended` SSE), **Reject** → `POST /games/{id}/found/reject` (clears claim locally and via the server). Either button on 409 clears local state with "Already Resolved" alert (covers the race where a second hider or the auto-dismiss timer beat this one).
+- **Seeker modal**: `SeekerFoundClaimWaitingModal` (`src/components/SeekerFoundClaimWaitingModal.tsx`) — auto-presented when `foundClaimPending !== null` and `role === 'seeker'`. Same non-dismissable `pageSheet` styling as the hider modal; no action buttons (intentionally blocking). Shows the title "Awaiting Confirmation..." and a large M:SS countdown driven by `useCountdownTimer(pending.deadlineUtc)`; the countdown hides at 0 so the UI doesn't lie if SSE resolution lags the deadline by a second or two. Dismissal is SSE-driven: `game_ended` (reason=found) navigates to recap, `found_claim_rejected` calls `clearFoundClaim()` plus the existing rejection toast, `found_claim_expired` already calls `clearFoundClaim()` plus an expiration toast.
+- **Backstop**: No SSE replay for missed `found_claim` events. The 2-minute server-side auto-dismiss is the backstop for both roles — if a device was offline when the claim arrived, the event expires silently and the modal never presents. The `found_claim_at` field is not exposed on game state snapshots (intentional, keeps scope tight).
 
 - TypeScript strict mode enabled
 - `@/` path alias maps to `src/`

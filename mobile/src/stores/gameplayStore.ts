@@ -39,6 +39,7 @@ type GameplayData =
 
 export interface FoundClaimPending {
   seekerPlayerId: string;
+  deadlineUtc: string;
 }
 
 interface GameplayActions {
@@ -64,7 +65,7 @@ interface GameplayActions {
   setEndgameView: (view: EndgameView) => void;
   clearEndgameView: () => void;
   updateEndgameView: (safeZone: GeoJSONGeometry, totalExclusion: GeoJSONGeometry | null) => void;
-  setFoundClaimPending: (seekerPlayerId: string) => void;
+  setFoundClaimPending: (seekerPlayerId: string, deadlineUtc: string) => void;
   clearFoundClaim: () => void;
 }
 
@@ -223,7 +224,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         selfLocation,
         previewQuestion: null,
         endgameView,
-        foundClaimPending: null,
+        foundClaimPending: prev.foundClaimPending,
       };
     });
   },
@@ -524,8 +525,8 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
     });
   },
 
-  setFoundClaimPending: (seekerPlayerId) => {
-    set({ foundClaimPending: { seekerPlayerId } });
+  setFoundClaimPending: (seekerPlayerId, deadlineUtc) => {
+    set({ foundClaimPending: { seekerPlayerId, deadlineUtc } });
   },
 
   clearFoundClaim: () => {

@@ -10,6 +10,7 @@ import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
 import { QuestionBanner } from '@/components/question-banner';
 import { QuestionCutoffModal } from '@/components/QuestionCutoffModal';
+import { SeekerFoundClaimWaitingModal } from '@/components/SeekerFoundClaimWaitingModal';
 import { ToastHost } from '@/components/ToastHost';
 import { UtilityBelt } from '@/components/utility-belt';
 import { useCandidateStations } from '@/hooks/useCandidateStations';
@@ -228,6 +229,7 @@ export default function GameplayScreen() {
       />
 
       <FoundClaimModal />
+      <SeekerFoundClaimWaitingModal />
 
       <ToastHost />
     </SafeAreaView>

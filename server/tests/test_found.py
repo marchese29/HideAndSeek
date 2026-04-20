@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import fakeredis
@@ -23,10 +24,10 @@ from .conftest import TEST_SECRET, create_game, create_game_map, create_player
 
 
 @pytest.fixture(autouse=True)
-def _patch_redis() -> Generator[None, None, None]:
+def _patch_redis() -> Generator[fakeredis.FakeRedis, None, None]:
     fake = fakeredis.FakeRedis(server=fakeredis.FakeServer())
     with patch('hideandseek_core.broadcast.emit.get_sync_redis', return_value=fake):
-        yield
+        yield fake
 
 
 def _headers(player_id: uuid.UUID) -> dict[str, str]:
@@ -127,6 +128,47 @@ def test_found_claim_rejects_hider(session: Session, client: TestClient) -> None
 
     resp = client.post(f'/games/{game.id}/found', headers=_headers(hider.id))
     assert resp.status_code == 403
+
+
+def test_found_claim_emits_to_both_channels_with_deadline(
+    session: Session, client: TestClient, _patch_redis: fakeredis.FakeRedis
+) -> None:
+    game, stop = _seeking_game_with_station(session)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
+    _report_seeker_at(session, game, seeker.id, stop.coordinates)
+
+    hider_ch = f'game:{game.id}:hider-events'
+    seeker_ch = f'game:{game.id}:seeker-events'
+    pubsub = _patch_redis.pubsub()
+    pubsub.subscribe(hider_ch, seeker_ch)
+
+    before = datetime.now(UTC)
+    resp = client.post(f'/games/{game.id}/found', headers=_headers(seeker.id))
+    assert resp.status_code == 204
+    after = datetime.now(UTC)
+
+    msgs: dict[str, list[dict]] = {hider_ch: [], seeker_ch: []}
+    for _ in range(50):
+        msg = pubsub.get_message()
+        if msg is None:
+            break
+        if msg['type'] != 'message':
+            continue
+        ch = msg['channel']
+        if isinstance(ch, bytes):
+            ch = ch.decode()
+        if ch in msgs:
+            msgs[ch].append(json.loads(msg['data']))
+
+    assert len(msgs[hider_ch]) == 1
+    assert len(msgs[seeker_ch]) == 1
+    for ch_msgs in (msgs[hider_ch], msgs[seeker_ch]):
+        envelope = ch_msgs[0]
+        assert envelope['event'] == 'found_claim'
+        data = envelope['data']
+        assert data['seeker_player_id'] == str(seeker.id)
+        deadline = datetime.fromisoformat(data['deadline_utc'].replace('Z', '+00:00'))
+        assert before + timedelta(seconds=118) <= deadline <= after + timedelta(seconds=122)
 
 
 def test_found_claim_rejects_when_claim_pending(session: Session, client: TestClient) -> None:

@@ -403,8 +403,10 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         'found_claim',
         seq.wrap((event) => {
           const data = parseData<FoundClaimDelta>(event);
-          if (data && role === 'hider') {
-            useGameplayStore.getState().setFoundClaimPending(data.seeker_player_id);
+          if (data) {
+            useGameplayStore
+              .getState()
+              .setFoundClaimPending(data.seeker_player_id, data.deadline_utc);
           }
         }),
       );
@@ -413,6 +415,7 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         'found_claim_rejected',
         seq.wrap(() => {
           if (role === 'seeker') {
+            useGameplayStore.getState().clearFoundClaim();
             useToastStore.getState().push({
               message: 'The hiders rejected your found claim',
               severity: 'warning',

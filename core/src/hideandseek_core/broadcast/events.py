@@ -412,9 +412,10 @@ class ProximityDeescalatedEvent(GameplayEventSchema):
 
 
 class FoundClaimEvent(GameplayEventSchema):
-    """A seeker claims to have found the hiders — hider channel only."""
+    """A seeker claims to have found the hiders — both channels."""
 
     seeker_player_id: uuid.UUID
+    deadline_utc: datetime
 
 
 class FoundClaimRejectedEvent(GameplayEventSchema):

@@ -230,12 +230,7 @@ def emit_gameplay(event: GameplayEvent) -> None:
 
         case FoundClaimEvent():
             data = event.model_dump(mode='json')
-            publish_sse(
-                hider_channel(event.game_id),
-                GameplayEventType.found_claim,
-                data,
-                required=True,
-            )
+            _both_channels(event.game_id, GameplayEventType.found_claim, data)
 
         case FoundClaimRejectedEvent():
             data = event.model_dump(mode='json')
