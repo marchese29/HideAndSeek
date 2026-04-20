@@ -135,11 +135,9 @@ Three services in a single ECS cluster. Shared task execution role (ECR pull, Se
 
 ### Route 53 + ACM
 
-- `marchese.dev` currently registered at Squarespace with DNS managed there. Migration plan:
-  1. CDK creates a Route 53 **hosted zone** for `marchese.dev` in this AWS account.
-  2. CDK output includes the 4 AWS nameservers.
-  3. **Manual step**: log into Squarespace → Domains → `marchese.dev` → update nameservers to the AWS values. Propagation minutes to hours.
-  4. Once propagated, Route 53 is authoritative for `marchese.dev` and CDK manages records (CloudFront aliases, ACM validation).
+- The `marchese.dev` Route 53 **hosted zone is created manually out-of-repo**, not by this CDK app. Rationale: `marchese.dev` is shared across multiple projects, so its zone shouldn't be owned by any single project's IaC. Nameserver migration from Squarespace was a one-time setup tracked separately (see HideAndSeek-vrq).
+- CDK **imports** the zone (read-only) via `HostedZone.fromLookup({ domainName: hostedZoneName })`. The zone ID is never hardcoded — `fromLookup` resolves it at synth time and caches the result in gitignored `cdk.context.json`. The zone name enters via the `HOSTED_ZONE_NAME` env var.
+- CDK manages only the **records inside that zone** that belong to this project (the CloudFront A/AAAA aliases for `hideandseek.marchese.dev`, and the ACM DNS-validation records).
 - ACM public cert for `hideandseek.marchese.dev` in `us-east-1`, DNS-validated (free).
 - `marchese.me` stays at Squarespace untouched — reserved for home-lab use.
 
@@ -271,7 +269,7 @@ Idle (no games, Fargate at desired-count minimums, Aurora paused):
 | Aurora Serverless v2 (0 ACU idle, ~2 GB storage) | ~$2 |
 | ElastiCache `cache.t4g.micro` | $12 |
 | SNS Mobile Push | $0 (free tier) |
-| Route 53 hosted zone (`marchese.dev`) | $0.50 |
+| Route 53 hosted zone (`marchese.dev`, shared across projects) | $0.50 |
 | Secrets Manager (2 secrets) | $1 |
 | CloudWatch Logs | ~$2 |
 | Egress-Only IGW + IPv6 data transfer | $0 |
@@ -313,7 +311,7 @@ First 12 months on a fresh AWS account drops ALB and ECR costs to ~$0 (~$43/mo i
 
 Rough sequencing — each phase is independently deployable/testable.
 
-1. **Domain migration** — CDK creates the `marchese.dev` hosted zone in Route 53. Manual Squarespace nameserver update. Verify propagation with `dig NS marchese.dev`.
+1. **Domain migration** *(out of scope for this CDK app — one-time manual setup)* — `marchese.dev` hosted zone created by hand in Route 53, Squarespace nameservers pointed at it, propagation verified with `dig NS marchese.dev`. Tracked separately (HideAndSeek-vrq). CDK only imports the zone via `HostedZone.fromLookup`.
 2. **Infra plumbing** — NetworkStack + DataStack + PushStack. No app deployed; verify Aurora + Redis + SNS work by hand from a bastion or from `aws` CLI.
 3. **App containerization** — Dockerfile per service (or one image with different entrypoints), push to ECR, smoke-test locally against the cloud data plane via port-forward.
 4. **Fargate services** — AppStack minus CloudFront: ALB directly on a public AWS-issued hostname. End-to-end test via `curl` and mobile app.
