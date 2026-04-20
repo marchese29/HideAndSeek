@@ -69,6 +69,8 @@ set -a; source infra/cdk/.env; set +a
 
 # APNs (iOS). Name + Platform are fixed conventions — AppStack (wos.8)
 # constructs the platform-application ARN from them, so match these exactly.
+# SNS infers token-based auth from the presence of TeamID + BundleID (no
+# explicit "auth method" attribute exists on CreatePlatformApplication).
 aws sns create-platform-application \
   --name hideandseek-ios \
   --platform APNS \
@@ -78,14 +80,15 @@ aws sns create-platform-application \
       --secret-id "$APNS_CREDENTIAL_SECRET_ARN" \
       --query SecretString --output text | jq -Rs .),
   "PlatformPrincipal": "$APNS_SIGNING_KEY_ID",
-  "AppleAuthenticationMethod": "Token",
   "ApplePlatformTeamID": "$APNS_TEAM_ID",
   "ApplePlatformBundleID": "$APNS_BUNDLE_ID"
 }
 EOF
 )"
 
-# FCM (Android). FCM HTTP v1 = AuthenticationMethod=Token + service-account JSON.
+# FCM (Android). A service-account JSON as PlatformCredential tells SNS to
+# use FCM HTTP v1 — verify after registration with `get-platform-application-
+# attributes` (AuthenticationMethod should read "Token").
 aws sns create-platform-application \
   --name hideandseek-android \
   --platform GCM \
@@ -93,8 +96,7 @@ aws sns create-platform-application \
 {
   "PlatformCredential": $(aws secretsmanager get-secret-value \
       --secret-id "$FCM_CREDENTIAL_SECRET_ARN" \
-      --query SecretString --output text | jq -Rs .),
-  "AuthenticationMethod": "Token"
+      --query SecretString --output text | jq -Rs .)
 }
 EOF
 )"
