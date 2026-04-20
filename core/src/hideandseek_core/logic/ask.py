@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 from datetime import UTC, datetime
 
+import structlog
 from shapely import Point
 
 from hideandseek_core.conventions import from_meters, resolve_tentacle_distance, to_meters
@@ -25,6 +26,18 @@ from hideandseek_models.question_params import (
     ThermometerParams,
 )
 from hideandseek_models.types import QuestionStatus, QuestionType
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _log_question_asked(game: Game, player: Player, question: Question) -> None:
+    logger.info(
+        'question_asked',
+        game_id=str(game.id),
+        question_id=str(question.id),
+        question_type=question.question_type.value,
+        player_id=str(player.id),
+    )
 
 
 def ask_radar(
@@ -51,6 +64,7 @@ def ask_radar(
             radar_params=RadarParams(radius=slot.distance or custom_distance),
         )
     )
+    _log_question_asked(game, player, question)
     return question
 
 
@@ -77,6 +91,7 @@ def ask_thermometer(
             thermometer_params=ThermometerParams(min_travel=slot.distance or custom_distance),
         )
     )
+    _log_question_asked(game, player, question)
     return question
 
 
@@ -124,6 +139,7 @@ def ask_matching(
             ),
         )
     )
+    _log_question_asked(game, player, question)
     return question
 
 
@@ -166,6 +182,7 @@ def ask_measuring(
             ),
         )
     )
+    _log_question_asked(game, player, question)
     return question
 
 
@@ -214,6 +231,7 @@ def ask_tentacles(
             ),
         )
     )
+    _log_question_asked(game, player, question)
     return question
 
 
@@ -222,6 +240,11 @@ def lock_in_thermometer(question: Question, seeker_end: Point) -> None:
     question.seeker_location_end = seeker_end
     question.status = QuestionStatus.answerable
     question.answerable_at = datetime.now(UTC)
+    logger.info(
+        'thermometer_locked_in',
+        game_id=str(question.game_id),
+        question_id=str(question.id),
+    )
 
 
 # ── Ask function dispatch ──────────────────────────────────────────────
@@ -278,10 +301,19 @@ def randomize_question(question: Question, game: Game) -> Question:
     qt = question.question_type
     if qt in (QuestionType.radar, QuestionType.thermometer):
         ask_fn = ask_radar if qt == QuestionType.radar else ask_thermometer
-        return ask_fn(game, seeker, seeker_location, replacement_slot, custom_distance)
+        replacement = ask_fn(game, seeker, seeker_location, replacement_slot, custom_distance)
     elif qt == QuestionType.matching:
-        return ask_matching(game, seeker, seeker_location, replacement_slot)
+        replacement = ask_matching(game, seeker, seeker_location, replacement_slot)
     elif qt == QuestionType.measuring:
-        return ask_measuring(game, seeker, seeker_location, replacement_slot)
+        replacement = ask_measuring(game, seeker, seeker_location, replacement_slot)
     else:
-        return ask_tentacles(game, seeker, seeker_location, replacement_slot)
+        replacement = ask_tentacles(game, seeker, seeker_location, replacement_slot)
+
+    logger.info(
+        'question_randomized',
+        game_id=str(game.id),
+        original_question_id=str(question.id),
+        new_question_id=str(replacement.id),
+        question_type=qt.value,
+    )
+    return replacement

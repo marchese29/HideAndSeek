@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import cast
 
+import structlog
 from shapely import Point
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
@@ -25,6 +26,18 @@ from hideandseek_core.queries.questions import get_latest_total_exclusion
 from hideandseek_models.game import Game
 from hideandseek_models.question import Question
 from hideandseek_models.types import QuestionStatus, QuestionType
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _log_question_answered(question: Question) -> None:
+    logger.info(
+        'question_answered',
+        game_id=str(question.game_id),
+        question_id=str(question.id),
+        question_type=question.question_type.value,
+        answer=question.answer,
+    )
 
 
 def _accumulate_exclusion(game: Game, exclusion: BaseGeometry | None) -> BaseGeometry | None:
@@ -60,6 +73,7 @@ def answer_radar(question: Question, game: Game) -> None:
     question.total_exclusion = _accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
+    _log_question_answered(question)
 
 
 def answer_thermometer(question: Question, game: Game) -> None:
@@ -87,6 +101,7 @@ def answer_thermometer(question: Question, game: Game) -> None:
     question.total_exclusion = _accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
+    _log_question_answered(question)
 
 
 def answer_matching(question: Question, game: Game) -> None:
@@ -138,6 +153,7 @@ def answer_matching(question: Question, game: Game) -> None:
     question.total_exclusion = _accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
+    _log_question_answered(question)
 
 
 def answer_measuring(question: Question, game: Game) -> None:
@@ -180,6 +196,7 @@ def answer_measuring(question: Question, game: Game) -> None:
     question.total_exclusion = _accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
+    _log_question_answered(question)
 
 
 def answer_tentacles(question: Question, game: Game) -> None:
@@ -208,6 +225,7 @@ def answer_tentacles(question: Question, game: Game) -> None:
         question.total_exclusion = _accumulate_exclusion(game, exclusion)
         question.answered_at = datetime.now(UTC)
         question.status = QuestionStatus.answered
+        _log_question_answered(question)
         return
 
     # Phase 1: distance check
@@ -221,6 +239,7 @@ def answer_tentacles(question: Question, game: Game) -> None:
         question.total_exclusion = _accumulate_exclusion(game, exclusion)
         question.answered_at = datetime.now(UTC)
         question.status = QuestionStatus.answered
+        _log_question_answered(question)
         return
 
     # Phase 2: hit — find nearest POI (ordered by DB)
@@ -240,23 +259,39 @@ def answer_tentacles(question: Question, game: Game) -> None:
     question.total_exclusion = _accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
+    _log_question_answered(question)
 
 
 def veto_immediate(question: Question) -> None:
     """Immediately veto a question — no answer, no exclusion zone."""
     question.status = QuestionStatus.vetoed
     question.answered_at = datetime.now(UTC)
+    logger.info(
+        'question_vetoed',
+        game_id=str(question.game_id),
+        question_id=str(question.id),
+    )
 
 
 def abandon_question(question: Question) -> None:
     """Seeker abandons a question — no answer, no exclusion zone."""
     question.status = QuestionStatus.abandoned
     question.answered_at = datetime.now(UTC)
+    logger.info(
+        'question_abandoned',
+        game_id=str(question.game_id),
+        question_id=str(question.id),
+    )
 
 
 def schedule_veto(question: Question) -> None:
     """Schedule a veto to fire when the auto-answer timer expires."""
     question.scheduled_veto = True
+    logger.debug(
+        'question_veto_scheduled',
+        game_id=str(question.game_id),
+        question_id=str(question.id),
+    )
 
 
 # ── Answer previews (read-only) ───────────────────────────────────────

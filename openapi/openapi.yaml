@@ -3172,6 +3172,178 @@ components:
       - question_deadline
       title: QuestionAskedEvent
       type: object
+    HiderQuestionAnsweredEvent:
+      description: "A question was answered \u2014 hider channel only.\n\nCarries\
+        \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
+        \ Includes hider-privileged data: location\nand feature resolution."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          title: Sequence
+          type: integer
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        answer:
+          title: Answer
+          type: string
+        slot_index:
+          title: Slot Index
+          type: integer
+        asked_by:
+          format: uuid
+          title: Asked By
+          type: string
+        answered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Answered At
+        hider_location:
+          anyOf:
+          - $ref: '#/components/schemas/Point'
+          - type: 'null'
+        hider_feature_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hider Feature Id
+        hider_feature_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hider Feature Name
+        hider_distance:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Hider Distance
+      required:
+      - question_id
+      - sequence
+      - question_type
+      - status
+      - answer
+      - slot_index
+      - asked_by
+      - answered_at
+      - hider_location
+      - hider_feature_id
+      - hider_feature_name
+      - hider_distance
+      title: HiderQuestionAnsweredEvent
+      type: object
+    QuestionVetoedEvent:
+      description: "A question was vetoed \u2014 both channels."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        slot_index:
+          title: Slot Index
+          type: integer
+      required:
+      - question_id
+      - question_type
+      - slot_index
+      title: QuestionVetoedEvent
+      type: object
+    StationElectionStatus:
+      enum:
+      - pending
+      - elected
+      - auto_assigned
+      - ambiguous
+      title: StationElectionStatus
+      type: string
+    PhaseChangedEvent:
+      description: "Game transitioned from hiding to seeking \u2014 both channels."
+      properties:
+        phase:
+          title: Phase
+          type: string
+        seeking_started_at:
+          format: date-time
+          title: Seeking Started At
+          type: string
+        station_election_status:
+          $ref: '#/components/schemas/StationElectionStatus'
+        hider_station_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Hider Station Id
+      required:
+      - phase
+      - seeking_started_at
+      - station_election_status
+      - hider_station_id
+      title: PhaseChangedEvent
+      type: object
+    GamePlayerLeftEvent:
+      description: "A player left during active gameplay \u2014 both channels."
+      properties:
+        player_id:
+          format: uuid
+          title: Player Id
+          type: string
+      required:
+      - player_id
+      title: GamePlayerLeftEvent
+      type: object
+    GameDissolvedEvent:
+      description: "Game dissolved during active gameplay \u2014 both channels."
+      properties:
+        reason:
+          title: Reason
+          type: string
+      required:
+      - reason
+      title: GameDissolvedEvent
+      type: object
+    HidingZoneExpandedEvent:
+      description: "Hiding zone expanded by the hider \u2014 both channels."
+      properties:
+        effective_radius:
+          description: New effective hiding zone radius in convention units.
+          title: Effective Radius
+          type: number
+      required:
+      - effective_radius
+      title: HidingZoneExpandedEvent
+      type: object
+    ProximityTier:
+      enum:
+      - none
+      - approaching
+      - near
+      - entered
+      title: ProximityTier
+      type: string
+    ProximityDeescalatedEvent:
+      description: "All seekers pulled back \u2014 hider channel only."
+      properties:
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+      required:
+      - proximity_tier
+      title: ProximityDeescalatedEvent
+      type: object
+    FoundClaimRejectedEvent:
+      description: "Hiders rejected the found claim \u2014 seeker channel only."
+      properties: {}
+      required: []
+      title: FoundClaimRejectedEvent
+      type: object
     SeekerQuestionAnsweredEvent:
       description: "A question was answered \u2014 seeker channel only (with exclusion\
         \ geometry).\n\nCarries answer-time delta fields only. No hider-privileged\
@@ -3261,151 +3433,6 @@ components:
       - answered_at
       title: SeekerQuestionAnsweredEvent
       type: object
-    QuestionAbandonedEvent:
-      description: "A question was abandoned \u2014 both channels."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        slot_index:
-          title: Slot Index
-          type: integer
-      required:
-      - question_id
-      - question_type
-      - slot_index
-      title: QuestionAbandonedEvent
-      type: object
-    StationElectionStatus:
-      enum:
-      - pending
-      - elected
-      - auto_assigned
-      - ambiguous
-      title: StationElectionStatus
-      type: string
-    StationElectionEvent:
-      description: "Station election status changed \u2014 hider channel only."
-      properties:
-        station_election_status:
-          $ref: '#/components/schemas/StationElectionStatus'
-        hider_station_id:
-          anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
-          title: Hider Station Id
-      required:
-      - station_election_status
-      - hider_station_id
-      title: StationElectionEvent
-      type: object
-    ProximityTier:
-      enum:
-      - none
-      - approaching
-      - near
-      - entered
-      title: ProximityTier
-      type: string
-    ProximityEscalatedEvent:
-      description: "Seekers moved closer \u2014 hider channel only."
-      properties:
-        proximity_tier:
-          $ref: '#/components/schemas/ProximityTier'
-      required:
-      - proximity_tier
-      title: ProximityEscalatedEvent
-      type: object
-    FoundClaimEvent:
-      description: "A seeker claims to have found the hiders \u2014 both channels."
-      properties:
-        seeker_player_id:
-          format: uuid
-          title: Seeker Player Id
-          type: string
-        deadline_utc:
-          format: date-time
-          title: Deadline Utc
-          type: string
-      required:
-      - seeker_player_id
-      - deadline_utc
-      title: FoundClaimEvent
-      type: object
-    FoundClaimExpiredEvent:
-      description: "Found claim timed out \u2014 both channels."
-      properties: {}
-      required: []
-      title: FoundClaimExpiredEvent
-      type: object
-    GameHostChangedEvent:
-      description: "Host transferred during active gameplay \u2014 both channels."
-      properties:
-        new_host_player_id:
-          format: uuid
-          title: New Host Player Id
-          type: string
-      required:
-      - new_host_player_id
-      title: GameHostChangedEvent
-      type: object
-    EndReason:
-      enum:
-      - found
-      - host_ended
-      - dissolved
-      title: EndReason
-      type: string
-    GameEndedEvent:
-      description: "Game finished \u2014 host ended it or seekers found the hiders.\
-        \ Both channels."
-      properties:
-        reason:
-          $ref: '#/components/schemas/EndReason'
-      required:
-      - reason
-      title: GameEndedEvent
-      type: object
-    HidingZoneExpandedEvent:
-      description: "Hiding zone expanded by the hider \u2014 both channels."
-      properties:
-        effective_radius:
-          description: New effective hiding zone radius in convention units.
-          title: Effective Radius
-          type: number
-      required:
-      - effective_radius
-      title: HidingZoneExpandedEvent
-      type: object
-    QuestionAnswerableEvent:
-      description: "A thermometer question was locked in \u2014 both channels."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        seeker_location_end:
-          $ref: '#/components/schemas/Point'
-        question_deadline:
-          format: date-time
-          title: Question Deadline
-          type: string
-      required:
-      - question_id
-      - question_type
-      - status
-      - seeker_location_end
-      - question_deadline
-      title: QuestionAnswerableEvent
-      type: object
     PlayerLocationEvent:
       properties:
         player_id:
@@ -3467,74 +3494,33 @@ components:
       - timestamp
       title: PlayerLocationEvent
       type: object
-    HiderQuestionAnsweredEvent:
-      description: "A question was answered \u2014 hider channel only.\n\nCarries\
-        \ answer-time delta fields only (ask-time fields were sent\nwith QuestionAskedEvent).\
-        \ Includes hider-privileged data: location\nand feature resolution."
+    QuestionAnswerableEvent:
+      description: "A thermometer question was locked in \u2014 both channels."
       properties:
         question_id:
           format: uuid
           title: Question Id
           type: string
-        sequence:
-          title: Sequence
-          type: integer
         question_type:
           $ref: '#/components/schemas/QuestionType'
         status:
           $ref: '#/components/schemas/QuestionStatus'
-        answer:
-          title: Answer
+        seeker_location_end:
+          $ref: '#/components/schemas/Point'
+        question_deadline:
+          format: date-time
+          title: Question Deadline
           type: string
-        slot_index:
-          title: Slot Index
-          type: integer
-        asked_by:
-          format: uuid
-          title: Asked By
-          type: string
-        answered_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Answered At
-        hider_location:
-          anyOf:
-          - $ref: '#/components/schemas/Point'
-          - type: 'null'
-        hider_feature_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hider Feature Id
-        hider_feature_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hider Feature Name
-        hider_distance:
-          anyOf:
-          - type: number
-          - type: 'null'
-          title: Hider Distance
       required:
       - question_id
-      - sequence
       - question_type
       - status
-      - answer
-      - slot_index
-      - asked_by
-      - answered_at
-      - hider_location
-      - hider_feature_id
-      - hider_feature_name
-      - hider_distance
-      title: HiderQuestionAnsweredEvent
+      - seeker_location_end
+      - question_deadline
+      title: QuestionAnswerableEvent
       type: object
-    QuestionVetoedEvent:
-      description: "A question was vetoed \u2014 both channels."
+    QuestionAbandonedEvent:
+      description: "A question was abandoned \u2014 both channels."
       properties:
         question_id:
           format: uuid
@@ -3549,18 +3535,11 @@ components:
       - question_id
       - question_type
       - slot_index
-      title: QuestionVetoedEvent
+      title: QuestionAbandonedEvent
       type: object
-    PhaseChangedEvent:
-      description: "Game transitioned from hiding to seeking \u2014 both channels."
+    StationElectionEvent:
+      description: "Station election status changed \u2014 hider channel only."
       properties:
-        phase:
-          title: Phase
-          type: string
-        seeking_started_at:
-          format: date-time
-          title: Seeking Started At
-          type: string
         station_election_status:
           $ref: '#/components/schemas/StationElectionStatus'
         hider_station_id:
@@ -3570,47 +3549,68 @@ components:
           - type: 'null'
           title: Hider Station Id
       required:
-      - phase
-      - seeking_started_at
       - station_election_status
       - hider_station_id
-      title: PhaseChangedEvent
+      title: StationElectionEvent
       type: object
-    GamePlayerLeftEvent:
-      description: "A player left during active gameplay \u2014 both channels."
+    GameHostChangedEvent:
+      description: "Host transferred during active gameplay \u2014 both channels."
       properties:
-        player_id:
+        new_host_player_id:
           format: uuid
-          title: Player Id
+          title: New Host Player Id
           type: string
       required:
-      - player_id
-      title: GamePlayerLeftEvent
+      - new_host_player_id
+      title: GameHostChangedEvent
       type: object
-    ProximityDeescalatedEvent:
-      description: "All seekers pulled back \u2014 hider channel only."
+    EndReason:
+      enum:
+      - found
+      - host_ended
+      - dissolved
+      title: EndReason
+      type: string
+    GameEndedEvent:
+      description: "Game finished \u2014 host ended it or seekers found the hiders.\
+        \ Both channels."
+      properties:
+        reason:
+          $ref: '#/components/schemas/EndReason'
+      required:
+      - reason
+      title: GameEndedEvent
+      type: object
+    ProximityEscalatedEvent:
+      description: "Seekers moved closer \u2014 hider channel only."
       properties:
         proximity_tier:
           $ref: '#/components/schemas/ProximityTier'
       required:
       - proximity_tier
-      title: ProximityDeescalatedEvent
+      title: ProximityEscalatedEvent
       type: object
-    FoundClaimRejectedEvent:
-      description: "Hiders rejected the found claim \u2014 seeker channel only."
-      properties: {}
-      required: []
-      title: FoundClaimRejectedEvent
-      type: object
-    GameDissolvedEvent:
-      description: "Game dissolved during active gameplay \u2014 both channels."
+    FoundClaimEvent:
+      description: "A seeker claims to have found the hiders \u2014 both channels."
       properties:
-        reason:
-          title: Reason
+        seeker_player_id:
+          format: uuid
+          title: Seeker Player Id
+          type: string
+        deadline_utc:
+          format: date-time
+          title: Deadline Utc
           type: string
       required:
-      - reason
-      title: GameDissolvedEvent
+      - seeker_player_id
+      - deadline_utc
+      title: FoundClaimEvent
+      type: object
+    FoundClaimExpiredEvent:
+      description: "Found claim timed out \u2014 both channels."
+      properties: {}
+      required: []
+      title: FoundClaimExpiredEvent
       type: object
     FeatureParamsResponse:
       description: Parameters for a matching or measuring question.
@@ -3712,359 +3712,6 @@ components:
       - role
       title: GamePlayer
       type: object
-    HiderActiveQuestion:
-      description: The active question as seen by the hider.
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-        asked_by:
-          description: Seeker who asked.
-          format: uuid
-          title: Asked By
-          type: string
-        slot_index:
-          description: Inventory slot used.
-          title: Slot Index
-          type: integer
-        question_deadline:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          default: null
-          description: When auto-answer fires (null if timer not started).
-          title: Question Deadline
-      required:
-      - question_id
-      - question_type
-      - status
-      - asked_by
-      - slot_index
-      title: HiderActiveQuestion
-      type: object
-    HiderQuestionHistoryEntry:
-      description: "A resolved question from the hider's perspective.\n\nFull question\
-        \ detail for reconnecting hiders \u2014 everything except exclusion\ngeometry.\
-        \ Supersedes the removed ``GET /questions/{id}`` detail endpoint."
-      properties:
-        question_id:
-          format: uuid
-          title: Question Id
-          type: string
-        sequence:
-          description: 1-based chronological order within the game.
-          title: Sequence
-          type: integer
-        question_type:
-          $ref: '#/components/schemas/QuestionType'
-        status:
-          $ref: '#/components/schemas/QuestionStatus'
-          description: 'Terminal status: answered, vetoed, or abandoned.'
-        ask_count:
-          description: Which attempt this was (1 = first ask).
-          title: Ask Count
-          type: integer
-        asked_by:
-          description: Seeker who asked.
-          format: uuid
-          title: Asked By
-          type: string
-        asked_at:
-          description: When the question was asked.
-          format: date-time
-          title: Asked At
-          type: string
-        slot_index:
-          description: Inventory slot used.
-          title: Slot Index
-          type: integer
-        parameters:
-          anyOf:
-          - $ref: '#/components/schemas/RadarParamsResponse'
-          - $ref: '#/components/schemas/ThermometerParamsResponse'
-          - $ref: '#/components/schemas/FeatureParamsResponse'
-          - $ref: '#/components/schemas/TentacleParamsResponse'
-          description: Type-specific question parameters.
-          title: Parameters
-        seeker_location_start:
-          $ref: '#/components/schemas/Point'
-          description: "GeoJSON Point \u2014 seeker position when asked."
-        seeker_location_end:
-          anyOf:
-          - $ref: '#/components/schemas/Point'
-          - type: 'null'
-          default: null
-          description: "GeoJSON Point \u2014 seeker position at lock-in (thermometer\
-            \ only)."
-        answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: yes/no/closer/farther or null if vetoed/abandoned.
-          title: Answer
-        answered_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          default: null
-          description: When the question was resolved.
-          title: Answered At
-        hider_location:
-          anyOf:
-          - $ref: '#/components/schemas/Point'
-          - type: 'null'
-          default: null
-          description: "GeoJSON Point \u2014 hider position at answer time."
-        hider_feature_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: Hider feature ID (matching/measuring only).
-          title: Hider Feature Id
-        hider_feature_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: Hider feature name (matching/measuring only).
-          title: Hider Feature Name
-        hider_distance:
-          anyOf:
-          - type: number
-          - type: 'null'
-          default: null
-          description: Hider distance to feature in convention units (matching/measuring
-            only).
-          title: Hider Distance
-      required:
-      - question_id
-      - sequence
-      - question_type
-      - status
-      - ask_count
-      - asked_by
-      - asked_at
-      - slot_index
-      - parameters
-      - seeker_location_start
-      title: HiderQuestionHistoryEntry
-      type: object
-    RadarParamsResponse:
-      description: Parameters for a radar question.
-      properties:
-        type:
-          const: radar
-          default: radar
-          title: Type
-          type: string
-        radius:
-          description: Radar radius in convention units.
-          title: Radius
-          type: number
-      required:
-      - radius
-      title: RadarParamsResponse
-      type: object
-    TentacleParamsResponse:
-      description: Parameters for a tentacles question.
-      properties:
-        type:
-          const: tentacles
-          default: tentacles
-          title: Type
-          type: string
-        category:
-          description: POI category.
-          title: Category
-          type: string
-        poi_ids:
-          description: Stable IDs of POIs within the distance circle.
-          items:
-            type: string
-          title: Poi Ids
-          type: array
-        poi_names:
-          description: Human-readable names, matching poi_ids order.
-          items:
-            type: string
-          title: Poi Names
-          type: array
-        hit:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          default: null
-          description: True if hider was in range (populated at answer time).
-          title: Hit
-        hider_feature_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: Stable ID of the nearest POI on hit (populated at answer time).
-          title: Hider Feature Id
-      required:
-      - category
-      - poi_ids
-      - poi_names
-      title: TentacleParamsResponse
-      type: object
-    ThermometerParamsResponse:
-      description: Parameters for a thermometer question.
-      properties:
-        type:
-          const: thermometer
-          default: thermometer
-          title: Type
-          type: string
-        min_travel:
-          description: Minimum travel distance in convention units.
-          title: Min Travel
-          type: number
-      required:
-      - min_travel
-      title: ThermometerParamsResponse
-      type: object
-    HiderGameStateResponse:
-      description: "Dynamic hider state snapshot \u2014 delivered as initial SSE event\
-        \ on connect."
-      properties:
-        game_id:
-          format: uuid
-          title: Game Id
-          type: string
-        phase:
-          description: 'Current phase: hiding or seeking.'
-          title: Phase
-          type: string
-        hiding_started_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Hiding Started At
-        seeking_started_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Seeking Started At
-        self_player_id:
-          description: Caller's player ID.
-          format: uuid
-          title: Self Player Id
-          type: string
-        host_player_id:
-          description: Player ID of the game's host.
-          format: uuid
-          title: Host Player Id
-          type: string
-        hiders:
-          description: All hiders with last known positions.
-          items:
-            $ref: '#/components/schemas/GamePlayer'
-          title: Hiders
-          type: array
-        seekers:
-          description: All seekers with last known positions.
-          items:
-            $ref: '#/components/schemas/GamePlayer'
-          title: Seekers
-          type: array
-        station_election_status:
-          $ref: '#/components/schemas/StationElectionStatus'
-        hider_station_id:
-          anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
-          default: null
-          description: Assigned station (once elected/assigned).
-          title: Hider Station Id
-        active_question:
-          anyOf:
-          - $ref: '#/components/schemas/HiderActiveQuestion'
-          - type: 'null'
-          default: null
-          description: Current unanswered question.
-        question_history:
-          description: All resolved questions.
-          items:
-            $ref: '#/components/schemas/HiderQuestionHistoryEntry'
-          title: Question History
-          type: array
-        candidate_stations:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          description: Stop IDs where all hiders are within hiding zone radius (pre-election
-            only).
-          title: Candidate Stations
-        not_in_zone:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          description: Player IDs of hiders outside the hiding zone (post-election
-            only).
-          title: Not In Zone
-        computed_answer:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: Hypothetical answer if question were answered now.
-          title: Computed Answer
-        hiding_zone_expanded:
-          default: false
-          description: Whether the hiding zone has been expanded.
-          title: Hiding Zone Expanded
-          type: boolean
-        proximity_tier:
-          $ref: '#/components/schemas/ProximityTier'
-          default: none
-          description: Current proximity tier based on nearest seeker distance to
-            hiding zone.
-        freeze_departed:
-          anyOf:
-          - items:
-              format: uuid
-              type: string
-            type: array
-          - type: 'null'
-          default: null
-          description: Player IDs of hiders who moved >50m from freeze position during
-            entered tier.
-          title: Freeze Departed
-      required:
-      - game_id
-      - phase
-      - hiding_started_at
-      - seeking_started_at
-      - self_player_id
-      - host_player_id
-      - hiders
-      - seekers
-      - station_election_status
-      - question_history
-      title: HiderGameStateResponse
-      type: object
     InventorySlotResponse:
       description: A single inventory slot in the gameplay state.
       properties:
@@ -4104,6 +3751,22 @@ components:
       - slot_index
       - ask_count
       title: InventorySlotResponse
+      type: object
+    RadarParamsResponse:
+      description: Parameters for a radar question.
+      properties:
+        type:
+          const: radar
+          default: radar
+          title: Type
+          type: string
+        radius:
+          description: Radar radius in convention units.
+          title: Radius
+          type: number
+      required:
+      - radius
+      title: RadarParamsResponse
       type: object
     RosterPlayer:
       description: "A player in the roster \u2014 identity only, no location fields."
@@ -4283,6 +3946,66 @@ components:
       - parameters
       title: SeekerQuestionHistoryEntry
       type: object
+    TentacleParamsResponse:
+      description: Parameters for a tentacles question.
+      properties:
+        type:
+          const: tentacles
+          default: tentacles
+          title: Type
+          type: string
+        category:
+          description: POI category.
+          title: Category
+          type: string
+        poi_ids:
+          description: Stable IDs of POIs within the distance circle.
+          items:
+            type: string
+          title: Poi Ids
+          type: array
+        poi_names:
+          description: Human-readable names, matching poi_ids order.
+          items:
+            type: string
+          title: Poi Names
+          type: array
+        hit:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: null
+          description: True if hider was in range (populated at answer time).
+          title: Hit
+        hider_feature_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Stable ID of the nearest POI on hit (populated at answer time).
+          title: Hider Feature Id
+      required:
+      - category
+      - poi_ids
+      - poi_names
+      title: TentacleParamsResponse
+      type: object
+    ThermometerParamsResponse:
+      description: Parameters for a thermometer question.
+      properties:
+        type:
+          const: thermometer
+          default: thermometer
+          title: Type
+          type: string
+        min_travel:
+          description: Minimum travel distance in convention units.
+          title: Min Travel
+          type: number
+      required:
+      - min_travel
+      title: ThermometerParamsResponse
+      type: object
     SeekerGameStateResponse:
       description: "Dynamic seeker state snapshot \u2014 delivered as initial SSE\
         \ event on connect."
@@ -4388,4 +4111,281 @@ components:
       - question_history
       - inventory
       title: SeekerGameStateResponse
+      type: object
+    HiderActiveQuestion:
+      description: The active question as seen by the hider.
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        asked_by:
+          description: Seeker who asked.
+          format: uuid
+          title: Asked By
+          type: string
+        slot_index:
+          description: Inventory slot used.
+          title: Slot Index
+          type: integer
+        question_deadline:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: When auto-answer fires (null if timer not started).
+          title: Question Deadline
+      required:
+      - question_id
+      - question_type
+      - status
+      - asked_by
+      - slot_index
+      title: HiderActiveQuestion
+      type: object
+    HiderQuestionHistoryEntry:
+      description: "A resolved question from the hider's perspective.\n\nFull question\
+        \ detail for reconnecting hiders \u2014 everything except exclusion\ngeometry.\
+        \ Supersedes the removed ``GET /questions/{id}`` detail endpoint."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          description: 1-based chronological order within the game.
+          title: Sequence
+          type: integer
+        question_type:
+          $ref: '#/components/schemas/QuestionType'
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+          description: 'Terminal status: answered, vetoed, or abandoned.'
+        ask_count:
+          description: Which attempt this was (1 = first ask).
+          title: Ask Count
+          type: integer
+        asked_by:
+          description: Seeker who asked.
+          format: uuid
+          title: Asked By
+          type: string
+        asked_at:
+          description: When the question was asked.
+          format: date-time
+          title: Asked At
+          type: string
+        slot_index:
+          description: Inventory slot used.
+          title: Slot Index
+          type: integer
+        parameters:
+          anyOf:
+          - $ref: '#/components/schemas/RadarParamsResponse'
+          - $ref: '#/components/schemas/ThermometerParamsResponse'
+          - $ref: '#/components/schemas/FeatureParamsResponse'
+          - $ref: '#/components/schemas/TentacleParamsResponse'
+          description: Type-specific question parameters.
+          title: Parameters
+        seeker_location_start:
+          $ref: '#/components/schemas/Point'
+          description: "GeoJSON Point \u2014 seeker position when asked."
+        seeker_location_end:
+          anyOf:
+          - $ref: '#/components/schemas/Point'
+          - type: 'null'
+          default: null
+          description: "GeoJSON Point \u2014 seeker position at lock-in (thermometer\
+            \ only)."
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: yes/no/closer/farther or null if vetoed/abandoned.
+          title: Answer
+        answered_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: When the question was resolved.
+          title: Answered At
+        hider_location:
+          anyOf:
+          - $ref: '#/components/schemas/Point'
+          - type: 'null'
+          default: null
+          description: "GeoJSON Point \u2014 hider position at answer time."
+        hider_feature_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Hider feature ID (matching/measuring only).
+          title: Hider Feature Id
+        hider_feature_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Hider feature name (matching/measuring only).
+          title: Hider Feature Name
+        hider_distance:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: Hider distance to feature in convention units (matching/measuring
+            only).
+          title: Hider Distance
+      required:
+      - question_id
+      - sequence
+      - question_type
+      - status
+      - ask_count
+      - asked_by
+      - asked_at
+      - slot_index
+      - parameters
+      - seeker_location_start
+      title: HiderQuestionHistoryEntry
+      type: object
+    HiderGameStateResponse:
+      description: "Dynamic hider state snapshot \u2014 delivered as initial SSE event\
+        \ on connect."
+      properties:
+        game_id:
+          format: uuid
+          title: Game Id
+          type: string
+        phase:
+          description: 'Current phase: hiding or seeking.'
+          title: Phase
+          type: string
+        hiding_started_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Hiding Started At
+        seeking_started_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Seeking Started At
+        self_player_id:
+          description: Caller's player ID.
+          format: uuid
+          title: Self Player Id
+          type: string
+        host_player_id:
+          description: Player ID of the game's host.
+          format: uuid
+          title: Host Player Id
+          type: string
+        hiders:
+          description: All hiders with last known positions.
+          items:
+            $ref: '#/components/schemas/GamePlayer'
+          title: Hiders
+          type: array
+        seekers:
+          description: All seekers with last known positions.
+          items:
+            $ref: '#/components/schemas/GamePlayer'
+          title: Seekers
+          type: array
+        station_election_status:
+          $ref: '#/components/schemas/StationElectionStatus'
+        hider_station_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          default: null
+          description: Assigned station (once elected/assigned).
+          title: Hider Station Id
+        active_question:
+          anyOf:
+          - $ref: '#/components/schemas/HiderActiveQuestion'
+          - type: 'null'
+          default: null
+          description: Current unanswered question.
+        question_history:
+          description: All resolved questions.
+          items:
+            $ref: '#/components/schemas/HiderQuestionHistoryEntry'
+          title: Question History
+          type: array
+        candidate_stations:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          description: Stop IDs where all hiders are within hiding zone radius (pre-election
+            only).
+          title: Candidate Stations
+        not_in_zone:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          description: Player IDs of hiders outside the hiding zone (post-election
+            only).
+          title: Not In Zone
+        computed_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Hypothetical answer if question were answered now.
+          title: Computed Answer
+        hiding_zone_expanded:
+          default: false
+          description: Whether the hiding zone has been expanded.
+          title: Hiding Zone Expanded
+          type: boolean
+        proximity_tier:
+          $ref: '#/components/schemas/ProximityTier'
+          default: none
+          description: Current proximity tier based on nearest seeker distance to
+            hiding zone.
+        freeze_departed:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          description: Player IDs of hiders who moved >50m from freeze position during
+            entered tier.
+          title: Freeze Departed
+      required:
+      - game_id
+      - phase
+      - hiding_started_at
+      - seeking_started_at
+      - self_player_id
+      - host_player_id
+      - hiders
+      - seekers
+      - station_election_status
+      - question_history
+      title: HiderGameStateResponse
       type: object

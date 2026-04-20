@@ -63,7 +63,8 @@ from hideandseek_core.logic.endgame import (
     effective_hiding_zone_radius_m,
     get_candidate_stations,
 )
-from hideandseek_core.logic.lobby import create_game_with_host, validate_color_available
+from hideandseek_core.logic.endgame import expand_hiding_zone as logic_expand_hiding_zone
+from hideandseek_core.logic.lobby import create_game_with_host, swap_color
 from hideandseek_core.logic.lobby import join_game as lobby_join_game
 from hideandseek_core.logic.lobby import remove_player as lobby_remove_player
 from hideandseek_core.logic.push_registration import register_push_endpoint
@@ -235,10 +236,9 @@ def patch_player(
         player.name = updates['name']
     if 'color' in updates:
         try:
-            validate_color_available(game, player, updates['color'])
+            swap_color(game, player, updates['color'])
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
-        player.color = updates['color']
     if 'role' in updates:
         player.role = updates['role']
     if updates.get('device_token'):
@@ -475,14 +475,10 @@ def expand_hiding_zone(
     _player: Player = Depends(get_hider_in_game),
 ) -> None:
     """Expand the hiding zone radius. Hider-only, seeking phase only, one-time use."""
-    if not game.status.is_seeking:
-        raise HTTPException(
-            status_code=409, detail='Hiding zone can only be expanded during the seeking phase.'
-        )
-    if game.hiding_zone_expanded:
-        raise HTTPException(status_code=409, detail='Hiding zone has already been expanded.')
-
-    game.hiding_zone_expanded = True
+    try:
+        logic_expand_hiding_zone(game)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
     new_radius_m = effective_hiding_zone_radius_m(game)
     new_radius_conv = from_meters(new_radius_m, game.game_map.convention)

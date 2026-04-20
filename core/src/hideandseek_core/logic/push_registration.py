@@ -39,9 +39,15 @@ def register_push_endpoint(
 
     token_provider = TokenProvider(provider)
     endpoint_arn = create_platform_endpoint(config, token, token_provider)
-    return upsert_device_token(
+    device_token = upsert_device_token(
         player_id=player_id,
         token=token,
         provider=provider,
         endpoint_arn=endpoint_arn,
     )
+    logger.info(
+        'push_endpoint_registered',
+        player_id=str(player_id),
+        provider=provider,
+    )
+    return device_token

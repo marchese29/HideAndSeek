@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+import structlog
 from shapely.geometry import Point
 
 from hideandseek_core.geo import distance as geo_distance
@@ -32,6 +33,8 @@ from hideandseek_models.types import (
     QuestionStatus,
     StationElectionStatus,
 )
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +128,15 @@ def process_location_update(
                 freeze_departed = compute_freeze_departed(game)
                 if not was_freeze_departed and player.id in (freeze_departed or []):
                     freeze_departure_push = True
+
+    logger.debug(
+        'location_update_processed',
+        game_id=str(game.id),
+        player_id=str(player.id),
+        role=player.role.value,
+        proximity_changed=proximity_result.changed if proximity_result else False,
+        freeze_departure_push=freeze_departure_push,
+    )
 
     return LocationEnrichment(
         candidate_stations=candidate_stations,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+import structlog
 from shapely.geometry.base import BaseGeometry
 
 from hideandseek_core.conventions import get_default_hiding_zone_radius, to_meters
@@ -21,6 +22,8 @@ from hideandseek_core.queries.stops import get_candidate_stations as query_candi
 from hideandseek_models.game import Game, Player
 from hideandseek_models.transit import Stop
 from hideandseek_models.types import EndReason, GameStatus
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 FOUND_CLAIM_TIMEOUT_SECONDS = 120
 
@@ -86,20 +89,42 @@ def record_found_claim(game: Game, seeker: Player) -> None:
     """Mark a pending found claim. Caller validates preconditions."""
     game.found_claim_at = datetime.now(UTC)
     game.found_claim_player_id = seeker.id
+    logger.info(
+        'found_claim_recorded',
+        game_id=str(game.id),
+        seeker_id=str(seeker.id),
+    )
 
 
 def confirm_found_claim(game: Game) -> None:
     """Finish the game with reason=found. Clears claim state."""
+    seeker_id = game.found_claim_player_id
     game.found_claim_at = None
     game.found_claim_player_id = None
     game.end_reason = EndReason.found
     update_game_status(game, GameStatus.finished)
+    logger.info(
+        'found_claim_confirmed',
+        game_id=str(game.id),
+        seeker_id=str(seeker_id) if seeker_id else None,
+    )
+    logger.info(
+        'game_ended',
+        game_id=str(game.id),
+        reason=EndReason.found.value,
+    )
 
 
 def reject_found_claim(game: Game) -> None:
     """Dismiss the pending claim. No game status change."""
+    seeker_id = game.found_claim_player_id
     game.found_claim_at = None
     game.found_claim_player_id = None
+    logger.info(
+        'found_claim_rejected',
+        game_id=str(game.id),
+        seeker_id=str(seeker_id) if seeker_id else None,
+    )
 
 
 def expire_found_claim(game: Game) -> bool:
@@ -112,4 +137,24 @@ def expire_found_claim(game: Game) -> bool:
         return False
     game.found_claim_at = None
     game.found_claim_player_id = None
+    logger.info('found_claim_expired', game_id=str(game.id))
     return True
+
+
+def expand_hiding_zone(game: Game) -> None:
+    """Apply the one-time hiding-zone expansion. Doubles the effective radius.
+
+    Raises ValueError if not seeking or if already expanded.
+    """
+    if not game.status.is_seeking:
+        msg = 'Hiding zone can only be expanded during the seeking phase.'
+        raise ValueError(msg)
+    if game.hiding_zone_expanded:
+        msg = 'Hiding zone has already been expanded.'
+        raise ValueError(msg)
+    game.hiding_zone_expanded = True
+    logger.info(
+        'hiding_zone_expanded',
+        game_id=str(game.id),
+        effective_radius_m=effective_hiding_zone_radius_m(game),
+    )

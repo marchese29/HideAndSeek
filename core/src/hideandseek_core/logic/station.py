@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import timedelta
 
+import structlog
 from shapely.geometry import MultiPoint, Point
 
 from hideandseek_core.geo import distance as geo_distance
@@ -23,6 +24,8 @@ from hideandseek_models.types import (
     PlayerRole,
     StationElectionStatus,
 )
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 def _get_hider_locations(game: Game) -> list[Point]:
@@ -82,11 +85,30 @@ def resolve_station_at_transition(
     radius_m = effective_hiding_zone_radius_m(game)
     hider_locations = _get_hider_locations(game)
     if not hider_locations:
+        logger.warning(
+            'station_ambiguous',
+            game_id=str(game.id),
+            reason='no_hider_locations',
+            candidate_count=0,
+        )
         return None, StationElectionStatus.ambiguous
 
     candidates = get_stops_within_radius_of_all(game, hider_locations, radius_m)
     if len(candidates) == 1:
+        logger.info(
+            'station_elected',
+            game_id=str(game.id),
+            stop_id=str(candidates[0].id),
+            candidate_count=1,
+        )
         return candidates[0], StationElectionStatus.auto_assigned
+    reason = 'zero_candidates' if not candidates else 'multiple_candidates'
+    logger.warning(
+        'station_ambiguous',
+        game_id=str(game.id),
+        reason=reason,
+        candidate_count=len(candidates),
+    )
     return None, StationElectionStatus.ambiguous
 
 
@@ -106,16 +128,34 @@ def resolve_station_fallback(game: Game) -> Stop:
     # Tier 1: all hiders in radius — ordered by max hider distance (tightest fit first)
     candidates = get_stops_within_radius_of_all(game, hider_locations, radius_m)
     if candidates:
+        logger.info(
+            'station_fallback_used',
+            game_id=str(game.id),
+            stop_id=str(candidates[0].id),
+            tier='all_fit',
+        )
         return candidates[0]
 
     # Tier 2: any hider in radius — ordered by min hider distance (shortest first)
     candidates = get_stops_within_radius_of_any(game, hider_locations, radius_m)
     if candidates:
+        logger.info(
+            'station_fallback_used',
+            game_id=str(game.id),
+            stop_id=str(candidates[0].id),
+            tier='any_fit',
+        )
         return candidates[0]
 
     # Tier 3: absolute closest (stop, hider) pair across all combos
     stop = get_closest_stop_to_any(game, hider_locations)
     if stop:
+        logger.info(
+            'station_fallback_used',
+            game_id=str(game.id),
+            stop_id=str(stop.id),
+            tier='closest_pair',
+        )
         return stop
 
     raise RuntimeError('No playable stops found for fallback resolution.')
@@ -133,6 +173,11 @@ def compute_hider_centroid(game: Game) -> Point | None:
     """
     hiders = [p for p in game.players if p.role == PlayerRole.hider]
     if not hiders:
+        logger.debug(
+            'hider_centroid_unavailable',
+            game_id=str(game.id),
+            reason='no_hiders',
+        )
         return None
 
     locations = []
@@ -142,6 +187,11 @@ def compute_hider_centroid(game: Game) -> Point | None:
             locations.append(latest)
 
     if not locations:
+        logger.debug(
+            'hider_centroid_unavailable',
+            game_id=str(game.id),
+            reason='no_locations',
+        )
         return None
 
     newest = max(loc.timestamp for loc in locations)
@@ -198,6 +248,11 @@ def set_freeze_locations(game: Game) -> None:
     for hider in hiders:
         latest = get_latest_location_for_player(hider, game)
         hider.freeze_location = latest.coordinates if latest else None
+    logger.debug(
+        'freeze_locations_set',
+        game_id=str(game.id),
+        hider_count=len(hiders),
+    )
 
 
 def clear_freeze_locations(game: Game) -> None:
@@ -208,6 +263,7 @@ def clear_freeze_locations(game: Game) -> None:
     hiders = [p for p in game.players if p.role == PlayerRole.hider]
     for hider in hiders:
         hider.freeze_location = None
+    logger.debug('freeze_locations_cleared', game_id=str(game.id))
 
 
 def compute_freeze_departed(game: Game) -> list[uuid.UUID]:

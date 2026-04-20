@@ -108,6 +108,19 @@ Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×
 
 `logging.py` provides `setup_logging()` — the single structlog/stdlib config used by all three services (server's lifespan, worker's `setup_logging` Celery signal, reconciler's `main()`). Handles root level, renderer (console vs JSON), `sqlalchemy.engine` routing, and third-party noise suppression. Server wraps this with its own `hideandseek.logging.setup_logging()` to additionally configure the `hideandseek.access` logger for request/response lines. Env vars: `ENV` (`local` / `development` / `production`), `LOG_FORMAT=json`, `SQL_ECHO=1|true|yes`.
 
+**Log level policy** (`logic/` owns the event vocabulary; `queries/` stays silent):
+- `logger.info(...)` — business state transitions rendered in every env. Audit-trail granularity: game lifecycle (`game_created`, `game_dissolved`, `game_ended`), player transitions (`player_joined`, `player_removed`, `host_transferred`, `color_swapped`), station election (`station_elected`, `station_fallback_used`), question lifecycle (`question_asked`, `question_answered`, `question_vetoed`, `question_abandoned`, `question_randomized`, `thermometer_locked_in`), proximity/claim changes (`proximity_changed`, `found_claim_recorded|confirmed|rejected|expired`, `hiding_zone_expanded`), push (`push_endpoint_registered`, `push_registration_noop`).
+- `logger.warning(...)` — recoverable anomalies. Right now: `station_ambiguous` (logic) and `sse_publish_skipped` / `sse_publish_failed` (broadcast). Don't add new try/except in logic purely to log — exceptions propagate to task/router boundaries where they're already captured.
+- `logger.debug(...)` — dev-only internal decision trace. Rendered in `local`/`development` (root DEBUG), elided in production. Used for high-frequency paths that would flood prod: `location_update_processed` (every 10s per player), `proximity_skipped`, `hider_centroid_unavailable`, `freeze_locations_set|cleared`, `question_veto_scheduled`. If a candidate log would fire >once/min per game in steady state, it belongs here.
+
+**Convention** (matches `worker/` and `reconciler/`):
+- `logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)` at module top.
+- Positional snake_case event name, context as kwargs: `logger.info('station_elected', game_id=str(game.id), stop_id=str(stop.id))`.
+- UUIDs stringified; enums passed as `.value`; branching outcomes carry a `reason=` kwarg with a short code.
+- Log at the decision site (logic layer), not the mutation site (queries layer) — the "why" lives one layer above persistence. `push_registration.py` is the single exception since it owns both validation and an external side-effect.
+- One log per business event, not per mutation. `remove_player()` emits one `player_removed` per branch with `reason=last_player|no_{role}s_remaining|host_transfer|self_leave|host_kick` rather than layering logs at each inner `update_game_status` / `delete_player`.
+- Don't duplicate broadcast: `emit.py` already logs Redis degradation; `push.py` already logs dead endpoints / no-tokens.
+
 ## Push Notifications — SNS Mobile Push
 
 Single-provider architecture on top of AWS SNS Mobile Push. `SnsProvider` calls `sns:Publish` against a per-device platform endpoint ARN; SNS routes to APNs or FCM based on the endpoint's parent platform application.

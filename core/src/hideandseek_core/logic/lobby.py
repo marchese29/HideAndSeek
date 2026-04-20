@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+import structlog
+
 from hideandseek_core.queries.games import add_player, delete_player, update_game_status
 from hideandseek_core.queries.games import create_game as query_create_game
 from hideandseek_core.queries.location import delete_player_locations
@@ -18,6 +20,8 @@ from hideandseek_models.types import (
     PlayerColor,
     PlayerRole,
 )
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +50,22 @@ def validate_color_available(game: Game, player: Player, color: PlayerColor) -> 
         if p.id != player.id and p.color == color:
             msg = f'Color {color} is already taken.'
             raise ValueError(msg)
+
+
+def swap_color(game: Game, player: Player, color: PlayerColor) -> None:
+    """Assign a new color to a player. Raises ValueError if taken by another player."""
+    if player.color == color:
+        return
+    validate_color_available(game, player, color)
+    old_color = player.color
+    player.color = color
+    logger.info(
+        'color_swapped',
+        game_id=str(game.id),
+        player_id=str(player.id),
+        old_color=old_color.value,
+        new_color=color.value,
+    )
 
 
 def create_game_with_host(
@@ -84,6 +104,13 @@ def create_game_with_host(
         color=color,
         secret_hash=secret_hash,
     )
+    logger.info(
+        'game_created',
+        game_id=str(game.id),
+        map_id=str(game_map.id),
+        size=size.value,
+        host_player_id=str(host_player_id),
+    )
     return game, player
 
 
@@ -99,7 +126,15 @@ def join_game(
         msg = 'Game is full (12 players max).'
         raise ValueError(msg)
     color = assign_color(game)
-    return add_player(game, name=name, color=color, role=role, secret_hash=secret_hash)
+    player = add_player(game, name=name, color=color, role=role, secret_hash=secret_hash)
+    logger.info(
+        'player_joined',
+        game_id=str(game.id),
+        player_id=str(player.id),
+        color=color.value,
+        role=role.value if role is not None else None,
+    )
+    return player
 
 
 def remove_player(
@@ -131,6 +166,9 @@ def remove_player(
 
     target_is_host = player.id == game.host_player_id
     removed_player_id = player.id
+    game_id_str = str(game.id)
+    player_id_str = str(player.id)
+    phase = game.status.value
 
     # Clean up location history for active games
     if game.status.is_active:
@@ -141,6 +179,19 @@ def remove_player(
         game.end_reason = EndReason.dissolved
         update_game_status(game, GameStatus.dissolved)
         delete_player(player)
+        logger.info(
+            'player_removed',
+            game_id=game_id_str,
+            player_id=player_id_str,
+            reason='last_player',
+            dissolved=True,
+        )
+        logger.info(
+            'game_dissolved',
+            game_id=game_id_str,
+            reason='last_player',
+            phase=phase,
+        )
         return RemovalResult(
             removed_player_id=removed_player_id,
             game_dissolved=True,
@@ -157,11 +208,25 @@ def remove_player(
             game.end_reason = EndReason.dissolved
             update_game_status(game, GameStatus.dissolved)
             delete_player(player)
+            reason = f'no_{player.role.value}s_remaining'
+            logger.info(
+                'player_removed',
+                game_id=game_id_str,
+                player_id=player_id_str,
+                reason=reason,
+                dissolved=True,
+            )
+            logger.info(
+                'game_dissolved',
+                game_id=game_id_str,
+                reason=reason,
+                phase=phase,
+            )
             return RemovalResult(
                 removed_player_id=removed_player_id,
                 game_dissolved=True,
                 new_host_id=None,
-                dissolution_reason=f'no_{player.role}s_remaining',
+                dissolution_reason=reason,
             )
 
     # Host leaving with others remaining — must transfer host
@@ -173,8 +238,22 @@ def remove_player(
         if new_host is None or new_host.id == player.id:
             msg = 'new_host_id must be another player in this game.'
             raise ValueError(msg)
+        old_host_id = game.host_player_id
         game.host_player_id = new_host.id
         delete_player(player)
+        logger.info(
+            'player_removed',
+            game_id=game_id_str,
+            player_id=player_id_str,
+            reason='host_transfer',
+            new_host_id=str(new_host.id),
+        )
+        logger.info(
+            'host_transferred',
+            game_id=game_id_str,
+            old_host_id=str(old_host_id),
+            new_host_id=str(new_host.id),
+        )
         return RemovalResult(
             removed_player_id=removed_player_id,
             game_dissolved=False,
@@ -183,6 +262,12 @@ def remove_player(
 
     # Non-host removal (self-leave or host-kick)
     delete_player(player)
+    logger.info(
+        'player_removed',
+        game_id=game_id_str,
+        player_id=player_id_str,
+        reason='self_leave' if is_self else 'host_kick',
+    )
     return RemovalResult(
         removed_player_id=removed_player_id,
         game_dissolved=False,

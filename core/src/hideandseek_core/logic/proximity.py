@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import structlog
+
 from hideandseek_core.geo import distance
 from hideandseek_core.logic.endgame import effective_hiding_zone_radius_m
 from hideandseek_core.queries.location import (
@@ -12,6 +14,8 @@ from hideandseek_core.queries.location import (
 )
 from hideandseek_models.game import Game, Player
 from hideandseek_models.types import PlayerRole, ProximityTier
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _TIER_ORDER: dict[ProximityTier, int] = {
     ProximityTier.none: 0,
@@ -67,6 +71,7 @@ def evaluate_proximity(game: Game, reporting_seeker: Player) -> ProximityResult:
     old_tier = game.proximity_tier
     station = game.hider_station
     if station is None:
+        logger.debug('proximity_skipped', game_id=str(game.id), reason='no_station')
         return ProximityResult(old_tier=old_tier, new_tier=old_tier)
 
     radius_m = effective_hiding_zone_radius_m(game)
@@ -75,6 +80,7 @@ def evaluate_proximity(game: Game, reporting_seeker: Player) -> ProximityResult:
     # Phase 1: check reporting seeker only.
     reporter_loc = get_latest_location_for_player(reporting_seeker, game)
     if reporter_loc is None:
+        logger.debug('proximity_skipped', game_id=str(game.id), reason='no_seeker_location')
         return ProximityResult(old_tier=old_tier, new_tier=old_tier)
 
     reporter_dist = distance(reporter_loc.coordinates, station_coords)
@@ -83,6 +89,13 @@ def evaluate_proximity(game: Game, reporting_seeker: Player) -> ProximityResult:
     if _TIER_ORDER[reporter_tier] > _TIER_ORDER[old_tier]:
         # Escalate immediately.
         game.proximity_tier = reporter_tier
+        logger.info(
+            'proximity_changed',
+            game_id=str(game.id),
+            old_tier=old_tier.value,
+            new_tier=reporter_tier.value,
+            direction='escalated',
+        )
         return ProximityResult(old_tier=old_tier, new_tier=reporter_tier)
 
     # Phase 2: check all seekers for possible de-escalation.
@@ -99,6 +112,13 @@ def evaluate_proximity(game: Game, reporting_seeker: Player) -> ProximityResult:
     if _TIER_ORDER[closest_tier] < _TIER_ORDER[old_tier]:
         # De-escalate to the closest remaining seeker's tier.
         game.proximity_tier = closest_tier
+        logger.info(
+            'proximity_changed',
+            game_id=str(game.id),
+            old_tier=old_tier.value,
+            new_tier=closest_tier.value,
+            direction='deescalated',
+        )
         return ProximityResult(old_tier=old_tier, new_tier=closest_tier)
 
     return ProximityResult(old_tier=old_tier, new_tier=old_tier)
