@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
+import { AppStack } from '../lib/app-stack';
 import { DataStack } from '../lib/data-stack';
 import { NetworkStack } from '../lib/network-stack';
 
@@ -17,4 +18,5 @@ cdk.Tags.of(app).add('Project', 'hideandseek');
 cdk.Tags.of(app).add('ManagedBy', 'cdk');
 
 const network = new NetworkStack(app, 'HideAndSeek-Network', { env });
-new DataStack(app, 'HideAndSeek-Data', { env, network });
+const data = new DataStack(app, 'HideAndSeek-Data', { env, network });
+new AppStack(app, 'HideAndSeek-App', { env, network, data });

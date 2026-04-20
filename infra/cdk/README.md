@@ -39,15 +39,43 @@ npx cdk diff HideAndSeek-Network
 # Deploy a single stack
 npx cdk deploy HideAndSeek-Network
 npx cdk deploy HideAndSeek-Data
+npx cdk deploy HideAndSeek-App
 
-# Deploy everything (as more stacks land)
+# Deploy everything
 npx cdk deploy --all
 
 # Tear down
+npx cdk destroy HideAndSeek-App
 npx cdk destroy HideAndSeek-Network
 ```
 
 **`HideAndSeek-Data` first-deploy note**: the first `cdk deploy HideAndSeek-Data` is slower than the others (usually 3–5 min) because CDK builds the server Docker image, pushes it to ECR, and then the migration custom resource runs one Fargate task to `alembic upgrade head`. Subsequent deploys skip the image build + migration run unless the image digest changes.
+
+**`HideAndSeek-App` smoke test**: after deploying AppStack, exercise the AWS-issued ALB hostname over **HTTP :80** (no TLS until `wos.9` adds CloudFront + `hideandseek.marchese.dev`):
+
+```bash
+ALB_DNS=$(aws cloudformation describe-stacks --stack-name HideAndSeek-App \
+  --query 'Stacks[0].Outputs[?OutputKey==`AlbDnsName`].OutputValue' --output text)
+BASE="http://$ALB_DNS"
+
+# 1. ALB → server (health endpoint, no auth)
+curl -fsS "$BASE/healthz"
+
+# 2. server → Aurora (requires seeded map data; skip if Aurora is empty)
+curl -fsS "$BASE/maps" | jq '.[0].id'
+
+# 3. server → Redis (lobby SSE channel publishes initial game_state)
+MAP_ID=$(curl -fsS "$BASE/maps" | jq -r '.[0].id')
+RESP=$(curl -fsS -X POST "$BASE/games" -H 'Content-Type: application/json' \
+  -d "{\"map_id\":\"$MAP_ID\",\"name\":\"smoke\",\"size\":\"small\"}")
+GAME_ID=$(echo "$RESP" | jq -r '.game.id')
+PLAYER_ID=$(echo "$RESP" | jq -r '.player_id')
+SECRET=$(echo "$RESP" | jq -r '.player_secret')
+timeout 3 curl -fsSN "$BASE/games/$GAME_ID/lobby/events" \
+  -H "X-Player-Id: $PLAYER_ID" -H "X-Player-Secret: $SECRET" | head -5
+```
+
+Follow with `aws logs tail /aws/ecs/.../<service> --since 5m` on each service's log group to confirm startup, and `aws elbv2 describe-target-health --target-group-arn <arn>` to confirm the server target is `healthy`.
 
 ## Stacks
 
@@ -55,7 +83,7 @@ npx cdk destroy HideAndSeek-Network
 |---|---|---|
 | `HideAndSeek-Network` | wos.5 | VPC, subnets, gateways, security groups |
 | `HideAndSeek-Data` | wos.6 | Aurora Serverless v2, ElastiCache, Secrets |
-| `HideAndSeek-App` | wos.8 / wos.9 | ECR, ECS cluster + services, ALB, CloudFront, Route 53 records |
+| `HideAndSeek-App` | wos.8 | ECS cluster + server/worker/reconciler services + ALB (HTTP :80 until wos.9 adds CloudFront + custom domain + :443) |
 
 SNS Mobile Push platform applications (APNs + FCM) are **not** in a CDK stack — `AWS::SNS::PlatformApplication` isn't a native CloudFormation resource type, and the apps are registered once per account/region via `aws sns create-platform-application`. See "Create SNS platform applications" below. The Topic + SQS queue for `EventDeliveryFailure` events is deferred to a later stack (the consumer that sweeps dead device tokens lives there too).
 

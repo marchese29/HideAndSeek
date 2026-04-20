@@ -30,8 +30,8 @@ When reviewing a PR touching this directory, one of the things to check is: does
 Three stacks, added incrementally:
 
 - `HideAndSeek-Network` — VPC, subnets, gateways, security groups.
-- `HideAndSeek-Data` — Aurora Serverless v2 + ElastiCache + Secrets Manager.
-- `HideAndSeek-App` (wos.8, wos.9) — ECR, ECS cluster + services, ALB, CloudFront, ACM, Route 53 A/AAAA records.
+- `HideAndSeek-Data` — Aurora Serverless v2 + ElastiCache + Secrets Manager + the shared `DockerImageAsset`.
+- `HideAndSeek-App` — ECS cluster + server/worker/reconciler Fargate services + ALB. Reuses `DataStack.appImage`. CloudFront, ACM, Route 53 A/AAAA records land in `wos.9`.
 
 All stacks are prefixed `HideAndSeek-` to avoid collisions with other projects in the same AWS account.
 
@@ -53,6 +53,35 @@ Use these tags in verification queries (e.g. `aws ec2 describe-vpcs --filters "N
 ## Deploy conventions
 
 See `README.md` for exact commands. One-time bootstrap per account/region is required before first deploy.
+
+## AppStack — services, sizing, listener
+
+Three `FargateTaskDefinition`s + three `FargateService`s on a shared `ecs.Cluster`. All three containers run the same image (`DataStack.appImage`) with different shell commands; server exposes :8000, worker/reconciler have no port mapping.
+
+| Service | cpu / memoryMiB | desiredCount | deploy % (min/max) | SG (from NetworkStack) | Invocation |
+|---|---|---|---|---|---|
+| `ServerService` | 512 / 1024 | 1 | 100 / 200 | `serverSg` | `uvicorn hideandseek.main:app --host 0.0.0.0 --port 8000` |
+| `WorkerService` | 256 / 512 | 1 | 50 / 200 | `workerSg` | `celery -A hideandseek_worker.celery_app worker` |
+| `ReconcilerService` | 256 / 512 | 1 | **0 / 100** | `reconcilerSg` | `python -m hideandseek_reconciler` |
+
+The reconciler's 0/100 config is the singleton-safe deploy strategy from the design doc: ECS stops the old task before starting the new one, accepting a 30–60s scheduling gap that the overdue query catches on the next tick. The gap is safe because reconciler SIGTERM handling was audited in `wos.2`. Server + worker use standard rolling deploys.
+
+Per-service task roles (defined inline in AppStack):
+- `ServerTaskRole` — `sns:CreatePlatformEndpoint`, `sns:SetEndpointAttributes`, `sns:GetEndpointAttributes` on the two platform-application ARNs; `sns:Publish` on endpoint-ARN children.
+- `WorkerTaskRole` — `sns:Publish` on endpoint-ARN children only (worker doesn't register tokens).
+- `ReconcilerTaskRole` — no extra permissions beyond the default exec role (DB access flows through the Secrets Manager-backed `DATABASE_URL`; Redis is in-VPC, no AWS API calls).
+
+### Networking: public subnets + `assignPublicIp`
+
+All three services run in the **public** dual-stack subnets with `assignPublicIp: true`, not the isolated ones. The original design was "isolated subnets + EIGW for IPv6-only egress", but Fargate's control plane (ECR, Secrets Manager, CloudWatch Logs) only advertises IPv4 endpoints for those APIs — so with no IPv4 egress route, task image pulls and secret hydration time out and the task hangs in `PENDING` until CloudFormation gives up. Cheap fixes for isolated subnets were 4× interface endpoints (~$28/mo) or a NAT gateway (~$32/mo). Public subnets with `assignPublicIp: true` cost ~$11/mo (3 × $3.60 IPv4-assignment fee) and keep the same security posture: `serverSg` ingress is ALB-only on :8000; `workerSg` / `reconcilerSg` have no ingress rules at all, so a port scan on any task IP lands on a closed port.
+
+NetworkStack's app SGs only allow IPv4 egress to Aurora:5432 and Redis:6379 by default. AppStack adds `:443/tcp → 0.0.0.0/0` egress via `CfnSecurityGroupEgress` on each app SG so the Fargate agent can reach ECR / Secrets Manager / Logs, and so the app containers can publish to SNS. IPv6 egress on these SGs is wide-open (`::/0`) from NetworkStack.
+
+IPv6 on Fargate ENIs is controlled entirely by the account-level ECS `dualStackIPv6` setting (`aws ecs put-account-setting --name dualStackIPv6 --value enabled`) plus subnet-level `AssignIpv6AddressOnCreation=true`. The CloudFormation `AWS::ECS::Service` schema has no per-service IPv6 toggle — attempting a `NetworkConfiguration.AwsvpcConfiguration.AssignIpv6Address` override fails with `extraneous key [AssignIpv6Address] is not permitted`.
+
+### ALB listener port — :80 in wos.8, :443 in wos.9
+
+The ALB is `dualstack-without-public-ipv4` (avoids the Feb-2024 public-IPv4 fees). For `wos.8` the single listener is **HTTP :80**, not :443, because the AWS-issued hostname (`*.elb.amazonaws.com`) can't carry an ACM cert and we don't own a Route 53 zone yet (that's `wos.9`). AppStack adds a temporary :80 ingress rule on `network.albSg` (NetworkStack only allows :443); `wos.9` drops that rule when it swaps the listener to :443 behind a CloudFront distribution at `hideandseek.marchese.dev`.
 
 ## DataStack — migration runner pattern
 
