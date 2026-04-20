@@ -128,6 +128,17 @@ export class DataStack extends cdk.Stack {
       },
     });
 
+    // Explicit log groups (not `logRetention:` sugar). The deprecated
+    // `logRetention` path spawns a singleton LogRetention Lambda and lets
+    // AWS auto-create `/aws/lambda/<fn-name>` groups on first invocation;
+    // those groups accumulate on every Lambda physical-name change (asset
+    // hash rebuild) and have to be hand-deleted later. Anchoring each
+    // Lambda / ECS container to a CDK-managed LogGroup sidesteps both.
+    const migrationLogGroup = new logs.LogGroup(this, 'MigrationLogGroup', {
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
     // The generated RDS cluster secret is a JSON blob with fields host/port/
     // dbname/username/password. Compose DATABASE_URL at runtime via a shell
     // entrypoint so the psycopg dialect prefix lands on the URL alembic uses.
@@ -148,7 +159,7 @@ export class DataStack extends cdk.Stack {
       },
       logging: ecs.LogDriver.awsLogs({
         streamPrefix: 'migrate',
-        logRetention: logs.RetentionDays.ONE_MONTH,
+        logGroup: migrationLogGroup,
       }),
     });
 
@@ -186,12 +197,17 @@ export class DataStack extends cdk.Stack {
     // Lambda that invokes run_task + waits for exit. The CDK custom resource
     // calls this on CREATE/UPDATE; DELETE is a no-op (migrations are
     // forward-only and the cluster outlives individual stack updates).
+    const runMigrationsFnLogGroup = new logs.LogGroup(this, 'RunMigrationsFnLogGroup', {
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
     const runMigrationsFn = new lambda.Function(this, 'RunMigrationsFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambda', 'run-migrations')),
       timeout: cdk.Duration.minutes(15),
       memorySize: 256,
+      logGroup: runMigrationsFnLogGroup,
       environment: {
         CLUSTER_ARN: migrationCluster.clusterArn,
         TASK_DEFINITION_ARN: migrationTaskDef.taskDefinitionArn,
@@ -239,9 +255,13 @@ export class DataStack extends cdk.Stack {
       }),
     );
 
+    const providerLogGroup = new logs.LogGroup(this, 'RunMigrationsProviderLogGroup', {
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
     const provider = new cr.Provider(this, 'RunMigrationsProvider', {
       onEventHandler: runMigrationsFn,
-      logRetention: logs.RetentionDays.ONE_MONTH,
+      logGroup: providerLogGroup,
     });
 
     const runMigrations = new cdk.CustomResource(this, 'RunMigrations', {
