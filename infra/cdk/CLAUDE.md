@@ -27,14 +27,15 @@ When reviewing a PR touching this directory, one of the things to check is: does
 
 ## Stack layout
 
-Four stacks, added incrementally:
+Three stacks, added incrementally:
 
-- `HideAndSeek-Network` (this issue) — VPC, subnets, gateways, security groups.
-- `HideAndSeek-Data` (wos.6) — Aurora Serverless v2 + ElastiCache + Secrets Manager.
-- `HideAndSeek-Push` (wos.7) — SNS platform applications + delivery-failure SQS.
+- `HideAndSeek-Network` — VPC, subnets, gateways, security groups.
+- `HideAndSeek-Data` — Aurora Serverless v2 + ElastiCache + Secrets Manager.
 - `HideAndSeek-App` (wos.8, wos.9) — ECR, ECS cluster + services, ALB, CloudFront, ACM, Route 53 A/AAAA records.
 
 All stacks are prefixed `HideAndSeek-` to avoid collisions with other projects in the same AWS account.
+
+SNS Mobile Push platform applications (APNs + FCM) are **not** managed by CDK: `AWS::SNS::PlatformApplication` is not a native CloudFormation resource type, so the two apps are created once per account/region via `aws sns create-platform-application` (see `README.md`). AppStack constructs their ARNs deterministically from fixed names (`hideandseek-ios`, `hideandseek-android`) + `account` + `region` and injects them as `SNS_APNS_APP_ARN` / `SNS_FCM_APP_ARN` on the server + worker task definitions. The SNS Topic + SQS queue for `EventDeliveryFailure` events is deferred to the consumer stack that will sweep dead device tokens.
 
 ## Cross-stack references
 

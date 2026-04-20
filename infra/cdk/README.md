@@ -53,10 +53,58 @@ npx cdk destroy HideAndSeek-Network
 
 | Stack | Ships in | Owns |
 |---|---|---|
-| `HideAndSeek-Network` | wos.5 (this) | VPC, subnets, gateways, security groups |
+| `HideAndSeek-Network` | wos.5 | VPC, subnets, gateways, security groups |
 | `HideAndSeek-Data` | wos.6 | Aurora Serverless v2, ElastiCache, Secrets |
-| `HideAndSeek-Push` | wos.7 | SNS platform apps, SQS delivery-failure queue |
 | `HideAndSeek-App` | wos.8 / wos.9 | ECR, ECS cluster + services, ALB, CloudFront, Route 53 records |
+
+SNS Mobile Push platform applications (APNs + FCM) are **not** in a CDK stack — `AWS::SNS::PlatformApplication` isn't a native CloudFormation resource type, and the apps are registered once per account/region via `aws sns create-platform-application`. See "Create SNS platform applications" below. The Topic + SQS queue for `EventDeliveryFailure` events is deferred to a later stack (the consumer that sweeps dead device tokens lives there too).
+
+## Create SNS platform applications
+
+One-time setup, per AWS account + region. Run once after credentials are uploaded to Secrets Manager and `infra/cdk/.env` is populated (see `.env.example` for the required variables).
+
+```bash
+# Load the env vars referenced below.
+set -a; source infra/cdk/.env; set +a
+
+# APNs (iOS). Name + Platform are fixed conventions — AppStack (wos.8)
+# constructs the platform-application ARN from them, so match these exactly.
+aws sns create-platform-application \
+  --name hideandseek-ios \
+  --platform APNS \
+  --attributes "$(cat <<EOF
+{
+  "PlatformCredential": $(aws secretsmanager get-secret-value \
+      --secret-id "$APNS_CREDENTIAL_SECRET_ARN" \
+      --query SecretString --output text | jq -Rs .),
+  "PlatformPrincipal": "$APNS_SIGNING_KEY_ID",
+  "AppleAuthenticationMethod": "Token",
+  "ApplePlatformTeamID": "$APNS_TEAM_ID",
+  "ApplePlatformBundleID": "$APNS_BUNDLE_ID"
+}
+EOF
+)"
+
+# FCM (Android). FCM HTTP v1 = AuthenticationMethod=Token + service-account JSON.
+aws sns create-platform-application \
+  --name hideandseek-android \
+  --platform GCM \
+  --attributes "$(cat <<EOF
+{
+  "PlatformCredential": $(aws secretsmanager get-secret-value \
+      --secret-id "$FCM_CREDENTIAL_SECRET_ARN" \
+      --query SecretString --output text | jq -Rs .),
+  "AuthenticationMethod": "Token"
+}
+EOF
+)"
+```
+
+The resulting ARNs have the form `arn:aws:sns:<region>:<account>:app/APNS/hideandseek-ios` and `arn:aws:sns:<region>:<account>:app/GCM/hideandseek-android`. AppStack injects them as `SNS_APNS_APP_ARN` / `SNS_FCM_APP_ARN` env vars on the server + worker containers.
+
+**Credential rotation:** re-run `aws secretsmanager put-secret-value` for the relevant secret, then `aws sns set-platform-application-attributes --platform-application-arn <arn> --attributes PlatformCredential=...` to push the new key to SNS (SNS does not auto-rotate).
+
+**Delivery-failure wiring:** deferred — when the delivery-failure consumer stack lands, that deploy will create an SNS topic and run `aws sns set-platform-application-attributes` to set `EventDeliveryFailure` on both platform apps.
 
 ## Verifying a deploy
 
