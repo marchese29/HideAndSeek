@@ -52,6 +52,16 @@ Use these tags in verification queries (e.g. `aws ec2 describe-vpcs --filters "N
 
 See `README.md` for exact commands. One-time bootstrap per account/region is required before first deploy.
 
+## DataStack — migration runner pattern
+
+DataStack (`lib/data-stack.ts`) ships the database, the cache, and the code that migrates the database *during deploy*. The migration runner is part of DataStack (not AppStack) so that by the time AppStack brings up ECS services, the schema is already at `head`.
+
+The pattern:
+1. `ecr_assets.DockerImageAsset` builds the server image from the repo root `server/Dockerfile`. The image ships Alembic + `alembic/` already (see `server/Dockerfile` `COPY alembic.ini`/`alembic/`). AppStack will reuse this same image asset — CDK de-duplicates by content hash.
+2. A `FargateTaskDefinition` runs `uv run alembic upgrade head` with the DB secret exposed as `DATABASE_URL`.
+3. A Lambda-backed `CustomResource` (`lambda/run-migrations/index.py`) calls `ecs.run_task()` + `get_waiter('tasks_stopped').wait()` and reads the container's exit code. Non-zero → the custom resource fails → CloudFormation rolls back.
+4. The custom resource's `PhysicalResourceId` is keyed to the Docker image digest, so any code change that rebuilds the image re-runs migrations. Idempotent deploys (no image change) skip the migration task.
+
 ## Language + tooling
 
 - TypeScript on AWS CDK v2 (`aws-cdk-lib`). CDK v1 is EOL.

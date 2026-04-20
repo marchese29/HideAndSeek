@@ -22,6 +22,11 @@ COPY reconciler/src/ /app/reconciler/src/
 COPY server/src/ /app/server/src/
 COPY server/scripts/ /app/server/scripts/
 
+# Alembic migrations — required by the ECS one-shot migration task (CDK) and
+# the docker-compose `migrate` service; invoked via `alembic upgrade head`.
+COPY alembic.ini /app/alembic.ini
+COPY alembic/ /app/alembic/
+
 # Install all workspace packages (server, worker, reconciler, core, models)
 RUN uv sync --frozen --no-dev --all-packages
 

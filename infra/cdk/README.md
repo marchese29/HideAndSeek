@@ -38,6 +38,7 @@ npx cdk diff HideAndSeek-Network
 
 # Deploy a single stack
 npx cdk deploy HideAndSeek-Network
+npx cdk deploy HideAndSeek-Data
 
 # Deploy everything (as more stacks land)
 npx cdk deploy --all
@@ -45,6 +46,8 @@ npx cdk deploy --all
 # Tear down
 npx cdk destroy HideAndSeek-Network
 ```
+
+**`HideAndSeek-Data` first-deploy note**: the first `cdk deploy HideAndSeek-Data` is slower than the others (usually 3–5 min) because CDK builds the server Docker image, pushes it to ECR, and then the migration custom resource runs one Fargate task to `alembic upgrade head`. Subsequent deploys skip the image build + migration run unless the image digest changes.
 
 ## Stacks
 

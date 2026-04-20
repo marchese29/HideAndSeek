@@ -38,6 +38,8 @@ Two modes — both serve on `localhost:8000`, both use PostgreSQL:
 
 In production (`ENV=production`): INFO level, JSON renderer, stderr only.
 
+**Schema is owned by Alembic, not the server.** The lifespan only configures logging. In docker-compose a one-shot `migrate` service runs `alembic upgrade head` before the API starts (`depends_on: service_completed_successfully`). In prod, the DataStack's CDK custom resource runs the same command in a Fargate task during `cdk deploy`. Local dev (`scripts/dev.sh`) assumes you've already brought compose up at least once so the migrate service has populated the volume — or run `uv run alembic upgrade head` yourself from the repo root.
+
 ## Logging
 
 The generic structlog config (root level, renderer, `sqlalchemy.engine` routing, third-party noise suppression) lives in `hideandseek_core.logging.setup_logging()`, shared with the worker and reconciler. Server's `hideandseek.logging.setup_logging()` wraps that and additionally builds the `hideandseek.access` logger used by `AccessLogMiddleware` — writing to `server/logs/access.log` in `local` mode, stderr in all modes. Called once from the FastAPI lifespan in `main.py`.

@@ -56,4 +56,4 @@ Minimal — only what the ORM models need:
 
 1. Create `src/hideandseek_models/<model>.py` with `from hideandseek_models.base import Base`
 2. Add re-exports to `__init__.py`
-3. The server's `db.create_db_and_tables()` imports `hideandseek_models` which registers all tables on `Base.metadata`
+3. Alembic's `env.py` imports `hideandseek_models` which registers all tables on `Base.metadata`. Run `uv run alembic revision --autogenerate -m "add <model>"` from the repo root to generate a migration, then review and commit it alongside the model.

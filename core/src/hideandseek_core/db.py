@@ -1,5 +1,4 @@
 import os
-import time
 from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -8,7 +7,6 @@ from functools import cache
 import sqlalchemy as sa
 import structlog
 from sqlalchemy import create_engine
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -21,11 +19,13 @@ def get_engine() -> sa.Engine:
     """Return the shared engine, creating it on first call.
 
     Requires DATABASE_URL to be set. Cached so all callers share one engine.
+    `pool_pre_ping=True` issues a lightweight validation before each connection
+    checkout so pooled connections survive Aurora Serverless v2 auto-pause.
     """
     if not DATABASE_URL:
         msg = 'DATABASE_URL environment variable is required'
         raise RuntimeError(msg)
-    return create_engine(DATABASE_URL)
+    return create_engine(DATABASE_URL, pool_pre_ping=True)
 
 
 _session_var: ContextVar[Session] = ContextVar('_session_var')
@@ -46,27 +46,6 @@ def register[T](*objects: T) -> T:
         session.add(obj)
     session.flush()
     return objects[-1]
-
-
-def create_db_and_tables(*, max_retries: int = 10) -> None:
-    import hideandseek_models  # noqa: F401, PLC0415 — registers all tables on metadata
-
-    engine = get_engine()
-    for attempt in range(max_retries):
-        try:
-            with engine.connect() as conn:
-                conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
-                conn.commit()
-            break
-        except OperationalError:
-            if attempt == max_retries - 1:
-                raise
-            logger.warning('db_connect_retry', attempt=attempt + 1, max_retries=max_retries)
-            time.sleep(1)
-
-    from hideandseek_models.base import Base  # noqa: PLC0415
-
-    Base.metadata.create_all(engine)
 
 
 @contextmanager

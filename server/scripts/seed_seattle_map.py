@@ -17,7 +17,7 @@ from shapely.geometry.base import BaseGeometry
 from sqlalchemy import select
 
 from hideandseek_core.conventions import get_default_inventory
-from hideandseek_core.db import create_db_and_tables, get_session, session_scope
+from hideandseek_core.db import get_session, session_scope
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.map_feature import GameMapFeature, MapFeature
 from hideandseek_models.transit import TransitDataset
@@ -588,8 +588,6 @@ HOSPITALS: list[tuple[str, float, float, str]] = [
 
 
 def main() -> None:
-    create_db_and_tables()
-
     # Look up existing Seattle TransitDataset
     with session_scope():
         dataset = (

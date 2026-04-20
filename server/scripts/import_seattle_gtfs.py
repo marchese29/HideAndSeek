@@ -22,7 +22,7 @@ from shapely.geometry import LineString, Point
 from sqlalchemy import select
 
 from hideandseek.gtfs import parse_gtfs
-from hideandseek_core.db import create_db_and_tables, get_session, session_scope
+from hideandseek_core.db import get_session, session_scope
 from hideandseek_models.transit import Route, RouteStop, Stop, TransitDataset
 from hideandseek_models.types import RouteType
 
@@ -85,8 +85,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description='Import Seattle GTFS transit data')
     parser.add_argument('--gtfs-path', help='Path to local GTFS zip (skips download)')
     args = parser.parse_args()
-
-    create_db_and_tables()
 
     # Check idempotency
     with session_scope():

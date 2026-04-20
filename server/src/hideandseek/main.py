@@ -8,13 +8,11 @@ from fastapi import FastAPI, Response
 from hideandseek.logging import setup_logging
 from hideandseek.middleware import AccessLogMiddleware
 from hideandseek.routers import endgame, events, games, location, maps, questions
-from hideandseek_core.db import create_db_and_tables
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_logging()
-    create_db_and_tables()
     yield
 
 

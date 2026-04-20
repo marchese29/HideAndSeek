@@ -87,13 +87,15 @@ def pytest_configure() -> None:
 def _pg_engine() -> Generator[sa.Engine, None, None]:
     with PostgresContainer('postgis/postgis:16-3.4-alpine') as pg:
         url = pg.get_connection_url().replace('psycopg2', 'psycopg')
-        # Set DATABASE_URL so the app lifespan's create_db_and_tables() works
         db_module.DATABASE_URL = url
         db_module.get_engine.cache_clear()
         engine = create_engine(url)
         with engine.connect() as conn:
             conn.execute(sa.text('CREATE EXTENSION IF NOT EXISTS postgis'))
             conn.commit()
+        # Tests use Base.metadata.create_all() instead of running Alembic migrations:
+        # ~10x faster per session, mirrors SQLAlchemy's recommended test setup, and
+        # tests exercise the schema — not the migration path.
         Base.metadata.create_all(engine)
         yield engine
         engine.dispose()

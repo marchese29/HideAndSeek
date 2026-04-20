@@ -12,10 +12,13 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hideandseek"]
+      test: ["CMD-SHELL", "pg_isready -U hideandseek -h 127.0.0.1"]
       interval: 2s
       timeout: 5s
-      retries: 5
+      retries: 10
+      # postgis init scripts briefly open a Unix socket before the TCP restart;
+      # -h 127.0.0.1 + start_period avoid declaring healthy during that window.
+      start_period: 15s
 
   redis:
     image: redis:7-alpine
@@ -42,6 +45,24 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    working_dir: /app
+    command: uv run alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
+    volumes:
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+      - ./models/src:/app/models/src
+      - ./core/src:/app/core/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
@@ -66,6 +87,8 @@ services:
       - ./models/src:/app/models/src
       - ./core/src:/app/core/src
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -101,6 +124,8 @@ services:
       - ./models/src:/app/models/src
       - ./core/src:/app/core/src
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -124,6 +149,8 @@ services:
       - ./models/src:/app/models/src
       - ./core/src:/app/core/src
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:

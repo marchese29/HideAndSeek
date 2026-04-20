@@ -25,3 +25,11 @@
 !server/pyproject.toml
 !server/src/
 !server/scripts/
+# CDK's DockerImageAsset stages the build context before invoking docker,
+# so the Dockerfile itself must survive the ignore filter. (Docker-compose
+# reads the Dockerfile from disk directly, so it works either way.)
+!server/Dockerfile
+
+# Alembic migrations (run by the migrate one-shot in compose + ECS)
+!alembic.ini
+!alembic/
