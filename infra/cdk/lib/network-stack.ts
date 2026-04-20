@@ -157,6 +157,15 @@ export class NetworkStack extends cdk.Stack {
     this.redisSg.addIngressRule(this.workerSg, ec2.Port.tcp(6379), 'From worker');
     this.redisSg.addIngressRule(this.reconcilerSg, ec2.Port.tcp(6379), 'From reconciler');
 
+    // App SGs default to IPv6-only egress (allowAllIpv6Outbound), but
+    // Aurora is IPv4-only (service limitation) and our Redis is IPv4 by
+    // choice (cluster-mode-disabled CfnCacheCluster; see data-stack.ts).
+    // Intra-VPC traffic only — no public IP cost, no EIGW involvement.
+    for (const sg of [this.serverSg, this.workerSg, this.reconcilerSg]) {
+      sg.addEgressRule(this.dbSg, ec2.Port.tcp(5432), 'To Aurora');
+      sg.addEgressRule(this.redisSg, ec2.Port.tcp(6379), 'To Redis');
+    }
+
     // --- Outputs ---
 
     new cdk.CfnOutput(this, 'VpcId', { value: vpc.vpcId });
