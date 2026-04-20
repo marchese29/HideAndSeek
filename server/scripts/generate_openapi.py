@@ -65,6 +65,10 @@ def main():
     ]
     inject_schemas(spec, all_sse_models)  # type: ignore[arg-type]  # SSEExposed concrete classes are BaseModel
 
+    schemas = spec.get('components', {}).get('schemas')
+    if schemas:
+        spec['components']['schemas'] = dict(sorted(schemas.items()))
+
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_PATH, 'w') as f:
         f.write(HEADER)
