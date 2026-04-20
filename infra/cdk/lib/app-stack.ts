@@ -19,18 +19,20 @@ export interface AppStackProps extends cdk.StackProps {
  * Ships an ECS cluster with three Fargate services (server, worker,
  * reconciler) all running the DataStack-built image with different
  * entrypoints, plus an ALB that fronts the server on the AWS-issued
- * hostname. Private-subnet Fargate with IPv6 egress via the
- * NetworkStack's Egress-Only IGW. No CloudFront, no custom domain —
- * those land in wos.9.
+ * hostname.
  *
  * ALB listens on HTTP :80 (not :443) because the AWS-issued
- * `*.elb.amazonaws.com` hostname can't hold an ACM cert. wos.9 adds
- * CloudFront :443 in front + ACM + custom domain; that stack can flip
- * this listener to :443 and drop the :80 ingress rule on the albSg.
+ * `*.elb.amazonaws.com` hostname can't hold an ACM cert. CdnStack adds
+ * CloudFront :443 out front with the custom-domain cert; CloudFront
+ * reaches the ALB over HTTP and the :80 SG ingress here is restricted
+ * to CloudFront's managed origin-facing prefix list (IPv4) plus `::/0`
+ * on IPv6 (no AWS-managed IPv6 prefix list exists for CloudFront
+ * origins; see inline notes on the ingress rules).
  */
 export class AppStack extends cdk.Stack {
   readonly cluster: ecs.Cluster;
   readonly alb: elbv2.ApplicationLoadBalancer;
+  readonly albDnsName: string;
   readonly serverService: ecs.FargateService;
   readonly workerService: ecs.FargateService;
   readonly reconcilerService: ecs.FargateService;
@@ -305,31 +307,46 @@ export class AppStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       ipAddressType: elbv2.IpAddressType.DUAL_STACK_WITHOUT_PUBLIC_IPV4,
     });
+    this.albDnsName = this.alb.loadBalancerDnsName;
 
-    // wos.8-only: allow :80 HTTP so we can smoke the ALB on its AWS-
-    // issued hostname (which can't carry an ACM cert). wos.9 switches
-    // the listener to :443 (behind CloudFront) and drops these rules.
-    //
+    // CloudFront → ALB runs over HTTP. AWS publishes a managed prefix
+    // list (`com.amazonaws.global.cloudfront.origin-facing`) with every
+    // IPv4 range CloudFront uses to reach origins; referencing it by
+    // name here keeps the ALB SG locked down without hardcoding CIDRs
+    // that AWS rotates periodically.
+    const cloudfrontOriginPrefixList = ec2.PrefixList.fromLookup(this, 'CloudfrontOriginPrefixList', {
+      prefixListName: 'com.amazonaws.global.cloudfront.origin-facing',
+      // AWS-managed prefix lists are owned by `AWS` (literal); narrowing
+      // the filter avoids ever resolving to a customer-managed list with
+      // a colliding name in this account.
+      ownerId: 'AWS',
+    });
+
     // Defined as standalone CfnSecurityGroupIngress resources in *this*
     // stack (rather than `network.albSg.addIngressRule(...)`) so the
-    // temporary wiring is scoped to AppStack's template — deleting them
-    // in wos.9 won't ripple into NetworkStack. Same pattern DataStack
-    // uses for the migration-task DB ingress.
+    // rules live in AppStack's template — a future edge/protocol change
+    // doesn't ripple into NetworkStack. Same pattern DataStack uses for
+    // the migration-task DB ingress.
     new ec2.CfnSecurityGroupIngress(this, 'AlbHttpIngressV4', {
       groupId: network.albSg.securityGroupId,
       ipProtocol: 'tcp',
       fromPort: 80,
       toPort: 80,
-      cidrIp: '0.0.0.0/0',
-      description: 'wos.8 smoke: HTTP IPv4',
+      sourcePrefixListId: cloudfrontOriginPrefixList.prefixListId,
+      description: 'CloudFront origin: HTTP IPv4',
     });
+    // No AWS-managed IPv6 prefix list exists for CloudFront origin-
+    // facing addresses. Since the ALB is DUAL_STACK_WITHOUT_PUBLIC_IPV4
+    // and CloudFront will connect over IPv6, we accept open ::/0 on :80
+    // as the trade-off for not paying the IPv4 assignment fee. The ALB
+    // serves the same payload CloudFront does; defense is at the edge.
     new ec2.CfnSecurityGroupIngress(this, 'AlbHttpIngressV6', {
       groupId: network.albSg.securityGroupId,
       ipProtocol: 'tcp',
       fromPort: 80,
       toPort: 80,
       cidrIpv6: '::/0',
-      description: 'wos.8 smoke: HTTP IPv6',
+      description: 'CloudFront origin: HTTP IPv6 (no managed PL for IPv6)',
     });
 
     // App SGs in NetworkStack only egress to Aurora:5432 + Redis:6379 on
@@ -383,7 +400,7 @@ export class AppStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'AlbDnsName', {
       value: this.alb.loadBalancerDnsName,
-      description: 'ALB AWS-issued hostname (smoke target until wos.9)',
+      description: 'ALB AWS-issued hostname (CloudFront origin; direct HTTP access is open only to the CloudFront prefix list)',
     });
     new cdk.CfnOutput(this, 'ClusterArn', { value: cluster.clusterArn });
     new cdk.CfnOutput(this, 'ServerServiceName', { value: this.serverService.serviceName });

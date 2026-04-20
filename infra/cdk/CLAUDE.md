@@ -18,8 +18,8 @@ The CDK app must deploy cleanly into **any** AWS account the operator is authent
 ### How this is enforced in practice
 
 - **Account + region** are read from `CDK_DEFAULT_ACCOUNT` and `CDK_DEFAULT_REGION` (populated automatically by the CDK CLI from the active AWS credentials), never hardcoded in any stack or `cdk.json`.
-- **Domain / hosted zone** values (needed for `wos.9+`) enter via `process.env.*` or CDK context. `cdk.context.json` is gitignored.
-- **Deploy-time env vars** (secret ARNs, developer IDs, bundle IDs) live in `infra/cdk/.env` — gitignored. A committed `infra/cdk/.env.example` documents which vars each stack reads. Load before deploys: `set -a; source infra/cdk/.env; set +a`.
+- **Domain / hosted zone** values enter via `DOMAIN_NAME` + `HOSTED_ZONE_NAME` env vars, read via `lib/env.ts`'s `requireEnv` helper. The hosted zone ID itself is never set — `HostedZone.fromLookup` resolves it at synth time and caches the result in gitignored `cdk.context.json`.
+- **Deploy-time env vars** (secret ARNs, developer IDs, bundle IDs, domain names) live in `infra/cdk/.env` — gitignored. A committed `infra/cdk/.env.example` documents which vars each stack reads. Load before deploys: `set -a; source infra/cdk/.env; set +a`.
 - **README commands** prefer the credential-inferring form (`npx cdk bootstrap`, `aws sts get-caller-identity`) over explicit ARNs like `aws://<account>/<region>`.
 - If you need to reference a concrete value while debugging, keep it in your shell, not in code or docs.
 
@@ -27,11 +27,12 @@ When reviewing a PR touching this directory, one of the things to check is: does
 
 ## Stack layout
 
-Three stacks, added incrementally:
+Four stacks, added incrementally:
 
 - `HideAndSeek-Network` — VPC, subnets, gateways, security groups.
 - `HideAndSeek-Data` — Aurora Serverless v2 + ElastiCache + Secrets Manager + the shared `DockerImageAsset`.
-- `HideAndSeek-App` — ECS cluster + server/worker/reconciler Fargate services + ALB. Reuses `DataStack.appImage`. CloudFront, ACM, Route 53 A/AAAA records land in `wos.9`.
+- `HideAndSeek-App` — ECS cluster + server/worker/reconciler Fargate services + ALB. Reuses `DataStack.appImage`.
+- `HideAndSeek-Cdn` — CloudFront distribution + ACM cert + Route 53 A/AAAA alias records. **Deploys to `us-east-1`** regardless of the primary region (ACM for CloudFront must live there; Route 53 is global). Consumes `AppStack.albDnsName` via `crossRegionReferences: true`.
 
 All stacks are prefixed `HideAndSeek-` to avoid collisions with other projects in the same AWS account.
 
@@ -79,9 +80,26 @@ NetworkStack's app SGs only allow IPv4 egress to Aurora:5432 and Redis:6379 by d
 
 IPv6 on Fargate ENIs is controlled entirely by the account-level ECS `dualStackIPv6` setting (`aws ecs put-account-setting --name dualStackIPv6 --value enabled`) plus subnet-level `AssignIpv6AddressOnCreation=true`. The CloudFormation `AWS::ECS::Service` schema has no per-service IPv6 toggle — attempting a `NetworkConfiguration.AwsvpcConfiguration.AssignIpv6Address` override fails with `extraneous key [AssignIpv6Address] is not permitted`.
 
-### ALB listener port — :80 in wos.8, :443 in wos.9
+### ALB listener port — HTTP :80 (CloudFront-fronted)
 
-The ALB is `dualstack-without-public-ipv4` (avoids the Feb-2024 public-IPv4 fees). For `wos.8` the single listener is **HTTP :80**, not :443, because the AWS-issued hostname (`*.elb.amazonaws.com`) can't carry an ACM cert and we don't own a Route 53 zone yet (that's `wos.9`). AppStack adds a temporary :80 ingress rule on `network.albSg` (NetworkStack only allows :443); `wos.9` drops that rule when it swaps the listener to :443 behind a CloudFront distribution at `hideandseek.marchese.dev`.
+The ALB is `dualstack-without-public-ipv4` (avoids the Feb-2024 public-IPv4 fees) and listens on **HTTP :80** only. The AWS-issued `*.elb.amazonaws.com` hostname can't hold an ACM cert, so TLS terminates one hop out at CloudFront, which reaches the ALB over HTTP.
+
+AppStack adds two :80 ingress rules on `network.albSg` (NetworkStack itself only allows :443):
+
+- **IPv4** — `SourcePrefixListId` = `com.amazonaws.global.cloudfront.origin-facing` (AWS-managed prefix list of every CloudFront origin-facing IPv4 range). Locks the ALB :80 to CloudFront traffic only, no manual CIDR bookkeeping.
+- **IPv6** — `::/0`. AWS doesn't publish an IPv6 prefix list for CloudFront origin-facing IPs, and the ALB is IPv6-only on the public side. Open ::/0 on :80 is the documented trade-off for not paying the IPv4-assignment fee; defense lives at the CloudFront layer.
+
+Both rules are defined as standalone `CfnSecurityGroupIngress` resources in AppStack (not `addIngressRule` on the NetworkStack SG) so a future edge-protocol change doesn't ripple into NetworkStack.
+
+### CdnStack — CloudFront + ACM + Route 53
+
+`lib/cdn-stack.ts` deploys to us-east-1. It looks up the Route 53 zone by name, provisions a DNS-validated ACM cert for the custom domain, and creates a CloudFront `Distribution` with:
+
+- HTTP origin pointed at `AppStack.albDnsName` (`OriginProtocolPolicy.HTTP_ONLY`, port 80, 60s read timeout for SSE).
+- `CachePolicy.CACHING_DISABLED` on the default behavior — applied globally, covers the three SSE/state paths from the design (`/games/*/lobby/events`, `/games/*/hider-state`, `/games/*/seeker-state`) without needing per-path overrides.
+- Custom `OriginRequestPolicy` that allow-lists `X-Player-Id` and `X-Player-Secret` (CloudFront strips unknown headers by default) plus all query strings.
+- `ViewerProtocolPolicy.REDIRECT_TO_HTTPS`, `HttpVersion.HTTP2_AND_3`, `SecurityPolicyProtocol.TLS_V1_2_2021`, `PriceClass.PRICE_CLASS_100`, `compress: false`.
+- A + AAAA alias records on the zone pointing at the distribution.
 
 ## DataStack — migration runner pattern
 
