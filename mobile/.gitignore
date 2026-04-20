@@ -18,6 +18,10 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Firebase — per-operator config, download from Firebase Console
+google-services.json
+GoogleService-Info.plist
+
 # Metro
 .metro-health-check*
 

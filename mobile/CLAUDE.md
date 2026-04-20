@@ -191,7 +191,7 @@ Both hooks:
 - Token rotation is handled by `addPushTokenListener` in the hook; the lobby screen watches for changes and PATCHes the player.
 - `expo-device` is used to skip push registration on simulators (`Device.isDevice` check).
 - Android requires a notification channel (created in `usePushToken`) before the permission prompt appears.
-- FCM on Android requires `google-services.json` from Firebase Console in the project root (referenced in `app.config.ts`).
+- FCM on Android requires `mobile/google-services.json` from Firebase Console (referenced by `app.config.ts`). **Gitignored** — every contributor downloads their own copy: Firebase Console → Project Settings → your Android app → Download `google-services.json`. A future EAS Build setup will layer an `eas secret` of type `file` so CI builds don't depend on a local copy.
 
 ## Map Rendering
 

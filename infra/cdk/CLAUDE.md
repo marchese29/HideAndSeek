@@ -19,6 +19,7 @@ The CDK app must deploy cleanly into **any** AWS account the operator is authent
 
 - **Account + region** are read from `CDK_DEFAULT_ACCOUNT` and `CDK_DEFAULT_REGION` (populated automatically by the CDK CLI from the active AWS credentials), never hardcoded in any stack or `cdk.json`.
 - **Domain / hosted zone** values (needed for `wos.9+`) enter via `process.env.*` or CDK context. `cdk.context.json` is gitignored.
+- **Deploy-time env vars** (secret ARNs, developer IDs, bundle IDs) live in `infra/cdk/.env` — gitignored. A committed `infra/cdk/.env.example` documents which vars each stack reads. Load before deploys: `set -a; source infra/cdk/.env; set +a`.
 - **README commands** prefer the credential-inferring form (`npx cdk bootstrap`, `aws sts get-caller-identity`) over explicit ARNs like `aws://<account>/<region>`.
 - If you need to reference a concrete value while debugging, keep it in your shell, not in code or docs.
 

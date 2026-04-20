@@ -16,13 +16,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.hideandseek.app',
+    bundleIdentifier: 'dev.marchese.hideandseek',
     config: {
       googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? '',
     },
   },
   android: {
-    package: 'com.hideandseek.app',
+    package: 'dev.marchese.hideandseek',
     adaptiveIcon: {
       backgroundColor: '#E6F4FE',
       foregroundImage: './assets/android-icon-foreground.png',

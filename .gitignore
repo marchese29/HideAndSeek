@@ -16,6 +16,10 @@ __pycache__/
 .env
 .env.local
 
+# Cloud service credentials (downloaded JSON — live in Secrets Manager instead)
+*firebase-adminsdk*.json
+*-service-account*.json
+
 # Claude Things
 .claude/
 
