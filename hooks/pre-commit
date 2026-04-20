@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Pre-commit hook: models → core → worker → reconciler → server → openapi → api-types → mobile
+# Pre-commit hook: models → core → worker → reconciler → server → openapi
+# → api-types → mobile → cdk, with alembic and cdk as independent leaves.
 #
 # Uses cached hashes of staged content so steps are skipped when
 # nothing has changed since the last successful run.
@@ -110,6 +111,14 @@ run_if_changed "mobile-checks" \
     "Mobile code changed — running checks..." \
     hooks/mobile-checks.sh \
     "mobile/" || exit 1
+
+# --- Alembic checks (ruff only; leaf — nothing in the workspace imports
+# from alembic/, so no downstream cascade) ---
+run_if_changed "alembic-checks" \
+    "Alembic checks passed on this content — skipping." \
+    "Alembic code changed — running checks..." \
+    hooks/alembic-checks.sh \
+    "alembic/" || exit 1
 
 # --- CDK checks (independent of other packages) ---
 run_if_changed "cdk-checks" \

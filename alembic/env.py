@@ -41,6 +41,7 @@ def _compare_type(context, inspected_column, metadata_column, inspected_type, me
         return False
     return None
 
+
 config = context.config
 
 if config.config_file_name is not None:
