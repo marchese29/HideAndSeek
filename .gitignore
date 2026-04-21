@@ -25,3 +25,6 @@ __pycache__/
 
 # Beads
 .beads/*.log*
+# Lift bd.sock (unix socket) up to the root — EAS Build doesn't honor the
+# nested .beads/.gitignore, and the socket crashes its tarball-copy step.
+.beads/bd.sock
