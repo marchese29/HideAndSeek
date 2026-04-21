@@ -152,6 +152,7 @@ export class AppStack extends cdk.Stack {
       taskRole: serverTaskRole,
     });
     const serverLogGroup = new logs.LogGroup(this, 'ServerLogGroup', {
+      logGroupName: '/hideandseek/server',
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -180,6 +181,7 @@ export class AppStack extends cdk.Stack {
       taskRole: workerTaskRole,
     });
     const workerLogGroup = new logs.LogGroup(this, 'WorkerLogGroup', {
+      logGroupName: '/hideandseek/worker',
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -207,6 +209,7 @@ export class AppStack extends cdk.Stack {
       taskRole: reconcilerTaskRole,
     });
     const reconcilerLogGroup = new logs.LogGroup(this, 'ReconcilerLogGroup', {
+      logGroupName: '/hideandseek/reconciler',
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });

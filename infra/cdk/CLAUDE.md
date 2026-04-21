@@ -72,6 +72,10 @@ Per-service task roles (defined inline in AppStack):
 - `WorkerTaskRole` — `sns:Publish` on endpoint-ARN children only (worker doesn't register tokens).
 - `ReconcilerTaskRole` — no extra permissions beyond the default exec role (DB access flows through the Secrets Manager-backed `DATABASE_URL`; Redis is in-VPC, no AWS API calls).
 
+### Log group naming
+
+CloudWatch log groups in this package use the `/hideandseek/<service>` convention — e.g. `/hideandseek/server`, `/hideandseek/worker`, `/hideandseek/reconciler`. Always set `logGroupName` explicitly on `new logs.LogGroup(...)` so CloudFormation doesn't fall back to the auto-generated `<StackName>-<Id>-<hash>` form; stable names make `aws logs tail /hideandseek/server --follow`, Log Insights queries, and dashboards survive stack rebuilds. `logGroupName` is immutable, so changing it on an existing stack replaces the log group (history is lost) — fine here because `removalPolicy: DESTROY` + `ONE_MONTH` retention is already the norm.
+
 ### Networking: public subnets + `assignPublicIp`
 
 All three services run in the **public** dual-stack subnets with `assignPublicIp: true`, not the isolated ones. The original design was "isolated subnets + EIGW for IPv6-only egress", but Fargate's control plane (ECR, Secrets Manager, CloudWatch Logs) only advertises IPv4 endpoints for those APIs — so with no IPv4 egress route, task image pulls and secret hydration time out and the task hangs in `PENDING` until CloudFormation gives up. Cheap fixes for isolated subnets were 4× interface endpoints (~$28/mo) or a NAT gateway (~$32/mo). Public subnets with `assignPublicIp: true` cost ~$11/mo (3 × $3.60 IPv4-assignment fee) and keep the same security posture: `serverSg` ingress is ALB-only on :8000; `workerSg` / `reconcilerSg` have no ingress rules at all, so a port scan on any task IP lands on a closed port.
