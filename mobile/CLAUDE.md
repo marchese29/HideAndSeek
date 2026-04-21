@@ -12,11 +12,39 @@ npx expo start                 # Start dev server (for already-built apps)
 npx tsc --noEmit               # Type check
 npx expo lint                  # Lint
 scripts/generate-api.sh        # Regenerate API types from OpenAPI spec
+
+# EAS Build (cloud builds — see "EAS Build & Distribution" below). `eas` does
+# NOT auto-load .env like `expo` does — always prefix with the source line.
+set -a && source .env && set +a && eas build --profile development --platform ios
+set -a && source .env && set +a && eas build --profile preview --platform android
+set -a && source .env && set +a && eas build --profile production --platform all
+set -a && source .env && set +a && eas credentials   # manage iOS certs / Android keystore
+set -a && source .env && set +a && eas env:list --environment production
 ```
 
 ## Development Builds
 
-This app requires **development builds** (not Expo Go) because `react-native-maps` needs native compilation. First build takes several minutes. Requires Xcode + command-line tools for iOS, Android Studio for Android.
+This app requires **development builds** (not Expo Go) because `react-native-maps` needs native compilation. First build takes several minutes. Requires Xcode + command-line tools for iOS, Android Studio for Android. `expo-dev-client` is installed to support the EAS `development` profile.
+
+## EAS Build & Distribution
+
+Cloud builds via [EAS](https://expo.dev/eas). Defined in `eas.json` at three profiles:
+
+- **development** — dev-client builds. iOS simulator build (no code signing), Android APK. Used for your local iteration loop.
+- **preview** — internal distribution for testers. **Android only** (APK, sideloadable). iOS preview is intentionally skipped; TestFlight via `production` covers the same use case.
+- **production** — store-ready builds (iOS IPA signed for App Store, Android AAB). `autoIncrement: true` — EAS manages build numbers remotely (`cli.appVersionSource: "remote"`). `eas submit --profile production` pushes to TestFlight internal testing + Google Play internal track.
+
+**Project-scoped EAS resources (live on expo.dev, not in repo):**
+
+- File env var `GOOGLE_SERVICES_JSON` (secret visibility) — uploaded copy of `google-services.json` for FCM. Wired into `app.config.ts` via `android.googleServicesFile = process.env.GOOGLE_SERVICES_JSON ?? './google-services.json'`.
+- String env vars `EAS_PROJECT_OWNER` + `EAS_PROJECT_ID` (plaintext) — mirror local `.env` so `app.config.ts` resolves identically in cloud builds.
+- Credentials (managed by `eas credentials`) — iOS distribution cert + App Store provisioning profile + APNs push key; Android upload keystore. EAS holds them; back them up with `eas credentials` → Download.
+
+**Dynamic app config + EAS:** because `app.config.ts` is dynamic, `eas init` can't auto-write `projectId` into it. We resolve `owner` and `extra.eas.projectId` from env vars instead. This keeps personal Expo-account identifiers out of the repo and lets every operator own their own project (mirrors the CDK `no-personal-info-in-repo` rule).
+
+**`.env` sourcing quirk:** `eas` CLI does NOT auto-load `.env` (unlike `expo`). Every `eas` invocation must source it first: `set -a && source .env && set +a && eas ...`.
+
+**`.easignore`:** don't create one. It _replaces_ `.gitignore` rather than augmenting it, which means node_modules etc. would start shipping to EAS. EAS's built-in git-archive upload (used when the working tree is clean) already honors `.gitignore`, so committing before each build is the clean path.
 
 ## Project Structure
 
@@ -140,8 +168,11 @@ const { data, error } = await api.GET('/games/{game_id}', {
 
 - `GOOGLE_MAPS_API_KEY` — build-time, used in `app.config.ts` for native map SDK keys
 - `EXPO_PUBLIC_API_BASE_URL` — runtime, defaults to `http://localhost:8000`
+- `EAS_PROJECT_OWNER` — Expo account slug (`marchese29`); drives `owner` in `app.config.ts`
+- `EAS_PROJECT_ID` — EAS project UUID; drives `extra.eas.projectId` in `app.config.ts`
+- `GOOGLE_SERVICES_JSON` — only set during EAS cloud builds (points at the mounted file); locally, `app.config.ts` falls back to `./google-services.json`
 
-Copy `.env.example` to `.env` and fill in values.
+Copy `.env.example` to `.env` and fill in values. Values for `EAS_PROJECT_*` are tied to a specific Expo account — each operator owns their own. Cloud builds read these from project-scoped EAS env vars, not from `.env`.
 
 ## State Management
 
@@ -191,7 +222,7 @@ Both hooks:
 - Token rotation is handled by `addPushTokenListener` in the hook; the lobby screen watches for changes and PATCHes the player.
 - `expo-device` is used to skip push registration on simulators (`Device.isDevice` check).
 - Android requires a notification channel (created in `usePushToken`) before the permission prompt appears.
-- FCM on Android requires `mobile/google-services.json` from Firebase Console (referenced by `app.config.ts`). **Gitignored** — every contributor downloads their own copy: Firebase Console → Project Settings → your Android app → Download `google-services.json`. A future EAS Build setup will layer an `eas secret` of type `file` so CI builds don't depend on a local copy.
+- FCM on Android requires `mobile/google-services.json` from Firebase Console (referenced by `app.config.ts`). **Gitignored** — every contributor downloads their own copy: Firebase Console → Project Settings → your Android app → Download `google-services.json`. EAS cloud builds pull the file from the `GOOGLE_SERVICES_JSON` file env var (secret, project-scoped) so they don't depend on a local copy; `app.config.ts` falls back to `./google-services.json` when the env var is absent (i.e., local builds).
 
 ## Map Rendering
 

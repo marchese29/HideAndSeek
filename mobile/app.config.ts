@@ -4,8 +4,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'HideAndSeek',
   slug: 'hide-and-seek',
+  owner: process.env.EAS_PROJECT_OWNER,
   scheme: 'hideandseek',
   platforms: ['ios', 'android'],
+  extra: {
+    eas: {
+      projectId: process.env.EAS_PROJECT_ID,
+    },
+  },
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
@@ -23,6 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'dev.marchese.hideandseek',
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
     adaptiveIcon: {
       backgroundColor: '#E6F4FE',
       foregroundImage: './assets/android-icon-foreground.png',
