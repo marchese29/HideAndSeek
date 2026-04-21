@@ -62,7 +62,7 @@ src/hideandseek_core/
 `logic/station.py` provides station-related computation for both election mechanics and location event enrichment:
 - `compute_candidate_station_ids(game)` — stop IDs where ALL hiders are within hiding zone radius. Pre-election only. Reuses `get_stops_within_radius_of_all()`.
 - `compute_not_in_zone(game)` — player IDs of hiders outside the hiding zone. Post-election only. Uses geodesic distance (pure math via `geo.distance()`).
-- `compute_hider_centroid(game)` — centroid of hiders with recent locations (used as representative hider location for answer previews).
+- `representative_hider_location(game)` — coordinates of the hider with the most recently updated location (used as the "where the hiders are" stand-in for answer previews). No freshness filter: hiders are expected to stick together, and a stale fix is still the last-known position of the group. Returns `None` only when no hider has any location.
 
 ## Logic — Proximity Tier Tracking
 

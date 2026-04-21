@@ -11,6 +11,7 @@ import { ConnectionDot } from '@/components/ConnectionDot';
 import { PlayerList } from '@/components/PlayerList';
 import { useLobbyEvents } from '@/hooks/useLobbyEvents';
 import { useAppStore } from '@/store';
+import { requestBackgroundLocationPermission } from '@/utils/locationPermission';
 
 type GameResponse = components['schemas']['GameResponse'];
 
@@ -19,6 +20,12 @@ export default function LobbyScreen() {
   const playerId = useAppStore((s) => s.playerId);
 
   const { connected } = useLobbyEvents(game_id);
+
+  // Ask for background ("Always") location permission in the lobby so the OS
+  // prompt never interrupts a phase transition during gameplay.
+  useEffect(() => {
+    void requestBackgroundLocationPermission();
+  }, []);
 
   // PATCH the player if the push token rotates while in the lobby
   const pushToken = useAppStore((s) => s.pushToken);

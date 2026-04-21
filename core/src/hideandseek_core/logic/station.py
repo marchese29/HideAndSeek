@@ -1,12 +1,11 @@
-"""Station election logic — election, transition, fallback, centroid."""
+"""Station election logic — election, transition, fallback, representative hider pick."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
 
 import structlog
-from shapely.geometry import MultiPoint, Point
+from shapely.geometry import Point
 
 from hideandseek_core.geo import distance as geo_distance
 from hideandseek_core.logic.endgame import effective_hiding_zone_radius_m
@@ -161,20 +160,18 @@ def resolve_station_fallback(game: Game) -> Stop:
     raise RuntimeError('No playable stops found for fallback resolution.')
 
 
-_HIDER_LOCATION_FRESHNESS = timedelta(minutes=1)
+def representative_hider_location(game: Game) -> Point | None:
+    """Return the coordinates of the hider whose latest location is most recent.
 
-
-def compute_hider_centroid(game: Game) -> Point | None:
-    """Compute the centroid of hiders with recent location updates.
-
-    Finds the latest hider location update across all hiders, then averages
-    the positions of all hiders whose latest update is within 1 minute of it.
-    Returns None if no hider has a location update.
+    Hiders are expected to stick together, so the freshest fix is a good proxy for
+    the group. No time filter — a stale fix still represents "last known position"
+    of a stationary group and is better than nothing.
+    Returns None if no hider has any location update.
     """
     hiders = [p for p in game.players if p.role == PlayerRole.hider]
     if not hiders:
         logger.debug(
-            'hider_centroid_unavailable',
+            'representative_hider_location_unavailable',
             game_id=str(game.id),
             reason='no_hiders',
         )
@@ -188,17 +185,14 @@ def compute_hider_centroid(game: Game) -> Point | None:
 
     if not locations:
         logger.debug(
-            'hider_centroid_unavailable',
+            'representative_hider_location_unavailable',
             game_id=str(game.id),
             reason='no_locations',
         )
         return None
 
-    newest = max(loc.timestamp for loc in locations)
-    cutoff = newest - _HIDER_LOCATION_FRESHNESS
-
-    fresh = [loc.coordinates for loc in locations if loc.timestamp >= cutoff]
-    return MultiPoint(fresh).centroid
+    latest = max(locations, key=lambda loc: loc.timestamp)
+    return latest.coordinates
 
 
 def compute_candidate_station_ids(game: Game) -> list[uuid.UUID]:

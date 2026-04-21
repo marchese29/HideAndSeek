@@ -29,8 +29,8 @@ from hideandseek_core.logic.answer import preview_answer
 from hideandseek_core.logic.station import (
     compute_candidate_station_ids,
     compute_freeze_departed,
-    compute_hider_centroid,
     compute_not_in_zone,
+    representative_hider_location,
 )
 from hideandseek_core.queries.features import get_all_map_features
 from hideandseek_core.queries.location import get_all_player_locations
@@ -180,7 +180,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
     elif game.hider_station_id is not None:
         not_in_zone = compute_not_in_zone(game)
         if active_q is not None and active_q.status == QuestionStatus.answerable:
-            hider_loc = compute_hider_centroid(game)
+            hider_loc = representative_hider_location(game)
             if hider_loc is not None:
                 computed_answer = preview_answer(active_q, hider_loc, game)
 

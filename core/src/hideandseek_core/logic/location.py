@@ -17,8 +17,8 @@ from hideandseek_core.logic.station import (
     clear_freeze_locations,
     compute_candidate_station_ids,
     compute_freeze_departed,
-    compute_hider_centroid,
     compute_not_in_zone,
+    representative_hider_location,
     set_freeze_locations,
 )
 from hideandseek_core.queries.location import (
@@ -119,7 +119,7 @@ def process_location_update(
             not_in_zone = compute_not_in_zone(game)
             active_q = get_active_question(game)
             if active_q is not None and active_q.status == QuestionStatus.answerable:
-                hider_loc = compute_hider_centroid(game)
+                hider_loc = representative_hider_location(game)
                 if hider_loc is not None:
                     computed_answer = preview_answer(active_q, hider_loc, game)
 

@@ -23,8 +23,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'dev.marchese.hideandseek',
-    config: {
-      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? '',
+    infoPlist: {
+      UIBackgroundModes: ['location'],
     },
   },
   android: {
@@ -41,6 +41,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         apiKey: process.env.GOOGLE_MAPS_API_KEY ?? '',
       },
     },
+    permissions: [
+      'ACCESS_BACKGROUND_LOCATION',
+      'FOREGROUND_SERVICE',
+      'FOREGROUND_SERVICE_LOCATION',
+    ],
   },
   plugins: [
     'expo-router',

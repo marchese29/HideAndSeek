@@ -14,3 +14,22 @@ export async function requestLocationPermission(): Promise<boolean> {
   const { status } = await Location.requestForegroundPermissionsAsync();
   return status === 'granted';
 }
+
+/**
+ * Requests the "Always" / background location permission. Foreground must be
+ * granted first — iOS only surfaces the Always upgrade after foreground is
+ * already approved.
+ *
+ * Called from the lobby so the OS prompt appears before gameplay starts and
+ * doesn't interrupt a phase transition.
+ */
+export async function requestBackgroundLocationPermission(): Promise<boolean> {
+  const { status: fg } = await Location.getForegroundPermissionsAsync();
+  if (fg !== 'granted') return false;
+
+  const { status: existing } = await Location.getBackgroundPermissionsAsync();
+  if (existing === 'granted') return true;
+
+  const { status } = await Location.requestBackgroundPermissionsAsync();
+  return status === 'granted';
+}

@@ -1,3 +1,5 @@
+import '@/background/locationTask';
+
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
