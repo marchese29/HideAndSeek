@@ -41,9 +41,11 @@ export function useLocationTracking(gameId: string): { permissionDenied: boolean
     let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function postLocation(coordinates: GeoJSONPoint, timestamp: string): Promise<boolean> {
-      // Seekers don't report during the hiding phase.
-      const { role, state } = useGameplayStore.getState();
-      if (role === 'seeker' && state?.phase === 'hiding') return false;
+      const { status, role, state } = useGameplayStore.getState();
+      // Don't post until SSE has hydrated — before that, role/phase are unknown
+      // and a seeker would POST during hiding phase and get 409'd.
+      if (status !== 'connected') return false;
+      if (role === 'seeker' && state.phase === 'hiding') return false;
 
       try {
         const { error } = await api.POST('/games/{game_id}/location', {
