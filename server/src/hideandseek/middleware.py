@@ -11,7 +11,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 SKIP_PATHS = {'/healthz'}
 MAX_BODY_LOG_BYTES = 1024
-REDACTED_HEADERS = {'authorization', 'cookie'}
+REDACTED_HEADERS = {'authorization', 'cookie', 'x-player-secret'}
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger('hideandseek.access')
 
