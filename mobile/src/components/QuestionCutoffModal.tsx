@@ -1,41 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getTypeColors } from '@/constants/questionColors';
 import type { SeekerQuestionHistoryEntry } from '@/types/gameplay';
 
-const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
-  radar: 'radar',
-  thermometer: 'thermometer',
-  matching: 'map-marker-multiple',
-  measuring: 'ruler',
-  tentacles: 'asterisk',
-};
-
-function answerLabel(answer: string | null): string {
-  if (!answer) return '';
-  switch (answer) {
-    case 'yes':
-      return 'Yes';
-    case 'no':
-      return 'No';
-    case 'closer':
-      return 'Closer';
-    case 'farther':
-      return 'Farther';
-    default:
-      return answer;
-  }
-}
-
-function paramSummary(entry: SeekerQuestionHistoryEntry, unit: string): string {
-  const p = entry.parameters;
-  if (p.type === 'radar') return `${p.radius} ${unit}`;
-  if (p.type === 'thermometer') return `${p.min_travel} ${unit}`;
-  if (p.type === 'matching' || p.type === 'measuring') return p.category.replace(/_/g, ' ');
-  if (p.type === 'tentacles') return p.category.replace(/_/g, ' ');
-  return '';
-}
+import { QuestionHistoryRow, questionHistoryRowStyles } from './QuestionHistoryRow';
 
 interface QuestionCutoffModalProps {
   visible: boolean;
@@ -76,37 +44,29 @@ export function QuestionCutoffModal({
           data={answered}
           keyExtractor={(item) => item.question_id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => {
-            const colors = getTypeColors(item.question_type);
-            const icon = QUESTION_TYPE_ICONS[item.question_type] ?? 'help-circle';
-            const summary = paramSummary(item, unit);
-
-            return (
-              <Pressable
-                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                onPress={() => {
-                  onSelect(item.sequence - 1);
-                  onClose();
-                }}
-              >
-                <View style={[styles.iconCircle, { backgroundColor: colors.active }]}>
-                  <MaterialCommunityIcons name={icon} size={18} color={colors.onActive} />
-                </View>
-                <Text style={styles.sequence}>Q{item.sequence}</Text>
-                <Text style={styles.paramSummary}>{summary}</Text>
-                <Text style={styles.answer}>{answerLabel(item.answer)}</Text>
-              </Pressable>
-            );
-          }}
+          renderItem={({ item }) => (
+            <QuestionHistoryRow
+              entry={item}
+              unit={unit}
+              onPress={() => {
+                onSelect(item.sequence - 1);
+                onClose();
+              }}
+            />
+          )}
           ListFooterComponent={
             <Pressable
-              style={({ pressed }) => [styles.row, styles.noneRow, pressed && styles.rowPressed]}
+              style={({ pressed }) => [
+                questionHistoryRowStyles.row,
+                styles.noneRow,
+                pressed && questionHistoryRowStyles.rowPressed,
+              ]}
               onPress={() => {
                 onSelect(maxSequence);
                 onClose();
               }}
             >
-              <View style={[styles.iconCircle, { backgroundColor: '#555' }]}>
+              <View style={[questionHistoryRowStyles.iconCircle, { backgroundColor: '#555' }]}>
                 <MaterialCommunityIcons name="cancel" size={18} color="#fff" />
               </View>
               <Text style={styles.noneLabel}>None</Text>
@@ -143,43 +103,6 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: 16,
     paddingBottom: 40,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  rowPressed: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sequence: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.5)',
-    marginLeft: 12,
-    width: 32,
-  },
-  paramSummary: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#fff',
-    flex: 1,
-    marginLeft: 8,
-  },
-  answer: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
   },
   noneRow: {
     marginTop: 8,

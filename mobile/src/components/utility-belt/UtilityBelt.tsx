@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { authHeader } from '@/api/auth';
@@ -8,6 +8,7 @@ import { useQuestionSelection } from '@/hooks/useQuestionSelection';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, HiderGameState, SeekerGameState, StopResponse } from '@/types/gameplay';
 
+import { HiderQuestionHistoryModal } from '../HiderQuestionHistoryModal';
 import { BeltActions } from './BeltActions';
 import { BeltUtilities } from './BeltUtilities';
 import { CandidateStatus } from './CandidateStatus';
@@ -15,6 +16,7 @@ import { CustomDistanceInput } from './CustomDistanceInput';
 import { EndgameBeltCenter } from './EndgameBeltCenter';
 import { EndgameStationPicker } from './EndgameStationPicker';
 import { GameTimer } from './GameTimer';
+import { HiderBeltUtilities } from './HiderBeltUtilities';
 import { ParamPicker } from './ParamPicker';
 import { QuestionTypeBar } from './QuestionTypeBar';
 import { StateAction } from './StateAction';
@@ -54,6 +56,8 @@ export const UtilityBelt = memo(function UtilityBelt({
     role === 'hider' ? (state as HiderGameState).station_election_status : undefined;
   const candidateStations = role === 'hider' ? (state as HiderGameState).candidate_stations : null;
   const disabled = !connected;
+
+  const [historyVisible, setHistoryVisible] = useState(false);
 
   const endgameView = useGameplayStore((s) => s.endgameView);
 
@@ -295,10 +299,22 @@ export const UtilityBelt = memo(function UtilityBelt({
           />
         )}
         {isSeekerSeeking && renderSeekerCenter()}
+        {isHiderSeeking && !isStopSelectionActive && (
+          <HiderBeltUtilities disabled={disabled} onHistory={() => setHistoryVisible(true)} />
+        )}
       </View>
 
       {/* Right: More button */}
       <BeltActions disabled={disabled} />
+
+      {role === 'hider' && (
+        <HiderQuestionHistoryModal
+          visible={historyVisible}
+          onClose={() => setHistoryVisible(false)}
+          questions={(state as HiderGameState).question_history ?? []}
+          convention={gameInfo.distance_convention}
+        />
+      )}
     </View>
   );
 });

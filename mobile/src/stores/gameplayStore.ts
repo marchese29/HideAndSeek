@@ -141,6 +141,11 @@ function buildHiderHistoryEntry(
   asked: HiderActiveQuestion,
   delta: HiderQuestionAnsweredDelta,
 ): HiderQuestionHistoryEntry {
+  // Event params and response params have different shapes for matching/measuring,
+  // but the display-relevant fields (type, radius, min_travel, category) overlap.
+  // Force cast is safe for display; next hydrate provides the canonical value.
+  const parameters = (asked.parameters ??
+    ({ type: 'radar', radius: 0 } as unknown)) as HiderQuestionHistoryEntry['parameters'];
   return {
     question_id: delta.question_id,
     sequence: delta.sequence,
@@ -150,9 +155,9 @@ function buildHiderHistoryEntry(
     asked_by: delta.asked_by,
     asked_at: '', // Not available from deltas; corrected on next hydrate
     slot_index: delta.slot_index,
-    parameters: { type: 'radar', radius: 0 } as never, // Placeholder; corrected on next hydrate
-    seeker_location_start: { type: 'Point', coordinates: [0, 0] },
-    seeker_location_end: null,
+    parameters,
+    seeker_location_start: asked.seeker_location_start ?? { type: 'Point', coordinates: [0, 0] },
+    seeker_location_end: asked.seeker_location_end ?? null,
     answer: delta.answer,
     answered_at: delta.answered_at,
     hider_location: delta.hider_location,

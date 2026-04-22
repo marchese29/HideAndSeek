@@ -26,6 +26,16 @@ set -a && source .env && set +a && eas env:list --environment production
 
 This app requires **development builds** (not Expo Go) because `react-native-maps` needs native compilation. First build takes several minutes. Requires Xcode + command-line tools for iOS, Android Studio for Android. `expo-dev-client` is installed to support the EAS `development` profile.
 
+## Working from a Git Worktree
+
+A fresh worktree under `.claude/worktrees/<branch>/` does not inherit untracked / gitignored files from the main checkout. To get `npx expo run:ios` working:
+
+1. **Copy `mobile/.env` from the main checkout.** It's gitignored (holds `EAS_PROJECT_*`, etc.). Without it `app.config.ts` resolves to a different app identity.
+2. **Copy `mobile/ios/` from the main checkout** until `HideAndSeek-r9i` lands. Fresh `expo prebuild` currently fails because `react-native-maps`'s config plugin injects a podspec that no longer ships; copying the already-prebuilt `ios/` directory skips the prebuild step. Once r9i removes `ios.config.googleMapsApiKey` from `app.config.ts`, prebuild works clean and this step goes away.
+3. **`.watchmanconfig`** at the worktree root marks it as a Watchman project boundary so the daemon doesn't walk up past the worktree's `.git` file into the main checkout. Already committed at the repo root — no per-worktree action needed.
+
+If Metro complains about a missing transitive module (e.g. `@babel/runtime/helpers/wrapRegExp`), the install is partial — `rm -rf node_modules && npm install` (no flags) fixes it. Cause is unclear; reproduce-and-file if it happens cleanly.
+
 ## EAS Build & Distribution
 
 Cloud builds via [EAS](https://expo.dev/eas). Defined in `eas.json` at three profiles:
@@ -100,7 +110,9 @@ src/
     ExclusionOverlay.tsx       # Exclusion zone polygon overlay (translucent red, seeker seeking phase only, zIndex 2000)
     HidingZoneOverlay.tsx      # Hiding zone polygon overlay (translucent blue fill, zIndex 450, strokeOnly prop for endgame outline)
     SafeZoneOverlay.tsx        # Endgame safe zone polygon overlay (translucent blue fill, zIndex 460)
-    QuestionCutoffModal.tsx    # Bottom sheet modal for endgame question cutoff selection
+    QuestionCutoffModal.tsx    # Bottom sheet modal for endgame question cutoff selection (uses QuestionHistoryRow)
+    QuestionHistoryRow.tsx     # Shared row (icon + Q# + params + answer/status) — read-only when onPress omitted; used by QuestionCutoffModal + HiderQuestionHistoryModal
+    HiderQuestionHistoryModal.tsx # Hider read-only history modal — lists all terminal questions (answered + vetoed + abandoned), accessed from belt
     PreviewBoundaryOverlay.tsx # Question preview boundary polyline (solid, type-colored, seeker only, zIndex 1500)
     StopMarker.tsx             # Transit stop dot marker (standalone, unused — replaced by TransitRoute)
     TransitRoute.tsx           # Transit route polyline + white stop dots (hides candidates via hiddenStopIds)
@@ -120,6 +132,7 @@ src/
       index.ts                 # Barrel export
       UtilityBelt.tsx          # Container — three-section row, wires question selection + stop selection + utility buttons
       BeltUtilities.tsx       # Seeker utility buttons (default belt center when question selection closed) — "Endgame" entry point
+      HiderBeltUtilities.tsx  # Hider utility buttons (default belt center during seeking) — "History" entry point
       EndgameBeltCenter.tsx    # Endgame view belt center — "Long Game" (exit) + "Found Them" (placeholder) buttons
       EndgameStationPicker.tsx # Endgame station picking belt center — checkmark/station name/cancel 3-button layout
       CandidateStatus.tsx      # Belt center status text for hiders (stop name / "Tap a stop" / "No stops in range")
@@ -314,6 +327,15 @@ Phone-local seeker mode for narrowing down hider location. Each seeker independe
 - **Live updates**: When `question_answered` SSE fires during endgame view, `useGameplayEvents` invalidates `['endgame-exclusions']` query cache → `useEndgameExclusions` re-fetches → overlays update via `updateEndgameView()`.
 - **Camera animation**: Animates to endgame hiding zone on activation (same pattern as hider station election). Resets when exiting endgame view.
 - **Question selection**: Works normally during endgame — the type bar / param picker takes rendering priority over endgame belt center. Closing question selection returns to Long Game / Found Them buttons.
+
+## Hider Question History
+
+Read-only modal accessed from the hider utility belt during the seeking phase. Surfaces every terminal question (answered, vetoed, abandoned) with a per-status indicator so the hider can review past gameplay.
+
+- **Entry point**: `HiderBeltUtilities` renders a "History" button in the belt center when the hider is in the seeking phase and station selection is not active. Owned by `UtilityBelt`, which holds the modal's `visible` state.
+- **Row component**: `QuestionHistoryRow` is the shared row used by both this modal and `QuestionCutoffModal`. Optional `onPress` — Pressable when provided (cutoff modal), View when omitted (history modal). Right column shows the answer label for `status === 'answered'`, otherwise an italic faded "Vetoed" / "Abandoned" badge.
+- **Filter**: hider modal shows all entries from `question_history`; cutoff modal still filters to `answered` only because non-answered questions produced no exclusion to seed from.
+- **Data source**: `HiderGameState.question_history` (already populated by `applyQuestionAnswered` from `question_answered` SSE events). Live-updates while the modal is open.
 
 ## Two-Party Game Completion (Waiting Seeker + Confirming Hider)
 
