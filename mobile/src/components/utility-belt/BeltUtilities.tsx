@@ -5,14 +5,20 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 interface BeltUtilitiesProps {
   disabled?: boolean;
   onEndgame: () => void;
+  onHistory: () => void;
 }
 
 export const BeltUtilities = memo(function BeltUtilities({
   disabled,
   onEndgame,
+  onHistory,
 }: BeltUtilitiesProps) {
   return (
     <View style={styles.row}>
+      <Pressable style={styles.cell} onPress={onHistory} disabled={disabled}>
+        <MaterialCommunityIcons name="history" size={28} color={disabled ? '#999' : '#000'} />
+        <Text style={[styles.label, disabled && styles.labelDisabled]}>History</Text>
+      </Pressable>
       <Pressable style={styles.cell} onPress={onEndgame} disabled={disabled}>
         <MaterialCommunityIcons
           name="flag-checkered"
@@ -35,10 +41,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     paddingHorizontal: 16,
-  },
-  cellBorder: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: 'rgba(0, 0, 0, 0.2)',
   },
   label: {
     fontSize: 11,

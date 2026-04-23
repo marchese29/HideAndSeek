@@ -9,6 +9,7 @@ import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, HiderGameState, SeekerGameState, StopResponse } from '@/types/gameplay';
 
 import { HiderQuestionHistoryModal } from '../HiderQuestionHistoryModal';
+import { SeekerQuestionHistoryModal } from '../SeekerQuestionHistoryModal';
 import { BeltActions } from './BeltActions';
 import { BeltUtilities } from './BeltUtilities';
 import { CandidateStatus } from './CandidateStatus';
@@ -58,6 +59,7 @@ export const UtilityBelt = memo(function UtilityBelt({
   const disabled = !connected;
 
   const [historyVisible, setHistoryVisible] = useState(false);
+  const [seekerHistoryVisible, setSeekerHistoryVisible] = useState(false);
 
   const endgameView = useGameplayStore((s) => s.endgameView);
 
@@ -254,7 +256,13 @@ export const UtilityBelt = memo(function UtilityBelt({
         />
       );
     }
-    return <BeltUtilities disabled={disabled} onEndgame={onEndgame ?? (() => {})} />;
+    return (
+      <BeltUtilities
+        disabled={disabled}
+        onEndgame={onEndgame ?? (() => {})}
+        onHistory={() => setSeekerHistoryVisible(true)}
+      />
+    );
   };
 
   return (
@@ -313,6 +321,15 @@ export const UtilityBelt = memo(function UtilityBelt({
           onClose={() => setHistoryVisible(false)}
           questions={(state as HiderGameState).question_history ?? []}
           convention={gameInfo.distance_convention}
+        />
+      )}
+
+      {role === 'seeker' && (
+        <SeekerQuestionHistoryModal
+          visible={seekerHistoryVisible}
+          onClose={() => setSeekerHistoryVisible(false)}
+          questions={(state as SeekerGameState).question_history ?? []}
+          gameInfo={gameInfo}
         />
       )}
     </View>

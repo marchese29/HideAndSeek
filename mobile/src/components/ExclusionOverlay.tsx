@@ -4,25 +4,33 @@ import { Polygon } from 'react-native-maps';
 import type { GeoJSONGeometry, GeoJSONMultiPolygon, GeoJSONPolygon } from '@/types/gameplay';
 import { multiPolygonToParts, polygonToCoords, polygonToHoles } from '@/utils/geo';
 
-const FILL_COLOR = 'rgba(231, 76, 60, 0.25)';
-const STROKE_COLOR = 'rgba(231, 76, 60, 0.5)';
-const STROKE_WIDTH = 1;
-const Z_INDEX = 2000;
+const DEFAULT_FILL_COLOR = 'rgba(231, 76, 60, 0.25)';
+const DEFAULT_STROKE_COLOR = 'rgba(231, 76, 60, 0.5)';
+const DEFAULT_STROKE_WIDTH = 1;
+const DEFAULT_Z_INDEX = 2000;
 
 interface ExclusionOverlayProps {
   exclusion: GeoJSONGeometry | null;
   /** When false, polygon stays mounted but renders fully transparent (Apple Maps workaround). */
   visible?: boolean;
+  fillColor?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  zIndex?: number;
 }
 
 export const ExclusionOverlay = React.memo(function ExclusionOverlay({
   exclusion,
   visible = true,
+  fillColor: fillColorProp = DEFAULT_FILL_COLOR,
+  strokeColor: strokeColorProp = DEFAULT_STROKE_COLOR,
+  strokeWidth = DEFAULT_STROKE_WIDTH,
+  zIndex = DEFAULT_Z_INDEX,
 }: ExclusionOverlayProps) {
   if (!exclusion) return null;
 
-  const fillColor = visible ? FILL_COLOR : 'transparent';
-  const strokeColor = visible ? STROKE_COLOR : 'transparent';
+  const fillColor = visible ? fillColorProp : 'transparent';
+  const strokeColor = visible ? strokeColorProp : 'transparent';
 
   if (exclusion.type === 'Polygon') {
     const polygon = exclusion as unknown as GeoJSONPolygon;
@@ -32,8 +40,8 @@ export const ExclusionOverlay = React.memo(function ExclusionOverlay({
         holes={polygonToHoles(polygon)}
         fillColor={fillColor}
         strokeColor={strokeColor}
-        strokeWidth={STROKE_WIDTH}
-        zIndex={Z_INDEX}
+        strokeWidth={strokeWidth}
+        zIndex={zIndex}
       />
     );
   }
@@ -49,8 +57,8 @@ export const ExclusionOverlay = React.memo(function ExclusionOverlay({
             holes={part.holes}
             fillColor={fillColor}
             strokeColor={strokeColor}
-            strokeWidth={STROKE_WIDTH}
-            zIndex={Z_INDEX}
+            strokeWidth={strokeWidth}
+            zIndex={zIndex}
           />
         ))}
       </>
