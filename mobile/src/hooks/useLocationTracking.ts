@@ -17,7 +17,10 @@ const DISTANCE_INTERVAL_M = 25;
  * Foreground: subscribes via `watchPositionAsync` on >=25m movement and runs a
  * trailing 30s heartbeat for liveness — every successful POST schedules a single
  * `setTimeout` that fires 30s later, so a steadily-moving player never sends a
- * redundant heartbeat.
+ * redundant heartbeat. On top of that, whenever eligibility to POST flips
+ * false→true (SSE hydrates, or a seeker transitions hiding→seeking) we fire a
+ * one-shot `getCurrentPositionAsync` so the first pin lands immediately instead
+ * of waiting up to 30s for movement or the first heartbeat.
  *
  * Background: a TaskManager-registered location subscription
  * (`startLocationUpdatesAsync`) takes over while the app is backgrounded/locked,
@@ -39,13 +42,20 @@ export function useLocationTracking(gameId: string): { permissionDenied: boolean
     let cancelled = false;
     let subscription: Location.LocationSubscription | null = null;
     let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+    let foregroundGranted = false;
+    let wasEligible = false;
 
-    async function postLocation(coordinates: GeoJSONPoint, timestamp: string): Promise<boolean> {
-      const { status, role, state } = useGameplayStore.getState();
+    function canPost(): boolean {
       // Don't post until SSE has hydrated — before that, role/phase are unknown
       // and a seeker would POST during hiding phase and get 409'd.
+      const { status, role, state } = useGameplayStore.getState();
       if (status !== 'connected') return false;
       if (role === 'seeker' && state.phase === 'hiding') return false;
+      return true;
+    }
+
+    async function postLocation(coordinates: GeoJSONPoint, timestamp: string): Promise<boolean> {
+      if (!canPost()) return false;
 
       try {
         const { error } = await api.POST('/games/{game_id}/location', {
@@ -76,6 +86,29 @@ export function useLocationTracking(gameId: string): { permissionDenied: boolean
       if (await postLocation(coordinates, timestamp)) {
         scheduleHeartbeat();
       }
+    }
+
+    async function fireImmediateFix() {
+      // watchPositionAsync hasn't delivered yet at phase transitions — a
+      // stationary player won't trip its 25m distanceInterval, and the 30s
+      // heartbeat only reschedules after a successful POST. Ask the OS for a
+      // fresh fix so the server (and every observer) sees us without waiting.
+      if (!foregroundGranted) return;
+      try {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        if (cancelled) return;
+        await handleFix(location);
+      } catch {
+        // ignore — watchPositionAsync or the next heartbeat will catch up.
+      }
+    }
+
+    function onEligibilityChange() {
+      const eligible = canPost();
+      if (eligible && !wasEligible) void fireImmediateFix();
+      wasEligible = eligible;
     }
 
     async function tickHeartbeat() {
@@ -162,11 +195,13 @@ export function useLocationTracking(gameId: string): { permissionDenied: boolean
       if (cancelled) return;
 
       if (status !== 'granted') {
+        foregroundGranted = false;
         setPermissionDenied(true);
         await stopAll();
         return;
       }
 
+      foregroundGranted = true;
       setPermissionDenied(false);
 
       if (!subscription) {
@@ -186,6 +221,10 @@ export function useLocationTracking(gameId: string): { permissionDenied: boolean
       }
 
       await syncBackground();
+      // Permission may have just been granted after SSE already hydrated —
+      // catch that case here. If the store is still pre-hydrate, this is a
+      // no-op and the store subscription below will fire once hydrate lands.
+      onEligibilityChange();
     }
 
     void checkAndStart();
@@ -203,7 +242,11 @@ export function useLocationTracking(gameId: string): { permissionDenied: boolean
     });
 
     // Re-evaluate background eligibility on role/phase changes (e.g. hiding→seeking).
+    // Also detect the false→true eligibility edge and fire an immediate POST
+    // so the first pin lands within seconds of the gate opening, not after the
+    // 30s heartbeat or the next 25m movement — whichever comes first.
     const unsubscribeGameplay = useGameplayStore.subscribe(() => {
+      onEligibilityChange();
       void syncBackground();
     });
 
