@@ -44,6 +44,7 @@ CLAUDE.md files exist at:
 
 ## Conventions
 
+- Active branch is `dev`; `main` only moves forward when code is deployed to prod. When creating a new git worktree for work in this repo, branch from `dev` — not `main`, and not the session's current HEAD if you're already inside a worktree. (Claude Code's `EnterWorktree` branches from session HEAD, so a session spawned inside a `main`-based worktree will compound the mistake.)
 - Issue tracking: use `bd` (beads) CLI. Run `bd onboard` to get started.
 - Git hooks: `hooks/pre-commit` is the versioned pre-commit hook (server checks + OpenAPI regen + beads JSONL flush). It's symlinked into `.git/hooks/`. Beads installs its own shims for other hooks (`pre-push`, `post-merge`, `post-checkout`, `prepare-commit-msg`) directly in `.git/hooks/`. See Setup below.
 - The pre-commit hook runs in dependency order: models checks → core checks → worker checks → reconciler checks → server checks → OpenAPI regen → API types regen → mobile checks → alembic checks → CDK checks. Models changes cascade to core, worker, reconciler, server, and OpenAPI regen. Core changes cascade to worker, reconciler, server, and OpenAPI regen. Worker changes cascade to reconciler and server. Alembic and CDK checks are independent leaves — no upstream cascade, nothing depends on them. Alembic runs ruff only (lint + format); pyright is skipped because geoalchemy2's dynamic `op.drop_geospatial_*` registration trips its attribute checks.

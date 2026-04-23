@@ -31,7 +31,7 @@ This app requires **development builds** (not Expo Go) because `react-native-map
 A fresh worktree under `.claude/worktrees/<branch>/` does not inherit untracked / gitignored files from the main checkout. To get `npx expo run:ios` working:
 
 1. **Copy `mobile/.env` from the main checkout.** It's gitignored (holds `EAS_PROJECT_*`, etc.). Without it `app.config.ts` resolves to a different app identity.
-2. **Copy `mobile/ios/` from the main checkout** until `HideAndSeek-r9i` lands. Fresh `expo prebuild` currently fails because `react-native-maps`'s config plugin injects a podspec that no longer ships; copying the already-prebuilt `ios/` directory skips the prebuild step. Once r9i removes `ios.config.googleMapsApiKey` from `app.config.ts`, prebuild works clean and this step goes away.
+2. **Copy `mobile/google-services.json` from the main checkout** if you'll build for Android. It's gitignored (every contributor downloads their own copy from Firebase Console — see "Push Notifications" below). iOS builds don't need it.
 3. **`.watchmanconfig`** at the worktree root marks it as a Watchman project boundary so the daemon doesn't walk up past the worktree's `.git` file into the main checkout. Already committed at the repo root — no per-worktree action needed.
 
 If Metro complains about a missing transitive module (e.g. `@babel/runtime/helpers/wrapRegExp`), the install is partial — `rm -rf node_modules && npm install` (no flags) fixes it. Cause is unclear; reproduce-and-file if it happens cleanly.
