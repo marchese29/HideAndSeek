@@ -444,6 +444,50 @@ class FoundClaimExpiredEvent(GameplayEventSchema):
     """Found claim timed out — both channels."""
 
 
+class PhotoQueuedEvent(GameplayEventSchema):
+    """A hider uploaded a photo but did not submit — hider channel only."""
+
+    question_id: uuid.UUID
+    sequence: int
+    queued_by: uuid.UUID
+    uploaded_at: datetime
+
+
+class PhotoUnqueuedEvent(GameplayEventSchema):
+    """A hider cleared the queued photo — hider channel only."""
+
+    question_id: uuid.UUID
+    sequence: int
+
+
+class PhotoSubmittedEvent(GameplayEventSchema):
+    """A hider (or auto-submit) committed the photo — both channels."""
+
+    question_id: uuid.UUID
+    sequence: int
+    status: QuestionStatus
+    submitted_at: datetime
+    submitted_by: uuid.UUID | None
+    is_null_answer: bool
+    review_deadline: datetime
+
+    @staticmethod
+    def from_question(question: Question, *, review_deadline: datetime) -> PhotoSubmittedEvent:
+        pp = question.photo_params
+        assert pp is not None
+        assert pp.submitted_at is not None
+        return PhotoSubmittedEvent(
+            game_id=question.game_id,
+            question_id=question.id,
+            sequence=question.sequence,
+            status=question.status,
+            submitted_at=pp.submitted_at,
+            submitted_by=pp.submitted_by,
+            is_null_answer=pp.is_null_answer,
+            review_deadline=review_deadline,
+        )
+
+
 GameplayEvent = (
     PlayerLocationEvent
     | QuestionAskedEvent
@@ -464,4 +508,7 @@ GameplayEvent = (
     | FoundClaimEvent
     | FoundClaimRejectedEvent
     | FoundClaimExpiredEvent
+    | PhotoQueuedEvent
+    | PhotoUnqueuedEvent
+    | PhotoSubmittedEvent
 )

@@ -47,6 +47,7 @@ from hideandseek_models.types import (
     PlayerRole,
     ProximityTier,
     QuestionStatus,
+    QuestionType,
     StationElectionStatus,
 )
 
@@ -179,7 +180,11 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         candidate_stations = compute_candidate_station_ids(game)
     elif game.hider_station_id is not None:
         not_in_zone = compute_not_in_zone(game)
-        if active_q is not None and active_q.status == QuestionStatus.answerable:
+        if (
+            active_q is not None
+            and active_q.status == QuestionStatus.answerable
+            and active_q.question_type != QuestionType.photo
+        ):
             hider_loc = representative_hider_location(game)
             if hider_loc is not None:
                 computed_answer = preview_answer(active_q, hider_loc, game)

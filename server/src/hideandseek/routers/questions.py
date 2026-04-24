@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from geojson_pydantic import Point as GeoJSONPoint
 from shapely.geometry import Point as ShapelyPoint
 from shapely.geometry import mapping
+from starlette.datastructures import UploadFile
 
 from hideandseek.dependencies import (
     get_game,
+    get_hider_in_game,
     get_player_in_game,
     get_seeker_in_game,
 )
@@ -31,14 +36,18 @@ from hideandseek.validators import (
 from hideandseek_core.broadcast.emit import emit_gameplay
 from hideandseek_core.broadcast.events import (
     HiderQuestionAnsweredEvent,
+    PhotoQueuedEvent,
+    PhotoSubmittedEvent,
+    PhotoUnqueuedEvent,
     QuestionAbandonedEvent,
     QuestionAnswerableEvent,
     QuestionAskedEvent,
     QuestionVetoedEvent,
     SeekerQuestionAnsweredEvent,
 )
-from hideandseek_core.conventions import format_distance_label
-from hideandseek_core.db import session_dependency
+from hideandseek_core.config import load_s3_config
+from hideandseek_core.conventions import effective_photo_review_sec, format_distance_label
+from hideandseek_core.db import get_session, session_dependency
 from hideandseek_core.geo_helpers import geom_or_none
 from hideandseek_core.logic.answer import (
     abandon_question,
@@ -60,16 +69,27 @@ from hideandseek_core.logic.ask import (
     lock_in_thermometer,
     randomize_question,
 )
+from hideandseek_core.logic.photo import (
+    clear_queued_photo,
+    queue_photo,
+    submit_photo_question,
+)
 from hideandseek_core.logic.preview import preview_question
 from hideandseek_core.queries.location import create_location_update
 from hideandseek_core.queries.questions import get_eligible_randomize_slots, has_unanswered_question
+from hideandseek_core.s3 import get_object_stream, upload_bytes
 from hideandseek_models.game import Game, Player
+from hideandseek_models.question import Question
 from hideandseek_models.types import (
+    PlayerRole,
     PushEventType,
     QuestionStatus,
     QuestionType,
 )
 from hideandseek_worker.tasks.push import send_push
+
+if TYPE_CHECKING:
+    from hideandseek_core.config import S3Config
 
 router = APIRouter(
     prefix='/games/{game_id}', tags=['questions'], dependencies=[Depends(session_dependency)]
@@ -579,4 +599,206 @@ def randomize_question_endpoint(
         QuestionAskedEvent.from_question(
             replacement, base_question_delay_min=game.base_question_delay_min
         )
+    )
+
+
+# ── Photo submission ────────────────────────────────────────────────────
+
+_JPEG_MAGIC = b'\xff\xd8\xff'
+_PNG_MAGIC = b'\x89PNG'
+_ALLOWED_PHOTO_CONTENT_TYPES = {'image/jpeg', 'image/png'}
+
+
+def _load_photo_question(question_id: uuid.UUID, game: Game) -> Question:
+    """Load a photo question scoped to the given game, or raise 404/422."""
+    session = get_session()
+    question = session.get(Question, question_id)
+    if question is None:
+        raise HTTPException(status_code=404, detail='Question not found.')
+    if question.game_id != game.id:
+        raise HTTPException(status_code=422, detail='Question does not belong to this game.')
+    if question.question_type != QuestionType.photo:
+        raise HTTPException(status_code=422, detail='Question is not a photo question.')
+    return question
+
+
+def _check_photo_submission_open(question: Question) -> None:
+    """409 if the photo question is no longer accepting submissions."""
+    if question.status == QuestionStatus.submitted:
+        raise HTTPException(status_code=409, detail='photo already submitted')
+    if question.status != QuestionStatus.answerable:
+        raise HTTPException(status_code=409, detail=f'question is {question.status.value}')
+
+
+def _validate_image(upload: UploadFile) -> tuple[str, str]:
+    """Validate an uploaded image. Returns (content_type, file_extension).
+
+    415 if the declared content-type isn't JPEG/PNG or the first bytes don't
+    match the claimed type (mislabeled uploads are rejected). The file handle
+    is seeked back to 0 before returning.
+    """
+    content_type = (upload.content_type or '').lower()
+    if content_type not in _ALLOWED_PHOTO_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f'unsupported image content-type: {content_type or "(unset)"}',
+        )
+    head = upload.file.read(4)
+    upload.file.seek(0)
+    if content_type == 'image/jpeg':
+        if not head.startswith(_JPEG_MAGIC):
+            raise HTTPException(status_code=415, detail='file is not a valid JPEG')
+        return content_type, 'jpg'
+    if not head.startswith(_PNG_MAGIC):
+        raise HTTPException(status_code=415, detail='file is not a valid PNG')
+    return content_type, 'png'
+
+
+def _photo_key(game_id: uuid.UUID, ext: str) -> str:
+    env = os.environ.get('HIDEANDSEEK_ENV', 'local')
+    return f'{env}/{game_id}/{uuid.uuid4()}.{ext}'
+
+
+def _require_s3_config() -> S3Config:
+    config = load_s3_config()
+    if config is None:
+        raise HTTPException(status_code=503, detail='photo storage not configured')
+    return config
+
+
+def _send_photo_submitted_push(game: Game, question: Question) -> None:
+    pp = question.photo_params
+    assert pp is not None
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.photo_submitted,
+        role_filter='seeker',
+        alert=f'A {pp.subject.value} photo has been submitted. Tap to review.',
+        question_id=str(question.id),
+    )
+
+
+@router.post('/questions/{question_id}/photo', status_code=204)
+async def submit_photo_endpoint(
+    question_id: uuid.UUID,
+    request: Request,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_hider_in_game),
+) -> None:
+    """Upload + optionally submit a photo, or submit a null answer.
+
+    JSON body ``{"null": true}`` → null-submit (no upload).
+    Multipart body with ``file`` field → upload the image; pair with
+    ``submit=true`` to also transition to ``submitted`` in one request.
+    Omitting ``submit`` (or ``submit=false``) leaves the photo queued so the
+    hider can replace it.
+    """
+    question = _load_photo_question(question_id, game)
+    _check_photo_submission_open(question)
+
+    content_type = request.headers.get('content-type', '').lower()
+
+    if content_type.startswith('application/json'):
+        body = await request.json()
+        if not isinstance(body, dict) or not body.get('null'):
+            raise HTTPException(status_code=422, detail='null submit requires {"null": true}')
+        submit_photo_question(question, player, is_null_answer=True)
+        review_deadline = datetime.now(UTC) + timedelta(seconds=effective_photo_review_sec(game))
+        emit_gameplay(PhotoSubmittedEvent.from_question(question, review_deadline=review_deadline))
+        _send_photo_submitted_push(game, question)
+        return
+
+    if content_type.startswith('multipart/form-data'):
+        form = await request.form()
+        upload = form.get('file')
+        if not isinstance(upload, UploadFile):
+            raise HTTPException(status_code=422, detail='multipart body requires a "file" field')
+        submit_flag_raw = form.get('submit', 'false')
+        submit_flag = (
+            submit_flag_raw.lower() == 'true' if isinstance(submit_flag_raw, str) else False
+        )
+
+        photo_content_type, ext = _validate_image(upload)
+        s3_config = _require_s3_config()
+        key = _photo_key(game.id, ext)
+        upload_bytes(s3_config, key, upload.file, photo_content_type)
+
+        queue_photo(question, player, key)
+        emit_gameplay(
+            PhotoQueuedEvent(
+                game_id=game.id,
+                question_id=question.id,
+                sequence=question.sequence,
+                queued_by=player.id,
+                uploaded_at=datetime.now(UTC),
+            )
+        )
+
+        if submit_flag:
+            submit_photo_question(question, player, is_null_answer=False)
+            review_deadline = datetime.now(UTC) + timedelta(
+                seconds=effective_photo_review_sec(game)
+            )
+            emit_gameplay(
+                PhotoSubmittedEvent.from_question(question, review_deadline=review_deadline)
+            )
+            _send_photo_submitted_push(game, question)
+        return
+
+    raise HTTPException(status_code=415, detail=f'unsupported content-type: {content_type!r}')
+
+
+@router.delete('/questions/{question_id}/photo', status_code=204)
+def unqueue_photo_endpoint(
+    question_id: uuid.UUID,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_hider_in_game),  # noqa: ARG001  (auth gate)
+) -> None:
+    """Clear a queued photo before submission. 409 if already submitted."""
+    question = _load_photo_question(question_id, game)
+    if question.status != QuestionStatus.answerable:
+        raise HTTPException(status_code=409, detail=f'question is {question.status.value}')
+    clear_queued_photo(question)
+    emit_gameplay(
+        PhotoUnqueuedEvent(
+            game_id=game.id,
+            question_id=question.id,
+            sequence=question.sequence,
+        )
+    )
+
+
+@router.get('/questions/{question_id}/photo')
+def fetch_photo_endpoint(
+    question_id: uuid.UUID,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_player_in_game),
+) -> StreamingResponse:
+    """Fetch the photo bytes for a photo question.
+
+    State-sensitive auth: pre-submit photos are hider-only; once submitted,
+    either role may fetch. 404 on null-answer or missing object.
+    """
+    question = _load_photo_question(question_id, game)
+    params = question.photo_params
+    assert params is not None
+
+    if params.is_null_answer:
+        raise HTTPException(status_code=404, detail='no photo for null answer')
+    if params.photo_object_key is None:
+        raise HTTPException(status_code=404, detail='no photo queued')
+
+    if question.status == QuestionStatus.answerable and player.role != PlayerRole.hider:
+        raise HTTPException(status_code=403, detail='photo not yet submitted')
+
+    s3_config = _require_s3_config()
+    obj = get_object_stream(s3_config, params.photo_object_key)
+
+    return StreamingResponse(
+        obj['Body'].iter_chunks(),
+        media_type=obj['ContentType'],
+        headers={
+            'Content-Length': str(obj['ContentLength']),
+            'Cache-Control': 'private, max-age=3600',
+        },
     )

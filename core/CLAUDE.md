@@ -29,7 +29,8 @@ src/hideandseek_core/
   geo_helpers.py       # Shapely-to-GeoJSON conversion helpers
   conventions.py       # Metric/imperial conversion, default inventory (now incl. 'photos' key
                        #   keyed by subjects_for_size), resolve_tentacle_distance(),
-                       #   photo timer resolvers (resolve_photo_submit_min / _review_sec)
+                       #   photo timer resolvers (resolve_photo_submit_min / _review_sec and
+                       #   their effective_* game-level wrappers)
   exclusion.py         # Exclusion zone geometry, boundary computation (incl. tentacles Voronoi), endgame safe_zone
   broadcast/           # Gameplay event production + Redis publishing
     events.py          # Typed gameplay event Pydantic models (frozen, auto-registered for OpenAPI)
@@ -37,6 +38,7 @@ src/hideandseek_core/
   queries/             # DB query functions by domain
   logic/               # Business logic (session-free, side-effect-free beyond DB)
     location.py        # process_location_update() — enrichment, proximity, freeze orchestration
+    photo.py           # queue/clear/submit transitions for photo-question submission
     push_registration.py  # register_push_endpoint() — inline CreatePlatformEndpoint + upsert
 ```
 
@@ -50,7 +52,7 @@ src/hideandseek_core/
 
 ## Broadcast
 
-`broadcast/events.py` defines frozen Pydantic models for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left, host changed, game dissolved, game ended, hiding zone expanded, proximity escalated/deescalated, found claim/rejected/expired). `FoundClaimEvent` carries `deadline_utc` (server-computed `found_claim_at + FOUND_CLAIM_TIMEOUT_SECONDS`) so both roles share one authoritative countdown, and publishes to both channels. All gameplay events extend `GameplayEventSchema` which auto-registers them for OpenAPI schema injection via `__init_subclass__`. `game_id = Field(exclude=True)` is on the base — present for construction/routing but excluded from `.model_dump()` and JSON schema. Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter models (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`, `TentacleEventParams`, `PhotoEventParams`) are standalone `BaseModel` subclasses with `Literal` type discriminators (`type: Literal['radar'] = 'radar'`), pulled into the OpenAPI spec automatically via `$defs` hoisting. `TentacleEventParams` includes `poi_names` denormalized from the model (no DB queries in event builders). `PhotoEventParams` carries only the subject enum — human-readable labels resolve client-side.
+`broadcast/events.py` defines frozen Pydantic models for all gameplay events (question asked/answered/vetoed/abandoned, phase changes, station elections, player locations, player left, host changed, game dissolved, game ended, hiding zone expanded, proximity escalated/deescalated, found claim/rejected/expired, photo queued/unqueued/submitted). `FoundClaimEvent` carries `deadline_utc` (server-computed `found_claim_at + FOUND_CLAIM_TIMEOUT_SECONDS`) so both roles share one authoritative countdown, and publishes to both channels. All gameplay events extend `GameplayEventSchema` which auto-registers them for OpenAPI schema injection via `__init_subclass__`. `game_id = Field(exclude=True)` is on the base — present for construction/routing but excluded from `.model_dump()` and JSON schema. Each question event has a `from_question()` static constructor. `QuestionAskedEvent.from_question()` and `QuestionAnswerableEvent.from_question()` require `base_question_delay_min` kwarg to compute `question_deadline`. Parameter models (`RadarEventParams`, `ThermometerEventParams`, `FeatureEventParams`, `TentacleEventParams`, `PhotoEventParams`) are standalone `BaseModel` subclasses with `Literal` type discriminators (`type: Literal['radar'] = 'radar'`), pulled into the OpenAPI spec automatically via `$defs` hoisting. `TentacleEventParams` includes `poi_names` denormalized from the model (no DB queries in event builders). `PhotoEventParams` carries only the subject enum — human-readable labels resolve client-side.
 
 `broadcast/emit.py` provides:
 - `SseChannel` — NamedTuple pairing a Redis pub/sub channel name with its per-channel sequence-counter key (e.g. `pubsub='game:{id}:lobby:events'`, `seq='game:{id}:lobby:seq'`).
@@ -95,6 +97,15 @@ Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×
 `logic/ask.py` provides `randomize_question(question, game)` — hider terminates an answerable question and the server picks a random replacement slot (same question type, `ask_count == 0`). Restores the original slot's `ask_count`, dispatches to the appropriate `ask_<type>()` function for the replacement. Thermometer replacements start in `in_progress` (seeker must travel + lock in again); all others — including photo — start `answerable`. The caller (router) handles timer revocation/scheduling and event emission. No new event type — emits a standard `QuestionAskedEvent` for the replacement.
 
 `ask_photo(game, player, seeker_location, slot)` creates a photo question in `answerable` status immediately — the hider satisfies it by uploading an image (z32.4 cycle). `answerable_at` doubles as the submit-window anchor read by the reconciler. Photo questions expose no preview — `preview_question()` raises `ValueError` for `QuestionType.photo`, which the router surfaces as 422.
+
+## Logic — Photo Submission
+
+`logic/photo.py` owns photo-question state transitions on the hider's side (kept out of the already-busy `logic/answer.py`):
+- `queue_photo(question, player, object_key)` — persist a queued (not yet submitted) photo. Caller has already uploaded bytes to S3; overwriting an existing key is intentional (the previous S3 object is retained — photos kept forever per design §10).
+- `clear_queued_photo(question)` — zero out the queued key and `is_null_answer` flag (DELETE endpoint).
+- `submit_photo_question(question, player, *, is_null_answer)` — flip status to `submitted`, stamp `submitted_at` / `submitted_by`. For `is_null_answer=True` also clears any queued key; otherwise the caller must have queued a photo first.
+
+`conventions.effective_photo_review_sec(game)` and `effective_photo_submit_min(game)` wrap the lower-level `resolve_photo_*` helpers with the standard three-level fallback (request override → map default → code default). Callers on the game critical path should use the `effective_*` wrappers.
 
 ## Logic — Answer Previews
 

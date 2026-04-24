@@ -349,6 +349,9 @@ class GameplayEventType(StrEnum):
     found_claim = 'found_claim'
     found_claim_rejected = 'found_claim_rejected'
     found_claim_expired = 'found_claim_expired'
+    photo_queued = 'photo_queued'
+    photo_submitted = 'photo_submitted'
+    photo_unqueued = 'photo_unqueued'
 
 
 class TokenProvider(StrEnum):
@@ -378,6 +381,7 @@ class PushEventType(StrEnum):
     found_claim = 'found_claim'
     found_claim_rejected = 'found_claim_rejected'
     found_claim_expired = 'found_claim_expired'
+    photo_submitted = 'photo_submitted'
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

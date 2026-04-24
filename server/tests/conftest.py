@@ -28,6 +28,7 @@ from hideandseek_models.location import LocationUpdate
 from hideandseek_models.map_feature import GameMapFeature, MapFeature
 from hideandseek_models.question import Question
 from hideandseek_models.question_params import (
+    PhotoQuestionParams,
     RadarParams,
     TentacleQuestionParams,
     ThermometerParams,
@@ -383,6 +384,9 @@ def create_question(session: Session, game_id: uuid.UUID, **overrides: Any) -> Q
                 poi_names=[],
             )
         )
+        session.flush()
+    elif q.question_type == QuestionType.photo and q.photo_params is None:
+        session.add(PhotoQuestionParams(question_id=q.id, subject=PhotoSubject.tree))
         session.flush()
 
     session.refresh(q)

@@ -1416,6 +1416,149 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}/photo:
+    post:
+      tags:
+      - questions
+      summary: Submit Photo Endpoint
+      description: "Upload + optionally submit a photo, or submit a null answer.\n\
+        \nJSON body ``{\"null\": true}`` \u2192 null-submit (no upload).\nMultipart\
+        \ body with ``file`` field \u2192 upload the image; pair with\n``submit=true``\
+        \ to also transition to ``submitted`` in one request.\nOmitting ``submit``\
+        \ (or ``submit=false``) leaves the photo queued so the\nhider can replace\
+        \ it."
+      operationId: submit_photo_endpoint_games__game_id__questions__question_id__photo_post
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - questions
+      summary: Unqueue Photo Endpoint
+      description: Clear a queued photo before submission. 409 if already submitted.
+      operationId: unqueue_photo_endpoint_games__game_id__questions__question_id__photo_delete
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - questions
+      summary: Fetch Photo Endpoint
+      description: 'Fetch the photo bytes for a photo question.
+
+
+        State-sensitive auth: pre-submit photos are hider-only; once submitted,
+
+        either role may fetch. 404 on null-answer or missing object.'
+      operationId: fetch_photo_endpoint_games__game_id__questions__question_id__photo_get
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/endgame-exclusions:
     get:
       tags:
@@ -3304,6 +3447,32 @@ components:
       - subject
       title: PhotoEventParams
       type: object
+    PhotoQueuedEvent:
+      description: "A hider uploaded a photo but did not submit \u2014 hider channel\
+        \ only."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          title: Sequence
+          type: integer
+        queued_by:
+          format: uuid
+          title: Queued By
+          type: string
+        uploaded_at:
+          format: date-time
+          title: Uploaded At
+          type: string
+      required:
+      - question_id
+      - sequence
+      - queued_by
+      - uploaded_at
+      title: PhotoQueuedEvent
+      type: object
     PhotoSubject:
       type: string
       enum:
@@ -3326,6 +3495,60 @@ components:
       - biggest_body_of_water
       - five_buildings
       title: PhotoSubject
+    PhotoSubmittedEvent:
+      description: "A hider (or auto-submit) committed the photo \u2014 both channels."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          title: Sequence
+          type: integer
+        status:
+          $ref: '#/components/schemas/QuestionStatus'
+        submitted_at:
+          format: date-time
+          title: Submitted At
+          type: string
+        submitted_by:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Submitted By
+        is_null_answer:
+          title: Is Null Answer
+          type: boolean
+        review_deadline:
+          format: date-time
+          title: Review Deadline
+          type: string
+      required:
+      - question_id
+      - sequence
+      - status
+      - submitted_at
+      - submitted_by
+      - is_null_answer
+      - review_deadline
+      title: PhotoSubmittedEvent
+      type: object
+    PhotoUnqueuedEvent:
+      description: "A hider cleared the queued photo \u2014 hider channel only."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          title: Sequence
+          type: integer
+      required:
+      - question_id
+      - sequence
+      title: PhotoUnqueuedEvent
+      type: object
     PlayerColor:
       type: string
       enum:

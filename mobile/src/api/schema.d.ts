@@ -640,6 +640,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/questions/{question_id}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fetch Photo Endpoint
+         * @description Fetch the photo bytes for a photo question.
+         *
+         *     State-sensitive auth: pre-submit photos are hider-only; once submitted,
+         *     either role may fetch. 404 on null-answer or missing object.
+         */
+        get: operations["fetch_photo_endpoint_games__game_id__questions__question_id__photo_get"];
+        put?: never;
+        /**
+         * Submit Photo Endpoint
+         * @description Upload + optionally submit a photo, or submit a null answer.
+         *
+         *     JSON body ``{"null": true}`` → null-submit (no upload).
+         *     Multipart body with ``file`` field → upload the image; pair with
+         *     ``submit=true`` to also transition to ``submitted`` in one request.
+         *     Omitting ``submit`` (or ``submit=false``) leaves the photo queued so the
+         *     hider can replace it.
+         */
+        post: operations["submit_photo_endpoint_games__game_id__questions__question_id__photo_post"];
+        /**
+         * Unqueue Photo Endpoint
+         * @description Clear a queued photo before submission. 409 if already submitted.
+         */
+        delete: operations["unqueue_photo_endpoint_games__game_id__questions__question_id__photo_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/endgame-exclusions": {
         parameters: {
             query?: never;
@@ -1964,10 +2001,74 @@ export interface components {
             subject: components["schemas"]["PhotoSubject"];
         };
         /**
+         * PhotoQueuedEvent
+         * @description A hider uploaded a photo but did not submit — hider channel only.
+         */
+        PhotoQueuedEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Queued By
+             * Format: uuid
+             */
+            queued_by: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+        };
+        /**
          * PhotoSubject
          * @enum {string}
          */
         PhotoSubject: "tree" | "sky" | "selfie" | "widest_street" | "tallest_structure_in_sightline" | "any_building_from_station" | "tallest_building_from_station" | "nearest_street_trace" | "two_buildings" | "restaurant_interior" | "train_platform" | "park" | "grocery_aisle" | "place_of_worship" | "half_mile_streets_traced" | "tallest_mountain_from_station" | "biggest_body_of_water" | "five_buildings";
+        /**
+         * PhotoSubmittedEvent
+         * @description A hider (or auto-submit) committed the photo — both channels.
+         */
+        PhotoSubmittedEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Sequence */
+            sequence: number;
+            status: components["schemas"]["QuestionStatus"];
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Submitted By */
+            submitted_by: string | null;
+            /** Is Null Answer */
+            is_null_answer: boolean;
+            /**
+             * Review Deadline
+             * Format: date-time
+             */
+            review_deadline: string;
+        };
+        /**
+         * PhotoUnqueuedEvent
+         * @description A hider cleared the queued photo — hider channel only.
+         */
+        PhotoUnqueuedEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Sequence */
+            sequence: number;
+        };
         /**
          * PlayerColor
          * @enum {string}
@@ -3844,6 +3945,107 @@ export interface operations {
         };
     };
     randomize_question_endpoint_games__game_id__questions__question_id__randomize_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                question_id: string;
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fetch_photo_endpoint_games__game_id__questions__question_id__photo_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                question_id: string;
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_photo_endpoint_games__game_id__questions__question_id__photo_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                question_id: string;
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unqueue_photo_endpoint_games__game_id__questions__question_id__photo_delete: {
         parameters: {
             query?: never;
             header: {

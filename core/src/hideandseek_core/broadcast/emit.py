@@ -21,6 +21,9 @@ from hideandseek_core.broadcast.events import (
     HiderQuestionAnsweredEvent,
     HidingZoneExpandedEvent,
     PhaseChangedEvent,
+    PhotoQueuedEvent,
+    PhotoSubmittedEvent,
+    PhotoUnqueuedEvent,
     PlayerLocationEvent,
     ProximityDeescalatedEvent,
     ProximityEscalatedEvent,
@@ -244,3 +247,25 @@ def emit_gameplay(event: GameplayEvent) -> None:
         case FoundClaimExpiredEvent():
             data = event.model_dump(mode='json')
             _both_channels(event.game_id, GameplayEventType.found_claim_expired, data)
+
+        case PhotoQueuedEvent():
+            data = event.model_dump(mode='json')
+            publish_sse(
+                hider_channel(event.game_id),
+                GameplayEventType.photo_queued,
+                data,
+                required=True,
+            )
+
+        case PhotoUnqueuedEvent():
+            data = event.model_dump(mode='json')
+            publish_sse(
+                hider_channel(event.game_id),
+                GameplayEventType.photo_unqueued,
+                data,
+                required=True,
+            )
+
+        case PhotoSubmittedEvent():
+            data = event.model_dump(mode='json')
+            _both_channels(event.game_id, GameplayEventType.photo_submitted, data)

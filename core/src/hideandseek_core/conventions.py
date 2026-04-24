@@ -7,6 +7,8 @@ Conversion happens at the boundary in logic.py.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from hideandseek_models.game_map import GameMap
 from hideandseek_models.types import (
     DistanceConvention,
@@ -14,6 +16,9 @@ from hideandseek_models.types import (
     MapSize,
     subjects_for_size,
 )
+
+if TYPE_CHECKING:
+    from hideandseek_models.game import Game
 
 _MILES_PER_METER = 1609.344
 
@@ -138,6 +143,23 @@ def resolve_photo_submit_min(
 def resolve_photo_review_sec(*, request_override: int | None, map_default: int | None) -> int:
     """Resolve photo review window with three-level fallback: request → map → code default."""
     return request_override or map_default or _DEFAULT_PHOTO_REVIEW_SEC
+
+
+def effective_photo_review_sec(game: Game) -> int:
+    """Resolve the effective photo review window for a game (three-level fallback)."""
+    return resolve_photo_review_sec(
+        request_override=game.photo_review_sec,
+        map_default=game.game_map.default_photo_review_sec,
+    )
+
+
+def effective_photo_submit_min(game: Game) -> int:
+    """Resolve the effective photo submit window for a game (three-level fallback)."""
+    return resolve_photo_submit_min(
+        request_override=game.photo_submit_min,
+        map_default=game.game_map.default_photo_submit_min,
+        size=game.size,
+    )
 
 
 def get_default_hiding_zone_radius(convention: DistanceConvention, size: MapSize) -> float:

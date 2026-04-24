@@ -596,6 +596,29 @@ class TestHiderGameStateEnrichment:
         state = build_hider_game_state(game, hider)
         assert state.computed_answer is None
 
+    def test_active_photo_question_skips_computed_answer(self, session: Session) -> None:
+        # Photo questions have no preview — snapshot must not call preview_answer for them.
+        game, hider, seeker, stop = _create_game_with_stop(session)
+        game.hider_station_id = stop.id
+        game.station_election_status = StationElectionStatus.elected
+        game.status = GameStatus.seeking
+        game.seeking_started_at = datetime.now(UTC)
+        session.flush()
+
+        create_location_update(session, hider.id, game.id, coordinates=Point(0.5, 0.5))
+        create_question(
+            session,
+            game.id,
+            question_type=QuestionType.photo,
+            status=QuestionStatus.answerable,
+            asked_by=seeker.id,
+            seeker_location_start=Point(0.5, 0.5),
+            answerable_at=datetime.now(UTC),
+        )
+
+        state = build_hider_game_state(game, hider)
+        assert state.computed_answer is None
+
     def test_no_hider_locations_empty_candidates(self, session: Session) -> None:
         game, hider, _seeker, _stop = _create_game_with_stop(session)
         state = build_hider_game_state(game, hider)

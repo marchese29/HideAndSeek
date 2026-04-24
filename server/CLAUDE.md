@@ -255,7 +255,42 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/photo \
 #   (e.g. tree, park, tallest_mountain_from_station — see PhotoSubject enum).
 # → QuestionAskedEvent emitted with parameters {type: 'photo', subject: '<subject>'}.
 # → No preview endpoint for photo — GET /questions/preview?question_type=photo... → 422.
-# → Hider submit + accept/reject flow lands in cycles z32.4 and z32.5.
+
+# Hider queues a photo without submitting (multipart form, submit=false):
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/photo \
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET" \
+  -F "file=@photo.jpg" -F "submit=false"
+# → 204. status stays "answerable"; PhotoQueuedEvent on hider SSE only.
+# → Content-type must be image/jpeg or image/png and magic bytes must match (415 otherwise).
+
+# Hider submits in one request (upload + submit):
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/photo \
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET" \
+  -F "file=@photo.jpg" -F "submit=true"
+# → 204. status → "submitted"; PhotoSubmittedEvent on both channels (review_deadline
+#   = submitted_at + effective_photo_review_sec(game)).
+# → 409 on any further upload/submit once status == "submitted".
+
+# Null answer (hider gives up / cannot photograph subject):
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/photo \
+  -H "Content-Type: application/json" \
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET" \
+  -d '{"null": true}'
+# → 204. status → "submitted"; is_null_answer=true; no PhotoQueuedEvent fires.
+
+# Clear a queued (not-yet-submitted) photo:
+curl -s -X DELETE localhost:8000/games/<game_id>/questions/<question_id>/photo \
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
+# → 204. status stays "answerable"; PhotoUnqueuedEvent on hider SSE only.
+# → Old S3 object is NOT deleted (photos kept forever per design §10).
+
+# Fetch the photo (state-sensitive auth):
+curl -s -o out.jpg localhost:8000/games/<game_id>/questions/<question_id>/photo \
+  -H "X-Player-Id: $HIDER_PLAYER_ID" -H "X-Player-Secret: $HIDER_SECRET"
+# → 200 + bytes. Pre-submit: hider only (seeker → 403). Post-submit: both roles.
+# → 404 if null answer or no photo queued.
+
+# → Seeker accept/reject flow lands in cycle z32.5.
 ```
 
 ### Question preview
@@ -400,8 +435,8 @@ Business logic, queries, DB infra, geo math, push, and redis live in the `hidean
   - **Emit call sites**: `routers/games.py` (join → `PlayerJoinedEvent`, remove → lobby `PlayerLeftEvent`/`HostChangedEvent` or gameplay `GamePlayerLeftEvent`/`GameHostChangedEvent`/`GameDissolvedEvent` via `RemovalResult`, patch → `PlayerUpdatedEvent` if lobby, start → `GameStartedEvent` + push, elect station → `StationElectionEvent`, expand hiding zone → `HidingZoneExpandedEvent` + push, end game → `GameEndedEvent` + push), `routers/location.py` (location report → `PlayerLocationEvent`, seeker location during seeking → `ProximityEscalatedEvent`/`ProximityDeescalatedEvent` + push to hiders), `routers/questions.py` (ask/lock-in/answer/veto/abandon/randomize → corresponding gameplay events), `routers/endgame.py` (found claim → `FoundClaimEvent` on both channels with `deadline_utc` + hider push, reject → `FoundClaimRejectedEvent` + seeker push, confirm → `GameEndedEvent` + push; schedules/revokes `found_claim:{game_id}` timer), `hideandseek_worker.tasks.game_timers` (phase transition → `PhaseChangedEvent` + `StationElectionEvent`, auto-answer → `HiderQuestionAnsweredEvent` + `SeekerQuestionAnsweredEvent` or `QuestionVetoedEvent`, auto-dismiss found claim → `FoundClaimExpiredEvent` + push). `create_game_with_host()` does NOT emit (no SSE subscribers yet).
   - **Static game info** (`GET /games/{id}/info`): returns `GameInfoResponse` — map boundary, districts, playable stops, transit routes (clipped shapes), map features (POIs with centroid locations), distance convention, hiding time, question delay. Fetched once on game entry and cached by the client. Auth via `get_player_in_game` (role-agnostic, no phase guard). `MapFeatureResponse` includes `stable_id`, `name`, `category`, `feature_class`, and `location` (GeoJSON Point centroid of the feature shape).
   - **Gameplay SSE endpoints** (`GET /games/{id}/hider-state`, `GET /games/{id}/seeker-state`): role-specific SSE streams in `routers/events.py`. Auth inline in `session_scope()` — same pattern as lobby. Phase guard: 409 if game not `is_active`. Role guard: 403 if wrong role. Two Redis channels: `game:{id}:hider-events`, `game:{id}:seeker-events`. Initial `game_state` event delivers a **dynamic-only** snapshot (`HiderGameStateResponse` or `SeekerGameStateResponse` — no map geometry, stops, routes, or timing config), then forwards Redis messages. Static data is served separately by `GET /info`. Stream generators: `hider_state_stream` / `seeker_state_stream` in `broadcast/subscribe.py`. Snapshot assembly: `queries/game_state.py` has `build_hider_game_state(game, player)` and `build_seeker_game_state(game, player)`. Both snapshots include `host_player_id` (for client-side host transfer UI).
-  - **`GameplayEventType` enum** (`hideandseek_models.types`): `game_state` (initial snapshot), `player_location`, `question_asked`, `question_answerable`, `question_answered`, `question_vetoed`, `question_abandoned`, `phase_changed`, `station_election`, `player_left`, `host_changed`, `game_dissolved`, `game_ended`, `hiding_zone_expanded`, `proximity_escalated`, `proximity_deescalated`, `found_claim`, `found_claim_rejected`, `found_claim_expired`.
-  - **`emit_gameplay(event)`** (`hideandseek_core.broadcast.emit`): routes gameplay events to role-specific Redis channels. All gameplay events are `required=True` (SSE is primary, no push fallback). Helper `_both_channels()` publishes identical data to hider + seeker channels. Channel routing: most events → both channels; `StationElectionEvent` → hider only; `HiderQuestionAnsweredEvent` → hider only; `SeekerQuestionAnsweredEvent` → seeker only; `PlayerLocationEvent` hider loc → hider only, seeker loc → both; `FoundClaimEvent` → both (carries `deadline_utc`); `FoundClaimRejectedEvent` → seeker only; `FoundClaimExpiredEvent` → both.
+  - **`GameplayEventType` enum** (`hideandseek_models.types`): `game_state` (initial snapshot), `player_location`, `question_asked`, `question_answerable`, `question_answered`, `question_vetoed`, `question_abandoned`, `phase_changed`, `station_election`, `player_left`, `host_changed`, `game_dissolved`, `game_ended`, `hiding_zone_expanded`, `proximity_escalated`, `proximity_deescalated`, `found_claim`, `found_claim_rejected`, `found_claim_expired`, `photo_queued`, `photo_unqueued`, `photo_submitted`.
+  - **`emit_gameplay(event)`** (`hideandseek_core.broadcast.emit`): routes gameplay events to role-specific Redis channels. All gameplay events are `required=True` (SSE is primary, no push fallback). Helper `_both_channels()` publishes identical data to hider + seeker channels. Channel routing: most events → both channels; `StationElectionEvent` → hider only; `HiderQuestionAnsweredEvent` → hider only; `SeekerQuestionAnsweredEvent` → seeker only; `PlayerLocationEvent` hider loc → hider only, seeker loc → both; `FoundClaimEvent` → both (carries `deadline_utc`); `FoundClaimRejectedEvent` → seeker only; `FoundClaimExpiredEvent` → both; `PhotoQueuedEvent` / `PhotoUnqueuedEvent` → hider only; `PhotoSubmittedEvent` → both (carries `review_deadline`).
   - **Gameplay event models** (`hideandseek_core.broadcast.events`): frozen Pydantic `BaseModel` subclasses extending `GameplayEventSchema` (auto-registered for OpenAPI schema injection). `game_id = Field(exclude=True)` on the base — present for construction/routing, excluded from `.model_dump()` and JSON schema. Question events have `from_question(question)` static constructors that extract fields from the ORM model. `QuestionAnswered` uses **two separate classes** — `HiderQuestionAnsweredEvent` (hider-privileged delta: `answered_at`, `hider_location`, flat hider resolution fields) and `SeekerQuestionAnsweredEvent` (exclusion geometry + `answered_at`, no hider data) — so the type system prevents accidental data leakage.
   - **SSE type auto-sync**: Gameplay event schemas and game state snapshot schemas are injected into the OpenAPI spec by `scripts/generate_openapi.py` via `GameplayEventSchema.registered_schemas()` and `SSEExposed.registered_schemas()`. The existing `openapi-typescript` pipeline (`openapi.yaml → schema.d.ts`) then generates TypeScript types. `mobile/src/types/gameplay.ts` provides short aliases (e.g. `PlayerLocationDelta` → `S[‘PlayerLocationEvent’]`). Adding a new event class is sufficient — it auto-registers and appears in the spec on next regen.
   - **`SSEExposed` mixin** (`hideandseek.schemas.response`): marks `HiderGameStateResponse` and `SeekerGameStateResponse` for OpenAPI injection (they aren’t on REST routes). Sub-types (`GamePlayer`, `HiderActiveQuestion`, etc.) are pulled in automatically via `$defs` hoisting.
