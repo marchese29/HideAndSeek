@@ -243,6 +243,21 @@ curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/answer \
 # → On hit, exclusion is Voronoi-based (excludes cells of non-answered POIs within the circle)
 ```
 
+### Photo question
+
+```bash
+# Ask (seeker). Photo slots come from the map's size-gated subject list.
+# No custom_distance, no category — just slot_index (and seeker location).
+curl -s -X POST localhost:8000/games/<game_id>/questions/photo \
+  -H "Content-Type: application/json" -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET" \
+  -d '{"location": {"type": "Point", "coordinates": [<lon>, <lat>]}, "slot_index": <N>}'
+# → 204. status: "answerable". The question asks for a photo of a specific subject
+#   (e.g. tree, park, tallest_mountain_from_station — see PhotoSubject enum).
+# → QuestionAskedEvent emitted with parameters {type: 'photo', subject: '<subject>'}.
+# → No preview endpoint for photo — GET /questions/preview?question_type=photo... → 422.
+# → Hider submit + accept/reject flow lands in cycles z32.4 and z32.5.
+```
+
 ### Question preview
 
 ```bash
@@ -398,7 +413,7 @@ Business logic, queries, DB infra, geo math, push, and redis live in the `hidean
   - **SSE sequence numbering & gap detection**: Every published event carries a per-channel monotonic sequence in its envelope; `subscribe.py` strips it out and sets the SSE `id:` field on each frame. The initial `game_state` frame's `id:` is the channel counter's value at subscribe time (`GET <seq_key>`); the forwarding loop drops any subsequent event with `seq <= snap_seq` so the client sees a clean monotonic stream from snapshot onwards. Mobile clients track the last-seen id per connection and reconnect when they see a gap (`got > expected+1`) — the reconnect yields a fresh snapshot and resets the baseline. No replay endpoint or event log; the snapshot is the recovery path. Lobby, hider, and seeker channels each have independent counters (`game:{id}:lobby:seq`, `game:{id}:hider:seq`, `game:{id}:seeker:seq`).
   - **`Question.slot_index`** — stored at ask time from `InventorySlot.slot_index`. Used in gameplay state question schemas.
   - **Configurable game parameters**: `POST /games` accepts optional `size` (small/medium/large — not special), `hiding_time_min`, and `base_question_delay_min` overrides. Three-level fallback: request → map → code default (by size). `Game.size` is stored on the game (can differ from `GameMap.size`), used by `effective_hiding_zone_radius_m()`. `MapSummary` exposes nullable `default_hiding_time_min` and `default_base_question_delay_min` for client-side default computation. Inventory stays map-based (not affected by game size override).
-  - **Inventory slots**: `InventoryResponse` groups slots by question type: `radar_slots`, `thermometer_slots`, `matching_slots`, `measuring_slots`, `tentacles_slots`. Tentacles slots come from `GameMap.tentacle_categories` (list of `{category, distance}` dicts). Each entry creates one `InventorySlot` with `question_type=tentacles`.
+  - **Inventory slots**: `InventoryResponse` groups slots by question type: `radar_slots`, `thermometer_slots`, `matching_slots`, `measuring_slots`, `tentacles_slots`, `photo_slots`. Tentacles slots come from `GameMap.tentacle_categories` (list of `{category, distance}` dicts). Each entry creates one `InventorySlot` with `question_type=tentacles`. Photo slots come from `get_default_inventory(size)['photos']`; each entry creates one `InventorySlot` with `question_type=photo` and a `photo_subject` drawn from the size-gated `PhotoSubject` enum. `SlotResponse` carries a nullable `photo_subject` for photo slots (null on all other types).
   - **Location update processing**: `POST /location` delegates all business logic to `process_location_update()` in `core/logic/location.py`, which returns a `LocationEnrichment` dataclass. The router dispatches SSE events and push notifications based on the result. This keeps the router thin (HTTP validation + event dispatch) while core owns the decision logic.
   - **Enriched hider location events**: `PlayerLocationEvent` carries optional fields (`candidate_stations`, `not_in_zone`, `computed_answer`, `freeze_departed`) for hider events only — all `None` for seeker events. Computed by `process_location_update()` in core. `candidate_stations` populated when election is `pending` or `ambiguous`, `not_in_zone` after election, `computed_answer` when an answerable question exists, `freeze_departed` when `proximity_tier == entered`. Same fields on `HiderGameStateResponse` for SSE reconnection. Computation functions live in core: `compute_candidate_station_ids()`, `compute_not_in_zone()`, `compute_freeze_departed()` in `logic/station.py`; `preview_answer()` in `logic/answer.py`.
   - **Proximity tier tracking**: On every seeker location update during seeking (after station election), `process_location_update()` calls `evaluate_proximity()` from core. If the tier changes, the router emits `ProximityEscalatedEvent` or `ProximityDeescalatedEvent` to the hider SSE channel and dispatches a hider-only push notification. `HiderGameStateResponse` includes `proximity_tier` for SSE reconnection hydration. Seekers receive no proximity information. See `core/logic/proximity.py` for the two-phase escalation/de-escalation algorithm.

@@ -107,6 +107,13 @@ class AskQuestionRequest(BaseModel):
     )
 
 
+class AskPhotoQuestionRequest(BaseModel):
+    """Ask a photo question — no custom distance, subject comes from the slot."""
+
+    slot_index: int = Field(description='0-based index into the photo inventory.')
+    location: Point = Field(description='Current seeker position as a GeoJSON Point.')
+
+
 class ElectStationRequest(BaseModel):
     """Elect a hider station — lock in the hiding zone."""
 

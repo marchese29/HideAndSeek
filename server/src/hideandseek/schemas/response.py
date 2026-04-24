@@ -21,6 +21,7 @@ from hideandseek_core.geo_helpers import geom_or_none
 from hideandseek_models.types import (
     GameStatus,
     MapSize,
+    PhotoSubject,
     PlayerColor,
     PlayerRole,
     ProximityTier,
@@ -145,6 +146,9 @@ class SlotResponse(BaseModel):
     feature_class: int | None = Field(
         default=None, description='Feature class tier. Classed categories only.'
     )
+    photo_subject: PhotoSubject | None = Field(
+        default=None, description='Photo subject. Photo slots only.'
+    )
     ask_count: int = Field(description='Number of times this slot has been used.')
 
 
@@ -156,6 +160,7 @@ class InventoryResponse(BaseModel):
     matching_slots: list[SlotResponse] = Field(description='Matching question slots.')
     measuring_slots: list[SlotResponse] = Field(description='Measuring question slots.')
     tentacles_slots: list[SlotResponse] = Field(description='Tentacles question slots.')
+    photo_slots: list[SlotResponse] = Field(description='Photo question slots.')
 
     @staticmethod
     def from_slots(slots: Sequence[InventorySlotModel]) -> InventoryResponse:
@@ -165,6 +170,7 @@ class InventoryResponse(BaseModel):
             'matching': [],
             'measuring': [],
             'tentacles': [],
+            'photo': [],
         }
         for s in slots:
             groups[s.question_type].append(
@@ -173,6 +179,7 @@ class InventoryResponse(BaseModel):
                     distance=s.distance,
                     category=str(s.category) if s.category else None,
                     feature_class=s.feature_class,
+                    photo_subject=s.photo_subject,
                     ask_count=s.ask_count,
                 )
             )
@@ -182,6 +189,7 @@ class InventoryResponse(BaseModel):
             matching_slots=groups['matching'],
             measuring_slots=groups['measuring'],
             tentacles_slots=groups['tentacles'],
+            photo_slots=groups['photo'],
         )
 
 
@@ -627,6 +635,9 @@ class InventorySlotResponse(BaseModel):
     )
     feature_class: int | None = Field(
         default=None, description='Feature class tier. Classed categories only.'
+    )
+    photo_subject: PhotoSubject | None = Field(
+        default=None, description='Photo subject. Photo slots only.'
     )
     ask_count: int = Field(description='Number of times this slot has been used.')
 

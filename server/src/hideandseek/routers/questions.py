@@ -15,7 +15,7 @@ from hideandseek.dependencies import (
     get_player_in_game,
     get_seeker_in_game,
 )
-from hideandseek.schemas.request import AskQuestionRequest
+from hideandseek.schemas.request import AskPhotoQuestionRequest, AskQuestionRequest
 from hideandseek.schemas.response import (
     FeaturePreviewResponse,
     PreviewQuestionResponse,
@@ -53,6 +53,7 @@ from hideandseek_core.logic.answer import (
 from hideandseek_core.logic.ask import (
     ask_matching,
     ask_measuring,
+    ask_photo,
     ask_radar,
     ask_tentacles,
     ask_thermometer,
@@ -276,6 +277,38 @@ def ask_tentacles_question(
         ),
         question_id=str(question.id),
         question_type=QuestionType.tentacles,
+        question_status=QuestionStatus.answerable,
+    )
+
+    emit_gameplay(
+        QuestionAskedEvent.from_question(
+            question, base_question_delay_min=game.base_question_delay_min
+        )
+    )
+
+
+@router.post('/questions/photo', status_code=204)
+def ask_photo_question(
+    body: AskPhotoQuestionRequest,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_seeker_in_game),
+) -> None:
+    """Ask a photo question, spending a photo inventory slot."""
+    _validate_can_ask(game)
+    seeker_location = _record_seeker_location(body.location, player, game)
+
+    slot = validate_slot_request(body.slot_index, None, game, QuestionType.photo)
+    question = ask_photo(game, player, seeker_location, slot)
+
+    pp = question.photo_params
+    assert pp is not None
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.question_asked,
+        role_filter='hider',
+        alert=(f'A photo question has been asked: {pp.subject.value}. Submit an image to answer.'),
+        question_id=str(question.id),
+        question_type=QuestionType.photo,
         question_status=QuestionStatus.answerable,
     )
 

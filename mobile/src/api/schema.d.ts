@@ -488,6 +488,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/questions/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Photo Question
+         * @description Ask a photo question, spending a photo inventory slot.
+         */
+        post: operations["ask_photo_question_games__game_id__questions_photo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/questions/preview": {
         parameters: {
             query?: never;
@@ -738,6 +758,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AskPhotoQuestionRequest
+         * @description Ask a photo question — no custom distance, subject comes from the slot.
+         */
+        AskPhotoQuestionRequest: {
+            /**
+             * Slot Index
+             * @description 0-based index into the photo inventory.
+             */
+            slot_index: number;
+            /** @description Current seeker position as a GeoJSON Point. */
+            location: components["schemas"]["Point"];
+        };
         /**
          * AskQuestionRequest
          * @description Ask a question, identified by slot_index. The URL determines question_type.
@@ -1532,6 +1565,11 @@ export interface components {
              * @description Tentacles question slots.
              */
             tentacles_slots: components["schemas"]["SlotResponse"][];
+            /**
+             * Photo Slots
+             * @description Photo question slots.
+             */
+            photo_slots: components["schemas"]["SlotResponse"][];
         };
         /**
          * InventorySlotResponse
@@ -1562,6 +1600,11 @@ export interface components {
              * @default null
              */
             feature_class: number | null;
+            /**
+             * @description Photo subject. Photo slots only.
+             * @default null
+             */
+            photo_subject: components["schemas"]["PhotoSubject"] | null;
             /**
              * Ask Count
              * @description Number of times this slot has been used.
@@ -1909,6 +1952,23 @@ export interface components {
             hider_station_id: string | null;
         };
         /**
+         * PhotoEventParams
+         * @description Photo question parameters — subject only; labels resolve client-side.
+         */
+        PhotoEventParams: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "photo";
+            subject: components["schemas"]["PhotoSubject"];
+        };
+        /**
+         * PhotoSubject
+         * @enum {string}
+         */
+        PhotoSubject: "tree" | "sky" | "selfie" | "widest_street" | "tallest_structure_in_sightline" | "any_building_from_station" | "tallest_building_from_station" | "nearest_street_trace" | "two_buildings" | "restaurant_interior" | "train_platform" | "park" | "grocery_aisle" | "place_of_worship" | "half_mile_streets_traced" | "tallest_mountain_from_station" | "biggest_body_of_water" | "five_buildings";
+        /**
          * PlayerColor
          * @enum {string}
          */
@@ -2152,7 +2212,7 @@ export interface components {
             /** Slot Index */
             slot_index: number;
             /** Parameters */
-            parameters: components["schemas"]["RadarEventParams"] | components["schemas"]["ThermometerEventParams"] | components["schemas"]["FeatureEventParams"] | components["schemas"]["TentacleEventParams"];
+            parameters: components["schemas"]["RadarEventParams"] | components["schemas"]["ThermometerEventParams"] | components["schemas"]["FeatureEventParams"] | components["schemas"]["TentacleEventParams"] | components["schemas"]["PhotoEventParams"];
             seeker_location_start: components["schemas"]["Point"];
             /**
              * Asked At
@@ -2518,6 +2578,8 @@ export interface components {
              * @description Feature class tier. Classed categories only.
              */
             feature_class?: number | null;
+            /** @description Photo subject. Photo slots only. */
+            photo_subject?: components["schemas"]["PhotoSubject"] | null;
             /**
              * Ask Count
              * @description Number of times this slot has been used.
@@ -3541,6 +3603,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AskQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_photo_question_games__game_id__questions_photo_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskPhotoQuestionRequest"];
             };
         };
         responses: {

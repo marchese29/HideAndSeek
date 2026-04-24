@@ -174,6 +174,7 @@ def test_get_game_inventory(client: TestClient, session: Session):
         'distance': 3000.0,
         'category': None,
         'feature_class': None,
+        'photo_subject': None,
         'ask_count': 0,
     }
     assert inv['radar_slots'][2]['distance'] is None

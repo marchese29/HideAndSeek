@@ -16,6 +16,7 @@ from hideandseek_models.types import (
     DistanceConvention,
     FeatureCategory,
     GameStatus,
+    PhotoSubject,
     PlayerRole,
     QuestionStatus,
     QuestionType,
@@ -1640,3 +1641,98 @@ def test_randomize_thermometer_starts_in_progress(client: TestClient, session: S
     replacement = _get_latest_question(game.id)
     assert replacement.question_type == QuestionType.thermometer
     assert replacement.status == QuestionStatus.in_progress
+
+
+# ── POST /questions/photo ────────────────────────────────────────────────────
+
+
+def test_ask_photo_question(client: TestClient, session: Session):
+    """Photo ask creates an answerable question with PhotoQuestionParams."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/photo',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 204
+
+    question = _get_latest_question(game.id)
+    assert question.question_type == QuestionType.photo
+    assert question.status == QuestionStatus.answerable
+    assert question.answerable_at is not None
+    assert question.photo_params is not None
+    assert question.photo_params.subject == PhotoSubject.tree
+    assert question.photo_params.photo_object_key is None
+    assert question.photo_params.submitted_at is None
+
+
+def test_ask_photo_invalid_slot_type(client: TestClient, session: Session):
+    """slot_index pointing to a radar slot (under photo type) is 422."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/photo',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 99},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 422
+
+
+def test_ask_photo_hider_forbidden(client: TestClient, session: Session):
+    """Only seekers can ask photo questions."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/photo',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 403
+
+
+def test_ask_photo_not_seeking(client: TestClient, session: Session):
+    """Photo ask during lobby is 409."""
+    game = create_game(session, status=GameStatus.lobby)
+    seeker = create_player(session, game.id, role=PlayerRole.seeker)
+    resp = client.post(
+        f'/games/{game.id}/questions/photo',
+        json={'location': _point(-0.1, 51.5), 'slot_index': 0},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 409
+
+
+def test_preview_photo_returns_422(client: TestClient, session: Session):
+    """Photo preview is not supported — 422 with a helpful message."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    resp = client.get(
+        f'/games/{game.id}/questions/preview',
+        params={'question_type': 'photo', 'slot_index': 0, 'lat': 0.5, 'lng': 0.5},
+        headers=_headers(seeker.id),
+    )
+    assert resp.status_code == 422
+    assert 'photo' in resp.json()['detail'].lower()
+
+
+def test_randomize_photo_question(client: TestClient, session: Session):
+    """Hider can randomize an answerable photo question."""
+    game, hider, seeker = _setup_seeking_game(client, session)
+    question_id = _ask_question(client, game.id, seeker.id, question_type='photo', slot_index=0)
+
+    resp = client.post(
+        f'/games/{game.id}/questions/{question_id}/randomize',
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 204
+
+    original = _get_question_by_id(question_id)
+    assert original.status == QuestionStatus.randomized
+
+    replacement = _get_latest_question(game.id)
+    assert replacement.id != question_id
+    assert replacement.question_type == QuestionType.photo
+    assert replacement.status == QuestionStatus.answerable
+    assert replacement.photo_params is not None
+    assert replacement.photo_params.subject in {
+        PhotoSubject.tree,
+        PhotoSubject.sky,
+        PhotoSubject.selfie,
+    }

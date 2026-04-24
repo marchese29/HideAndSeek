@@ -283,6 +283,7 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
             distance=s.distance,
             category=str(s.category) if s.category else None,
             feature_class=s.feature_class,
+            photo_subject=s.photo_subject,
             ask_count=s.ask_count,
         )
         for s in slots

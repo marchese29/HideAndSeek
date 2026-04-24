@@ -49,6 +49,8 @@ def validate_slot_request(
         and custom_distance is None
     ):
         raise HTTPException(status_code=422, detail='custom_distance is required for custom slots.')
+    if question_type == QuestionType.photo and slot.photo_subject is None:
+        raise HTTPException(status_code=422, detail='Slot is missing a photo subject.')
 
     return slot
 

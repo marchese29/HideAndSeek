@@ -21,6 +21,7 @@ from hideandseek_models.inventory import InventorySlot
 from hideandseek_models.question import Question
 from hideandseek_models.question_params import (
     FeatureQuestionParams,
+    PhotoQuestionParams,
     RadarParams,
     TentacleQuestionParams,
     ThermometerParams,
@@ -235,6 +236,36 @@ def ask_tentacles(
     return question
 
 
+def ask_photo(
+    game: Game,
+    player: Player,
+    seeker_location: Point,
+    slot: InventorySlot,
+) -> Question:
+    """Create a photo question: use slot, persist. Answerable via hider image submit."""
+    assert slot.photo_subject is not None
+    assert slot.question_type == QuestionType.photo
+
+    slot.ask_count += 1
+
+    question = register(
+        Question(
+            game=game,
+            sequence=get_question_count(game) + 1,
+            question_type=QuestionType.photo,
+            status=QuestionStatus.answerable,
+            asked_by=player.id,
+            seeker_location_start=seeker_location,
+            ask_count=slot.ask_count,
+            slot_index=slot.slot_index,
+            answerable_at=datetime.now(UTC),
+            photo_params=PhotoQuestionParams(subject=slot.photo_subject),
+        )
+    )
+    _log_question_asked(game, player, question)
+    return question
+
+
 def lock_in_thermometer(question: Question, seeker_end: Point) -> None:
     """Lock in the seeker's end position for a thermometer question."""
     question.seeker_location_end = seeker_end
@@ -255,6 +286,7 @@ _ASK_DISPATCH: dict[QuestionType, str] = {
     QuestionType.matching: 'ask_matching',
     QuestionType.measuring: 'ask_measuring',
     QuestionType.tentacles: 'ask_tentacles',
+    QuestionType.photo: 'ask_photo',
 }
 
 
@@ -306,6 +338,8 @@ def randomize_question(question: Question, game: Game) -> Question:
         replacement = ask_matching(game, seeker, seeker_location, replacement_slot)
     elif qt == QuestionType.measuring:
         replacement = ask_measuring(game, seeker, seeker_location, replacement_slot)
+    elif qt == QuestionType.photo:
+        replacement = ask_photo(game, seeker, seeker_location, replacement_slot)
     else:
         replacement = ask_tentacles(game, seeker, seeker_location, replacement_slot)
 

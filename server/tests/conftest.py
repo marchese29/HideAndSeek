@@ -39,6 +39,7 @@ from hideandseek_models.types import (
     FeatureCategory,
     GameStatus,
     MapSize,
+    PhotoSubject,
     PlayerColor,
     QuestionStatus,
     QuestionType,
@@ -137,6 +138,11 @@ def client(session: Session) -> Generator[TestClient, None, None]:
 _DEFAULT_INVENTORY_TEMPLATE: dict[str, Any] = {
     'radars': [{'distance': 3000}, {'distance': 5000}, {'distance': None}],
     'thermometers': [{'distance': 500}, {'distance': None}],
+    'photos': [
+        {'subject': PhotoSubject.tree.value},
+        {'subject': PhotoSubject.sky.value},
+        {'subject': PhotoSubject.selfie.value},
+    ],
 }
 
 
@@ -246,6 +252,16 @@ def _create_inventory_slots(session: Session, game: Game, template: dict[str, An
             )
             session.add(slot)
             idx += 1
+
+    # Photo slots from template
+    for idx, slot_data in enumerate(template.get('photos', [])):
+        slot = InventorySlot(
+            game_id=game.id,
+            question_type=QuestionType.photo,
+            slot_index=idx,
+            photo_subject=PhotoSubject(slot_data['subject']),
+        )
+        session.add(slot)
 
     # Tentacles slots from map's tentacle_categories
     tentacle_cats = game.game_map.tentacle_categories or []

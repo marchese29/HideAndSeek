@@ -61,6 +61,11 @@ def preview_question(
     For matching/measuring, also resolves the seeker's feature and includes
     it in the result.
     """
+    if question_type == QuestionType.photo:
+        raise ValueError(
+            'Photo questions have no preview; use POST /questions/photo to ask directly.'
+        )
+
     game_map = game.game_map
     boundary_geom = game_map.boundary
     convention = game_map.convention

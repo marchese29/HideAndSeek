@@ -22,6 +22,7 @@ from hideandseek_core.conventions import resolve_tentacle_distance
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_models.types import (
     EndReason,
+    PhotoSubject,
     PlayerColor,
     PlayerRole,
     ProximityTier,
@@ -81,8 +82,21 @@ class TentacleEventParams(BaseModel):
     poi_names: list[str] = Field(description='Human-readable names, matching poi_ids order.')
 
 
+class PhotoEventParams(BaseModel):
+    """Photo question parameters — subject only; labels resolve client-side."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal['photo'] = 'photo'
+    subject: PhotoSubject
+
+
 QuestionEventParams = (
-    RadarEventParams | ThermometerEventParams | FeatureEventParams | TentacleEventParams
+    RadarEventParams
+    | ThermometerEventParams
+    | FeatureEventParams
+    | TentacleEventParams
+    | PhotoEventParams
 )
 
 
@@ -96,6 +110,10 @@ def build_event_params(question: Question) -> QuestionEventParams:
         tp = question.thermometer_params
         assert tp is not None
         return ThermometerEventParams(min_travel=tp.min_travel)
+    elif question.question_type == QuestionType.photo:
+        pp = question.photo_params
+        assert pp is not None
+        return PhotoEventParams(subject=pp.subject)
     elif question.question_type == QuestionType.tentacles:
         tp = question.tentacle_params
         assert tp is not None

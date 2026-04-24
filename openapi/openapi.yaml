@@ -1033,6 +1033,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/photo:
+    post:
+      tags:
+      - questions
+      summary: Ask Photo Question
+      description: Ask a photo question, spending a photo inventory slot.
+      operationId: ask_photo_question_games__game_id__questions_photo_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskPhotoQuestionRequest'
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/questions/preview:
     get:
       tags:
@@ -1568,6 +1611,22 @@ paths:
           description: Successful Response
 components:
   schemas:
+    AskPhotoQuestionRequest:
+      properties:
+        slot_index:
+          type: integer
+          title: Slot Index
+          description: 0-based index into the photo inventory.
+        location:
+          $ref: '#/components/schemas/Point'
+          description: Current seeker position as a GeoJSON Point.
+      type: object
+      required:
+      - slot_index
+      - location
+      title: AskPhotoQuestionRequest
+      description: "Ask a photo question \u2014 no custom distance, subject comes\
+        \ from the slot."
     AskQuestionRequest:
       properties:
         slot_index:
@@ -2693,6 +2752,12 @@ components:
           type: array
           title: Tentacles Slots
           description: Tentacles question slots.
+        photo_slots:
+          items:
+            $ref: '#/components/schemas/SlotResponse'
+          type: array
+          title: Photo Slots
+          description: Photo question slots.
       type: object
       required:
       - radar_slots
@@ -2700,6 +2765,7 @@ components:
       - matching_slots
       - measuring_slots
       - tentacles_slots
+      - photo_slots
       title: InventoryResponse
       description: "Question inventory \u2014 all slots grouped by question type."
     InventorySlotResponse:
@@ -2732,6 +2798,12 @@ components:
           default: null
           description: Feature class tier. Classed categories only.
           title: Feature Class
+        photo_subject:
+          anyOf:
+          - $ref: '#/components/schemas/PhotoSubject'
+          - type: 'null'
+          default: null
+          description: Photo subject. Photo slots only.
         ask_count:
           description: Number of times this slot has been used.
           title: Ask Count
@@ -3217,6 +3289,43 @@ components:
       - hider_station_id
       title: PhaseChangedEvent
       type: object
+    PhotoEventParams:
+      description: "Photo question parameters \u2014 subject only; labels resolve\
+        \ client-side."
+      properties:
+        type:
+          const: photo
+          default: photo
+          title: Type
+          type: string
+        subject:
+          $ref: '#/components/schemas/PhotoSubject'
+      required:
+      - subject
+      title: PhotoEventParams
+      type: object
+    PhotoSubject:
+      type: string
+      enum:
+      - tree
+      - sky
+      - selfie
+      - widest_street
+      - tallest_structure_in_sightline
+      - any_building_from_station
+      - tallest_building_from_station
+      - nearest_street_trace
+      - two_buildings
+      - restaurant_interior
+      - train_platform
+      - park
+      - grocery_aisle
+      - place_of_worship
+      - half_mile_streets_traced
+      - tallest_mountain_from_station
+      - biggest_body_of_water
+      - five_buildings
+      title: PhotoSubject
     PlayerColor:
       type: string
       enum:
@@ -3595,6 +3704,7 @@ components:
           discriminator:
             mapping:
               feature: '#/components/schemas/FeatureEventParams'
+              photo: '#/components/schemas/PhotoEventParams'
               radar: '#/components/schemas/RadarEventParams'
               tentacles: '#/components/schemas/TentacleEventParams'
               thermometer: '#/components/schemas/ThermometerEventParams'
@@ -3604,6 +3714,7 @@ components:
           - $ref: '#/components/schemas/ThermometerEventParams'
           - $ref: '#/components/schemas/FeatureEventParams'
           - $ref: '#/components/schemas/TentacleEventParams'
+          - $ref: '#/components/schemas/PhotoEventParams'
           title: Parameters
         seeker_location_start:
           $ref: '#/components/schemas/Point'
@@ -4176,6 +4287,11 @@ components:
           - type: 'null'
           title: Feature Class
           description: Feature class tier. Classed categories only.
+        photo_subject:
+          anyOf:
+          - $ref: '#/components/schemas/PhotoSubject'
+          - type: 'null'
+          description: Photo subject. Photo slots only.
         ask_count:
           type: integer
           title: Ask Count
