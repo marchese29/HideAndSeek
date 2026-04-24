@@ -374,3 +374,5 @@ def preview_answer(question: Question, hider_location: Point, game: Game) -> str
             return preview_measuring(question, hider_location, game)
         case QuestionType.tentacles:
             return preview_tentacles(question, hider_location, game)
+        case QuestionType.photo:
+            raise ValueError('photo questions have no preview — router should 422')

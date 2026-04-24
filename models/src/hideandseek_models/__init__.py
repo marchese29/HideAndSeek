@@ -9,6 +9,7 @@ from hideandseek_models.map_feature import GameMapFeature, MapFeature
 from hideandseek_models.question import Question
 from hideandseek_models.question_params import (
     FeatureQuestionParams,
+    PhotoQuestionParams,
     RadarParams,
     TentacleQuestionParams,
     ThermometerParams,
@@ -16,10 +17,14 @@ from hideandseek_models.question_params import (
 from hideandseek_models.transit import Route, RouteStop, Stop, TransitDataset
 from hideandseek_models.types import (
     MAX_PLAYERS,
+    PHOTO_SUBJECT_META,
     DistrictClass,
     FeatureCategory,
     GameStatus,
     MapSize,
+    PhotoReviewDecision,
+    PhotoSubject,
+    PhotoSubjectMeta,
     PlayerColor,
     PlayerRole,
     ProximityTier,
@@ -28,6 +33,7 @@ from hideandseek_models.types import (
     QuestionType,
     RouteType,
     TokenProvider,
+    subjects_for_size,
 )
 
 __all__ = [
@@ -40,6 +46,7 @@ __all__ = [
     'InventorySlot',
     'LocationUpdate',
     'MapFeature',
+    'PhotoQuestionParams',
     'Player',
     'Question',
     'RadarParams',
@@ -53,6 +60,8 @@ __all__ = [
     'FeatureCategory',
     'GameStatus',
     'MapSize',
+    'PhotoReviewDecision',
+    'PhotoSubject',
     'PlayerColor',
     'PlayerRole',
     'ProximityTier',
@@ -63,6 +72,10 @@ __all__ = [
     'TokenProvider',
     # Constants
     'MAX_PLAYERS',
+    'PHOTO_SUBJECT_META',
     # Value objects
     'DistrictClass',
+    'PhotoSubjectMeta',
+    # Helpers
+    'subjects_for_size',
 ]

@@ -18,6 +18,7 @@ from hideandseek_models.types import (
     MATCHING_CATEGORIES,
     MEASURING_CATEGORIES,
     FeatureCategory,
+    PhotoSubject,
     QuestionStatus,
     QuestionType,
     category_key,
@@ -184,8 +185,9 @@ def create_inventory_slots(
 ) -> list[InventorySlot]:
     """Create InventorySlot rows from a map's default_inventory and feature categories.
 
-    Radar/thermometer slots come from default_inventory.
+    Radar/thermometer/photo slots come from default_inventory.
     Matching/measuring slots are derived from the map's feature categories.
+    Tentacles slots come from the map's tentacle_categories config.
     """
     session = get_session()
     slots: list[InventorySlot] = []
@@ -239,6 +241,17 @@ def create_inventory_slots(
             slot_index=idx,
             category=FeatureCategory(entry['category']),
             distance=entry['distance'],
+        )
+        session.add(slot)
+        slots.append(slot)
+
+    # Photo slots from default_inventory (subjects gated by map size at template time)
+    for idx, slot_data in enumerate(default_inventory.get('photos', [])):
+        slot = InventorySlot(
+            game=game,
+            question_type=QuestionType.photo,
+            slot_index=idx,
+            photo_subject=PhotoSubject(slot_data['subject']),
         )
         session.add(slot)
         slots.append(slot)

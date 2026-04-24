@@ -30,6 +30,8 @@ class GameMap(Base):
     default_inventory: Mapped[dict] = mapped_column(JSON, default=dict)
     default_hiding_time_min: Mapped[int | None] = mapped_column(default=None)
     default_base_question_delay_min: Mapped[int | None] = mapped_column(default=None)
+    default_photo_submit_min: Mapped[int | None] = mapped_column(default=None)
+    default_photo_review_sec: Mapped[int | None] = mapped_column(default=None)
     hiding_zone_radius: Mapped[float | None] = mapped_column(default=None)
     tentacle_categories: Mapped[list] = mapped_column(JSON, default=list)
     notes: Mapped[str | None] = mapped_column(default=None)

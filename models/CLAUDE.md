@@ -17,8 +17,10 @@ src/hideandseek_models/
   __init__.py              # Re-exports all models, enums, and constants
   base.py                  # DeclarativeBase with StrEnum type annotation map
   types.py                 # Enums (GameStatus, PlayerColor, QuestionType, ProximityTier,
-                           #   EndReason, etc.), constants (MAX_PLAYERS), value objects
-                           #   (DistrictClass), category classification sets
+                           #   EndReason, PhotoSubject, PhotoReviewDecision, etc.),
+                           #   constants (MAX_PLAYERS), value objects (DistrictClass,
+                           #   PhotoSubjectMeta), category classification sets,
+                           #   PHOTO_SUBJECT_META + subjects_for_size(size) helper
   geo_types.py             # Custom SQLAlchemy column types (ShapelyGeography, ShapelyGeometry)
   game.py                  # Game (end_reason + found_claim_* for two-party completion),
                            #   Player (Player.freeze_location for endgame freeze mechanic)
@@ -27,7 +29,8 @@ src/hideandseek_models/
   location.py              # LocationUpdate
   map_feature.py           # MapFeature, GameMapFeature
   question.py              # Question
-  question_params.py       # RadarParams, ThermometerParams, FeatureQuestionParams, TentacleQuestionParams
+  question_params.py       # RadarParams, ThermometerParams, FeatureQuestionParams,
+                           #   TentacleQuestionParams, PhotoQuestionParams
   transit.py               # TransitDataset, Stop, Route, RouteStop
   device_token.py          # DeviceToken (token + endpoint_arn for SNS Mobile Push)
 ```
@@ -49,6 +52,7 @@ Minimal — only what the ORM models need:
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int)
 - Two spatial column types: `ShapelyGeography` (distance/proximity) and `ShapelyGeometry` (topological). See `geo_types.py`.
 - `GameMap.boundary` is `MULTIPOLYGON` — always stored as `MultiPolygon` (single polygons wrapped at creation via `MultiPolygon([polygon])`).
+- Enum-value extension caveat: the existing Postgres native enum types (`questiontype`, `questionstatus`, etc.) were created by the initial migration via `sa.Enum(name=...)`. Adding new values to those enums requires `ALTER TYPE ... ADD VALUE` in an `op.get_context().autocommit_block()` (see `alembic/versions/022e24f069e7_*`). New StrEnum fields added since the initial migration store as VARCHAR per `type_annotation_map={StrEnum: String}` — no new native enum types are created going forward.
 - No business logic — models define schema only
 - Style rules match the server (ruff + pyright, single quotes, 100 char line length)
 

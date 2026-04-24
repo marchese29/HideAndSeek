@@ -39,6 +39,8 @@ class Game(Base):
     join_code: Mapped[str | None] = mapped_column(unique=True, index=True, default=None)
     hiding_time_min: Mapped[int] = mapped_column(default=60)
     base_question_delay_min: Mapped[int] = mapped_column(default=5)
+    photo_submit_min: Mapped[int | None] = mapped_column(default=None)
+    photo_review_sec: Mapped[int | None] = mapped_column(default=None)
     size: Mapped[MapSize] = mapped_column(default=MapSize.medium)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
     hiding_started_at: Mapped[datetime | None] = mapped_column(default=None)

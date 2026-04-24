@@ -3642,6 +3642,7 @@ components:
       - asked
       - in_progress
       - answerable
+      - submitted
       - answered
       - vetoed
       - abandoned
@@ -3656,6 +3657,7 @@ components:
       - matching
       - measuring
       - tentacles
+      - photo
       title: QuestionType
     QuestionVetoedEvent:
       description: "A question was vetoed \u2014 both channels."

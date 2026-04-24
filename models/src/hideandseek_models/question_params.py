@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek_models.base import Base
-from hideandseek_models.types import FeatureCategory
+from hideandseek_models.types import FeatureCategory, PhotoReviewDecision, PhotoSubject
 
 if TYPE_CHECKING:
     from hideandseek_models.question import Question
@@ -80,3 +81,29 @@ class TentacleQuestionParams(Base):
     hider_feature_id: Mapped[str | None] = mapped_column(default=None)
 
     question: Mapped[Question] = relationship(back_populates='tentacle_params')
+
+
+class PhotoQuestionParams(Base):
+    """Parameters for a photo question (one-to-one with Question).
+
+    `subject` is set at ask time. Submission fields (`photo_object_key` or
+    `is_null_answer`, plus `submitted_at` / `submitted_by`) are populated when
+    the hider commits. Review fields are populated when a seeker accepts/rejects
+    or when auto-accept fires on the review timer. On reject, the submission
+    fields null out so another attempt can take over; the review fields carry
+    the last review only (no full history).
+    """
+
+    __tablename__ = 'photo_question_params'
+
+    question_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('question.id'), primary_key=True)
+    subject: Mapped[PhotoSubject]
+    photo_object_key: Mapped[str | None] = mapped_column(default=None)
+    is_null_answer: Mapped[bool] = mapped_column(default=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(default=None)
+    submitted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('player.id'), default=None)
+    review_decision: Mapped[PhotoReviewDecision | None] = mapped_column(default=None)
+    reviewed_at: Mapped[datetime | None] = mapped_column(default=None)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('player.id'), default=None)
+
+    question: Mapped[Question] = relationship(back_populates='photo_params')

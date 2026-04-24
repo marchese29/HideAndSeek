@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 from pydantic import BaseModel
@@ -179,16 +180,124 @@ class QuestionType(StrEnum):
     matching = 'matching'
     measuring = 'measuring'
     tentacles = 'tentacles'
+    photo = 'photo'
 
 
 class QuestionStatus(StrEnum):
     asked = 'asked'
     in_progress = 'in_progress'
     answerable = 'answerable'
+    submitted = 'submitted'
     answered = 'answered'
     vetoed = 'vetoed'
     abandoned = 'abandoned'
     randomized = 'randomized'
+
+
+# ── Photo questions ───────────────────────────────────────────────────────────
+
+
+class PhotoSubject(StrEnum):
+    # small-gated
+    tree = 'tree'
+    sky = 'sky'
+    selfie = 'selfie'
+    widest_street = 'widest_street'
+    tallest_structure_in_sightline = 'tallest_structure_in_sightline'
+    any_building_from_station = 'any_building_from_station'
+
+    # medium-gated
+    tallest_building_from_station = 'tallest_building_from_station'
+    nearest_street_trace = 'nearest_street_trace'
+    two_buildings = 'two_buildings'
+    restaurant_interior = 'restaurant_interior'
+    train_platform = 'train_platform'
+    park = 'park'
+    grocery_aisle = 'grocery_aisle'
+    place_of_worship = 'place_of_worship'
+
+    # large-gated
+    half_mile_streets_traced = 'half_mile_streets_traced'
+    tallest_mountain_from_station = 'tallest_mountain_from_station'
+    biggest_body_of_water = 'biggest_body_of_water'
+    five_buildings = 'five_buildings'
+
+
+class PhotoReviewDecision(StrEnum):
+    accepted = 'accepted'
+    rejected = 'rejected'
+    auto_accepted = 'auto_accepted'
+
+
+@dataclass(frozen=True)
+class PhotoSubjectMeta:
+    label: str
+    min_size: MapSize
+
+
+PHOTO_SUBJECT_META: dict[PhotoSubject, PhotoSubjectMeta] = {
+    # small
+    PhotoSubject.tree: PhotoSubjectMeta(label='A Tree', min_size=MapSize.small),
+    PhotoSubject.sky: PhotoSubjectMeta(label='The Sky', min_size=MapSize.small),
+    PhotoSubject.selfie: PhotoSubjectMeta(label='A Selfie', min_size=MapSize.small),
+    PhotoSubject.widest_street: PhotoSubjectMeta(label='The Widest Street', min_size=MapSize.small),
+    PhotoSubject.tallest_structure_in_sightline: PhotoSubjectMeta(
+        label='The Tallest Structure in Your Sightline', min_size=MapSize.small
+    ),
+    PhotoSubject.any_building_from_station: PhotoSubjectMeta(
+        label='Any Building From Your Station', min_size=MapSize.small
+    ),
+    # medium
+    PhotoSubject.tallest_building_from_station: PhotoSubjectMeta(
+        label='The Tallest Building From Your Station', min_size=MapSize.medium
+    ),
+    PhotoSubject.nearest_street_trace: PhotoSubjectMeta(
+        label='A Trace of the Nearest Street', min_size=MapSize.medium
+    ),
+    PhotoSubject.two_buildings: PhotoSubjectMeta(label='Two Buildings', min_size=MapSize.medium),
+    PhotoSubject.restaurant_interior: PhotoSubjectMeta(
+        label='A Restaurant Interior', min_size=MapSize.medium
+    ),
+    PhotoSubject.train_platform: PhotoSubjectMeta(
+        label='A Train Platform', min_size=MapSize.medium
+    ),
+    PhotoSubject.park: PhotoSubjectMeta(label='A Park', min_size=MapSize.medium),
+    PhotoSubject.grocery_aisle: PhotoSubjectMeta(
+        label='A Grocery Store Aisle', min_size=MapSize.medium
+    ),
+    PhotoSubject.place_of_worship: PhotoSubjectMeta(
+        label='A Place of Worship', min_size=MapSize.medium
+    ),
+    # large
+    PhotoSubject.half_mile_streets_traced: PhotoSubjectMeta(
+        label='A Half-Mile of Streets Traced', min_size=MapSize.large
+    ),
+    PhotoSubject.tallest_mountain_from_station: PhotoSubjectMeta(
+        label='The Tallest Mountain From Your Station', min_size=MapSize.large
+    ),
+    PhotoSubject.biggest_body_of_water: PhotoSubjectMeta(
+        label='The Biggest Body of Water', min_size=MapSize.large
+    ),
+    PhotoSubject.five_buildings: PhotoSubjectMeta(label='Five Buildings', min_size=MapSize.large),
+}
+
+_SIZE_ORDER: dict[MapSize, int] = {
+    MapSize.small: 0,
+    MapSize.medium: 1,
+    MapSize.large: 2,
+}
+
+
+def subjects_for_size(size: MapSize) -> list[PhotoSubject]:
+    """Return photo subjects available at the given map size.
+
+    Subjects unlock as map size grows: small → 6, medium → 14, large → 18.
+    `MapSize.special` returns [] (never user-selectable for gameplay).
+    """
+    if size == MapSize.special:
+        return []
+    target = _SIZE_ORDER[size]
+    return [s for s, meta in PHOTO_SUBJECT_META.items() if _SIZE_ORDER[meta.min_size] <= target]
 
 
 class StationElectionStatus(StrEnum):

@@ -8,7 +8,12 @@ Conversion happens at the boundary in logic.py.
 from __future__ import annotations
 
 from hideandseek_models.game_map import GameMap
-from hideandseek_models.types import DistanceConvention, FeatureCategory, MapSize
+from hideandseek_models.types import (
+    DistanceConvention,
+    FeatureCategory,
+    MapSize,
+    subjects_for_size,
+)
 
 _MILES_PER_METER = 1609.344
 
@@ -96,6 +101,13 @@ def get_default_hiding_time_min(size: MapSize) -> int:
 
 _DEFAULT_QUESTION_DELAY_MIN = 5
 
+_DEFAULT_PHOTO_SUBMIT_MIN: dict[MapSize, int] = {
+    MapSize.small: 10,
+    MapSize.medium: 10,
+    MapSize.large: 20,
+}
+_DEFAULT_PHOTO_REVIEW_SEC = 30
+
 
 def resolve_hiding_time_min(
     *, request_override: int | None, map_default: int | None, size: MapSize
@@ -109,6 +121,23 @@ def resolve_base_question_delay_min(
 ) -> int:
     """Resolve question delay with three-level fallback: request → map → code default."""
     return request_override or map_default or _DEFAULT_QUESTION_DELAY_MIN
+
+
+def resolve_photo_submit_min(
+    *, request_override: int | None, map_default: int | None, size: MapSize
+) -> int:
+    """Resolve photo submit window with three-level fallback: request → map → code default.
+
+    Raises ValueError for special-size maps (no code-level default defined).
+    """
+    if size == MapSize.special:
+        raise ValueError('special-size maps must provide a photo_submit_min override.')
+    return request_override or map_default or _DEFAULT_PHOTO_SUBMIT_MIN[size]
+
+
+def resolve_photo_review_sec(*, request_override: int | None, map_default: int | None) -> int:
+    """Resolve photo review window with three-level fallback: request → map → code default."""
+    return request_override or map_default or _DEFAULT_PHOTO_REVIEW_SEC
 
 
 def get_default_hiding_zone_radius(convention: DistanceConvention, size: MapSize) -> float:
@@ -145,6 +174,7 @@ def get_default_inventory(convention: DistanceConvention, size: MapSize) -> dict
     return {
         'radars': [{'distance': d} for d in radars] + [{'distance': None}],
         'thermometers': [{'distance': d} for d in thermos] + [{'distance': None}],
+        'photos': [{'subject': s.value} for s in subjects_for_size(size)],
     }
 
 

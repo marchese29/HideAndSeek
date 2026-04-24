@@ -7,7 +7,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hideandseek_models.base import Base
-from hideandseek_models.types import FeatureCategory, QuestionType
+from hideandseek_models.types import FeatureCategory, PhotoSubject, QuestionType
 
 if TYPE_CHECKING:
     from hideandseek_models.game import Game
@@ -30,6 +30,7 @@ class InventorySlot(Base):
     distance: Mapped[float | None] = mapped_column(default=None)
     category: Mapped[FeatureCategory | None] = mapped_column(default=None)
     feature_class: Mapped[int | None] = mapped_column(default=None)
+    photo_subject: Mapped[PhotoSubject | None] = mapped_column(default=None)
     ask_count: Mapped[int] = mapped_column(default=0)
 
     game: Mapped[Game] = relationship(back_populates='inventory_slots')

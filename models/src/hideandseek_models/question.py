@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from hideandseek_models.game import Game, Player
     from hideandseek_models.question_params import (
         FeatureQuestionParams,
+        PhotoQuestionParams,
         RadarParams,
         TentacleQuestionParams,
         ThermometerParams,
@@ -68,6 +69,10 @@ class Question(Base):
         uselist=False,
     )
     tentacle_params: Mapped[TentacleQuestionParams | None] = relationship(
+        back_populates='question',
+        uselist=False,
+    )
+    photo_params: Mapped[PhotoQuestionParams | None] = relationship(
         back_populates='question',
         uselist=False,
     )

@@ -2170,12 +2170,12 @@ export interface components {
          * QuestionStatus
          * @enum {string}
          */
-        QuestionStatus: "asked" | "in_progress" | "answerable" | "answered" | "vetoed" | "abandoned" | "randomized";
+        QuestionStatus: "asked" | "in_progress" | "answerable" | "submitted" | "answered" | "vetoed" | "abandoned" | "randomized";
         /**
          * QuestionType
          * @enum {string}
          */
-        QuestionType: "radar" | "thermometer" | "matching" | "measuring" | "tentacles";
+        QuestionType: "radar" | "thermometer" | "matching" | "measuring" | "tentacles" | "photo";
         /**
          * QuestionVetoedEvent
          * @description A question was vetoed — both channels.
