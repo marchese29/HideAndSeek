@@ -65,6 +65,62 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+### Priority Scheme
+
+We use a five-tier rubric grounded in gameplay impact. We talk in P1–P5; beads stores them as P0–P4 (subtract 1 when using the `--priority` flag).
+
+- **P1 (beads P0)** — Development cannot (or should not) continue until this is dealt with.
+- **P2 (beads P1)** — Bugs that impact gameplay experience; beads under epics that represent gameplay gaps (e.g. photo questions, timer corrections, iOS background-location staleness).
+- **P3 (beads P2)** — Bugs that are noticeable but not gameplay-impacting; beads under epics that don't fit P2 but are above "nice to have" (e.g. Android audit, Curses feature, EAS submit setup).
+- **P4 (beads P3)** — Bugs that aren't visible and/or don't impact gameplay; beads under nice-to-have epics (map tools, Live Activities, Voronoi pre-compute).
+- **P5 (beads P4)** — Housekeeping, background cleanup, exploration, CI niceties when manual options still work (e.g. CI auto-build is P5 because manual EAS builds work).
+
+### Epic Handling
+
+Epics get the priority of their theme — the same priority their children will inherit. We keep epics off the `ready` list by **type filtering**, not by mutating priority. The `bdr` shell function in `~/.zshrc` (see below) wraps this for everyday use; the raw commands look like:
+
+```bash
+bd ready --type=task    # Most actionable work
+bd ready --type=bug     # Outstanding bugs
+bd ready --type=feature # Feature work
+```
+
+Type doesn't accept comma-lists — run per type, or use `bdr`.
+
+When an epic has **no children yet**, file a single planning task under it:
+
+```bash
+bd create "Plan <slug>: ..." --type=task --priority=P<N> --parent=HideAndSeek-<epic>
+```
+
+Give the plan task the same priority as the future children. It appears in the ready list as actionable planning work. Close it once real children are filed. Never demote an epic's priority just because it's been decomposed — importance and visibility are decoupled (type controls visibility, priority stays purely about importance).
+
+### `bdr` shell function
+
+Add this to your `~/.zshrc` (or bash equivalent). Wraps `bd ready --json -s priority` with a `jq` filter that drops epics structurally, sorts strictly by priority, displays priority in our P1–P5 nomenclature, and color-codes by tier. Extra args pass through (e.g. `bdr --type=task`, `bdr -n 20`).
+
+```bash
+# bdr — `bd ready` with epics filtered out, priority-sorted, colorized, and
+# displayed in P1–P5 (beads internally uses P0–P4; +1 for display).
+# Extra args pass through to `bd ready` (e.g. `bdr --type=task`, `bdr -n 100`).
+bdr() {
+  bd ready --json -n 100 -s priority "$@" | jq -r '
+    def color(p):
+      if   p == 0 then "[1;35m"  # P1 — dev blocked (bold magenta)
+      elif p == 1 then "[1;31m"  # P2 — gameplay-impacting (bold red)
+      elif p == 2 then "[33m"    # P3 — noticeable (yellow)
+      elif p == 3 then "[36m"    # P4 — invisible (cyan)
+      elif p == 4 then "[90m"    # P5 — housekeeping (grey)
+      else              "[0m" end;
+    def reset: "[0m";
+    .[] | select(.issue_type != "epic") |
+    "\(color(.priority))[P\(.priority + 1)]\(reset) [\(.issue_type)] \(.id): \(.title)"
+  '
+}
+```
+
+Note that `--priority` passed through to `bd ready` uses beads' P0–P4 numbering, so `bdr --priority=1` shows our P2 tier.
+
 ## Verification
 
 When server code changes, verify with **both** automated and manual checks before committing:
