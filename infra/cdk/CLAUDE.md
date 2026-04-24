@@ -20,6 +20,7 @@ The CDK app must deploy cleanly into **any** AWS account the operator is authent
 - **Account + region** are read from `CDK_DEFAULT_ACCOUNT` and `CDK_DEFAULT_REGION` (populated automatically by the CDK CLI from the active AWS credentials), never hardcoded in any stack or `cdk.json`.
 - **Domain / hosted zone** values enter via `DOMAIN_NAME` + `HOSTED_ZONE_NAME` env vars, read via `lib/env.ts`'s `requireEnv` helper. The hosted zone ID itself is never set — `HostedZone.fromLookup` resolves it at synth time and caches the result in gitignored `cdk.context.json`.
 - **Deploy-time env vars** (secret ARNs, developer IDs, bundle IDs, domain names) live in `infra/cdk/.env` — gitignored. A committed `infra/cdk/.env.example` documents which vars each stack reads. Load before deploys: `set -a; source infra/cdk/.env; set +a`.
+- **New git worktrees** need their own `infra/cdk/.env` copied in from the main checkout before committing any CDK change — the `cdk-checks` pre-commit hook runs `cdk synth`, which fails with `Missing required env var DOMAIN_NAME` if the file isn't present. One-liner: `cp /path/to/main/infra/cdk/.env infra/cdk/.env`.
 - **README commands** prefer the credential-inferring form (`npx cdk bootstrap`, `aws sts get-caller-identity`) over explicit ARNs like `aws://<account>/<region>`.
 - If you need to reference a concrete value while debugging, keep it in your shell, not in code or docs.
 
@@ -30,7 +31,7 @@ When reviewing a PR touching this directory, one of the things to check is: does
 Four stacks, added incrementally:
 
 - `HideAndSeek-Network` — VPC, subnets, gateways, security groups.
-- `HideAndSeek-Data` — Aurora Serverless v2 + ElastiCache + Secrets Manager + the shared `DockerImageAsset`.
+- `HideAndSeek-Data` — Aurora Serverless v2 + ElastiCache + Secrets Manager + the shared `DockerImageAsset` + S3 photo bucket (hider-submitted evidence for photo questions).
 - `HideAndSeek-App` — ECS cluster + server/worker/reconciler Fargate services + ALB. Reuses `DataStack.appImage`.
 - `HideAndSeek-Cdn` — CloudFront distribution + ACM cert + Route 53 A/AAAA alias records. **Deploys to `us-east-1`** regardless of the primary region (ACM for CloudFront must live there; Route 53 is global). Consumes `AppStack.albDnsName` via `crossRegionReferences: true`.
 
@@ -68,9 +69,15 @@ Three `FargateTaskDefinition`s + three `FargateService`s on a shared `ecs.Cluste
 The reconciler's 0/100 config is the singleton-safe deploy strategy from the design doc: ECS stops the old task before starting the new one, accepting a 30–60s scheduling gap that the overdue query catches on the next tick. The gap is safe because reconciler SIGTERM handling was audited in `wos.2`. Server + worker use standard rolling deploys.
 
 Per-service task roles (defined inline in AppStack):
-- `ServerTaskRole` — `sns:CreatePlatformEndpoint`, `sns:SetEndpointAttributes`, `sns:GetEndpointAttributes` on the two platform-application ARNs; `sns:Publish` on endpoint-ARN children.
-- `WorkerTaskRole` — `sns:Publish` on endpoint-ARN children only (worker doesn't register tokens).
-- `ReconcilerTaskRole` — no extra permissions beyond the default exec role (DB access flows through the Secrets Manager-backed `DATABASE_URL`; Redis is in-VPC, no AWS API calls).
+- `ServerTaskRole` — `sns:CreatePlatformEndpoint`, `sns:SetEndpointAttributes`, `sns:GetEndpointAttributes` on the two platform-application ARNs; `sns:Publish` on endpoint-ARN children; read/write on the photo bucket.
+- `WorkerTaskRole` — `sns:Publish` on endpoint-ARN children only (worker doesn't register tokens); read/write on the photo bucket.
+- `ReconcilerTaskRole` — read/write on the photo bucket (for eventual cleanup tasks, HideAndSeek-81h); no SNS permissions (DB access flows through the Secrets Manager-backed `DATABASE_URL`; Redis is in-VPC, no AWS API calls).
+
+### S3 photo bucket
+
+`DataStack.photoBucket` is a single private S3 bucket that holds hider-submitted photo-question evidence. Name is `hideandseek-photos-${account}-${region}` (account + region pseudo-params resolved at deploy time, not baked into source); encryption `S3_MANAGED`, `enforceSSL: true`, versioning off, `BLOCK_ALL` public access, `RemovalPolicy.RETAIN` so photos outlive stack rebuilds. Lifecycle/cleanup (HideAndSeek-81h) is deferred; no CloudFront in front of it yet (design §10).
+
+AppStack grants `grantReadWrite` on this bucket to all three task roles (server, worker, reconciler) and injects the resolved name into each task definition as the `S3_BUCKET_NAME` env var. The reconciler's env is otherwise stripped of AWS vars (no SNS) so the bucket env + role grant are the only S3 surface on that service until a cleanup task actually ships.
 
 ### Log group naming
 

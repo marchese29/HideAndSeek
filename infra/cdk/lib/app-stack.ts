@@ -87,6 +87,7 @@ export class AppStack extends cdk.Stack {
       AWS_REGION: region,
       SNS_APNS_APP_ARN: apnsAppArn,
       SNS_FCM_APP_ARN: fcmAppArn,
+      S3_BUCKET_NAME: data.photoBucket.bucketName,
     };
 
     // `uv run` inside the DataStack image lives at /app; each command
@@ -118,12 +119,13 @@ export class AppStack extends cdk.Stack {
         resources: [apnsEndpointArnPattern, fcmEndpointArnPattern],
       }),
     );
+    data.photoBucket.grantReadWrite(serverTaskRole);
 
     // worker task role: Publish-only on endpoints. Worker doesn't
     // register tokens — the server does that inline on device-token POST.
     const workerTaskRole = new iam.Role(this, 'WorkerTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
-      description: 'HideAndSeek worker task role: SNS publish',
+      description: 'HideAndSeek worker task role: SNS publish + photo bucket read/write',
     });
     workerTaskRole.addToPolicy(
       new iam.PolicyStatement({
@@ -131,14 +133,16 @@ export class AppStack extends cdk.Stack {
         resources: [apnsEndpointArnPattern, fcmEndpointArnPattern],
       }),
     );
+    data.photoBucket.grantReadWrite(workerTaskRole);
 
-    // reconciler task role: no extra permissions beyond exec — it only
-    // reads Postgres (via the dbSecret-composed DATABASE_URL) and writes
-    // to the Celery broker (Redis, in-VPC only, no AWS API calls).
+    // reconciler task role: DB + Redis; plus photo-bucket read/write for
+    // eventual sweep/cleanup tasks (HideAndSeek-81h) so the service can
+    // land without an IAM round-trip later.
     const reconcilerTaskRole = new iam.Role(this, 'ReconcilerTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
-      description: 'HideAndSeek reconciler task role: DB read + Redis enqueue only',
+      description: 'HideAndSeek reconciler task role: DB read + Redis enqueue + photo bucket',
     });
+    data.photoBucket.grantReadWrite(reconcilerTaskRole);
 
     // --- Task definitions + containers -----------------------------------
 
@@ -215,12 +219,14 @@ export class AppStack extends cdk.Stack {
     });
     // Reconciler doesn't call SNS and doesn't use endpoint ARNs — strip
     // the SNS env vars so a misconfigured code path can't publish from
-    // this service.
+    // this service. S3_BUCKET_NAME stays: cleanup tasks (HideAndSeek-81h)
+    // will need it, and the task role already carries the matching grant.
     const reconcilerEnv: Record<string, string> = {
       ENV: appEnv.ENV,
       CELERY_BROKER_URL: appEnv.CELERY_BROKER_URL,
       REDIS_URL: appEnv.REDIS_URL,
       AWS_REGION: appEnv.AWS_REGION,
+      S3_BUCKET_NAME: appEnv.S3_BUCKET_NAME,
     };
     reconcilerTaskDef.addContainer('Reconciler', {
       containerName: 'Reconciler',

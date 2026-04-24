@@ -35,7 +35,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      SERVICES: sns
+      SERVICES: sns,s3
       DEBUG: 0
     volumes:
       - ./infra/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh
@@ -80,6 +80,7 @@ services:
       AWS_ENDPOINT_URL: http://localstack:4566
       SNS_APNS_APP_ARN: arn:aws:sns:us-east-1:000000000000:app/APNS_SANDBOX/hideandseek-ios-dev
       SNS_FCM_APP_ARN: arn:aws:sns:us-east-1:000000000000:app/GCM/hideandseek-android-dev
+      S3_BUCKET_NAME: hideandseek-photos-local
     volumes:
       - ./server/src:/app/server/src
       - ./worker/src:/app/worker/src
@@ -117,6 +118,7 @@ services:
       AWS_ENDPOINT_URL: http://localstack:4566
       SNS_APNS_APP_ARN: arn:aws:sns:us-east-1:000000000000:app/APNS_SANDBOX/hideandseek-ios-dev
       SNS_FCM_APP_ARN: arn:aws:sns:us-east-1:000000000000:app/GCM/hideandseek-android-dev
+      S3_BUCKET_NAME: hideandseek-photos-local
     volumes:
       - ./server/src:/app/server/src
       - ./worker/src:/app/worker/src
@@ -142,6 +144,11 @@ services:
       DATABASE_URL: postgresql+psycopg://hideandseek:hideandseek@postgres:5432/hideandseek
       CELERY_BROKER_URL: redis://redis:6379/0
       ENV: development
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_ENDPOINT_URL: http://localstack:4566
+      S3_BUCKET_NAME: hideandseek-photos-local
     volumes:
       - ./server/src:/app/server/src
       - ./worker/src:/app/worker/src
@@ -154,6 +161,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      localstack:
         condition: service_healthy
 
 volumes:

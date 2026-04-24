@@ -8,6 +8,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as rds from 'aws-cdk-lib/aws-rds';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
@@ -34,6 +35,7 @@ export class DataStack extends cdk.Stack {
   readonly redisEndpoint: string;
   readonly redisPort: string;
   readonly appImage: ecr_assets.DockerImageAsset;
+  readonly photoBucket: s3.Bucket;
 
   constructor(scope: Construct, id: string, props: DataStackProps) {
     super(scope, id, props);
@@ -99,6 +101,26 @@ export class DataStack extends cdk.Stack {
     this.redis = redis;
     this.redisEndpoint = redis.attrRedisEndpointAddress;
     this.redisPort = redis.attrRedisEndpointPort;
+
+    // --- S3 photo bucket ---------------------------------------------------
+
+    // Hider-submitted photo evidence for photo-type questions (z32 epic).
+    // Read/write is granted to server + worker + reconciler task roles in
+    // AppStack. No public access; no lifecycle rule yet (cleanup deferred
+    // to HideAndSeek-81h). RETAIN on stack deletion — photos outlive stack
+    // rebuilds.
+    //
+    // Bucket name uses the account + region pseudo-params so the source
+    // stays portable (deploys into any authenticated account) while the
+    // concrete name — globally unique — is resolved at deploy time.
+    this.photoBucket = new s3.Bucket(this, 'PhotoBucket', {
+      bucketName: `hideandseek-photos-${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}`,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      versioned: false,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
 
     // --- One-shot migration runner (ECS Fargate + Lambda-backed CR) --------
 
@@ -288,6 +310,10 @@ export class DataStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'RedisEndpoint', {
       value: `${this.redisEndpoint}:${this.redisPort}`,
       description: 'ElastiCache Redis primary endpoint (host:port)',
+    });
+    new cdk.CfnOutput(this, 'PhotoBucketName', {
+      value: this.photoBucket.bucketName,
+      description: 'S3 bucket for hider-submitted photo-question evidence',
     });
   }
 }

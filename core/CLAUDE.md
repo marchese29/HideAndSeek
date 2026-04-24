@@ -19,8 +19,11 @@ src/hideandseek_core/
   db.py                # Engine factory (pool_pre_ping), session ContextVar, register(), session_scope()
   logging.py           # Shared setup_logging() for server / worker / reconciler
   config.py            # SnsConfig (region + APNs/FCM platform app ARNs + endpoint_url)
+                       #   + S3Config (photo bucket name + endpoint_url)
   push.py              # SnsProvider (boto3 sns:Publish), create_platform_endpoint(),
                        #   PushService (no-ops when SnsConfig is None)
+  s3.py                # get_s3_client() (@cache'd), upload_bytes(),
+                       #   get_object_stream(), delete_object() — typed boto3 S3 wrapper
   redis_client.py      # Redis client factory (sync + async)
   geo.py               # Pure geodesic distance functions (pyproj)
   geo_helpers.py       # Shapely-to-GeoJSON conversion helpers
@@ -130,6 +133,15 @@ Single-provider architecture on top of AWS SNS Mobile Push. `SnsProvider` calls 
 - **Envelope**: `_build_envelope()` assembles `{"default", "APNS", "APNS_SANDBOX", "GCM"}` every call and passes `MessageStructure='json'`. APNs payload carries `aps` (alert/sound on standard pushes, `content-available=1` for silent) + `data`. FCM payload carries stringified `data` (FCM requires string values) and optional `notification`.
 - **Registration** (`logic/push_registration.py → register_push_endpoint`): routers call this on device-token registration. Calls `sns:CreatePlatformEndpoint` inline, persists the ARN on `DeviceToken`. On the duplicate-endpoint error, parses the existing ARN out of the message and calls `set_endpoint_attributes(Enabled=true, Token=...)`.
 - **Dead-token cleanup** — synchronous, not async. When SNS flips an endpoint to disabled (APNs/FCM feedback), the next `sns:Publish` to that ARN raises `EndpointDisabled` (or `NotFound` / `InvalidParameter`). `SnsProvider.send()` collects those ARNs and returns them; the `send_push` worker task calls `delete_device_token_by_endpoint(arn)` inline. Lossy by one delivery — acceptable at hobby scale. A follow-up issue proposes EventBridge/Lambda for eager feedback.
+
+## Photo Storage — S3
+
+Photo questions (HideAndSeek-z32.*) store hider-captured images in a single S3 bucket. No CloudFront, no lifecycle rules yet (cleanup deferred to HideAndSeek-81h).
+
+- **`S3Config`** (`config.py`) — loaded from env vars: `S3_BUCKET_NAME` (required), optional `AWS_ENDPOINT_URL` (LocalStack in dev, shared with SNS). `load_s3_config()` returns `None` when the bucket var is missing. Unlike `SnsConfig`, there is no useful no-op — photo endpoints surface a clean 500/503 when config is absent rather than silently dropping writes.
+- **`s3.py`** — module-level functions over a `@cache`-d `get_s3_client(config)`. `upload_bytes()` puts an object with explicit `content_type`; `get_object_stream()` returns the raw `GetObjectOutputTypeDef` TypedDict so callers see typed `Body` / `ContentType` / `ContentLength`; `delete_object()` is idempotent (S3 returns 204 even if the key is absent). No `SnsProvider`-style class — S3 has no stateful registration flow, so plain functions are simpler.
+- **Typed client**: `mypy_boto3_s3.S3Client` via `boto3-stubs[s3]` (folded into the existing `boto3-stubs[sns,s3]` dev dep). No `Any` escape hatches.
+- **LocalStack** emulates S3 in dev; `infra/localstack/init-aws.sh` creates `hideandseek-photos-local` on first boot. Prod bucket is provisioned by `DataStack` and its name flows into containers as `S3_BUCKET_NAME`.
 
 ## Database & Migrations
 
