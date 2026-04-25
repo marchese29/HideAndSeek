@@ -533,6 +533,16 @@ class HiderActiveQuestion(BaseModel):
     question_deadline: datetime | None = Field(
         default=None, description='When auto-answer fires (null if timer not started).'
     )
+    submitted_at: datetime | None = Field(
+        default=None, description='Photo questions only: when the hider submitted.'
+    )
+    is_null_answer: bool | None = Field(
+        default=None, description='Photo questions only: true for null submissions.'
+    )
+    review_deadline: datetime | None = Field(
+        default=None,
+        description='Photo questions only: when auto-accept fires for a submitted photo.',
+    )
 
 
 class SeekerActiveQuestion(BaseModel):
@@ -544,6 +554,16 @@ class SeekerActiveQuestion(BaseModel):
     slot_index: int = Field(description='Inventory slot used.')
     question_deadline: datetime | None = Field(
         default=None, description='When auto-answer fires (null if timer not started).'
+    )
+    submitted_at: datetime | None = Field(
+        default=None, description='Photo questions only: when the hider submitted.'
+    )
+    is_null_answer: bool | None = Field(
+        default=None, description='Photo questions only: true for null submissions.'
+    )
+    review_deadline: datetime | None = Field(
+        default=None,
+        description='Photo questions only: when auto-accept fires for a submitted photo.',
     )
 
 

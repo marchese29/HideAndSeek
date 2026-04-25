@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 
 import structlog
 
@@ -11,12 +12,16 @@ from hideandseek_core.broadcast.events import (
     FoundClaimExpiredEvent,
     HiderQuestionAnsweredEvent,
     PhaseChangedEvent,
+    PhotoSubmittedEvent,
+    QuestionAbandonedEvent,
     QuestionVetoedEvent,
     SeekerQuestionAnsweredEvent,
     StationElectionEvent,
 )
+from hideandseek_core.conventions import effective_photo_review_sec
 from hideandseek_core.db import session_scope
 from hideandseek_core.logic.answer import (
+    abandon_question,
     answer_matching,
     answer_measuring,
     answer_radar,
@@ -25,6 +30,7 @@ from hideandseek_core.logic.answer import (
     veto_immediate,
 )
 from hideandseek_core.logic.endgame import expire_found_claim
+from hideandseek_core.logic.photo import accept_photo, auto_submit_photo
 from hideandseek_core.logic.station import (
     resolve_station_at_transition,
     resolve_station_fallback,
@@ -224,6 +230,101 @@ def auto_answer_question(question_id: str) -> None:
 
         emit_gameplay(HiderQuestionAnsweredEvent.from_question(question))
         emit_gameplay(SeekerQuestionAnsweredEvent.from_question(question))
+
+
+@app.task
+def auto_resolve_photo_submit(question_id: str) -> None:
+    """Resolve a photo question whose submit window expired in `answerable`.
+
+    If the hider has a queued photo (object key set or null-answer flag),
+    promote it to `submitted` so the seeker still has to review. Otherwise
+    abandon — the hider failed to act in time.
+    """
+    with session_scope():
+        question = get_question(uuid.UUID(question_id))
+        if not question:
+            logger.warning('photo_submit_question_not_found', question_id=question_id)
+            return
+        if (
+            question.status != QuestionStatus.answerable
+            or question.question_type != QuestionType.photo
+        ):
+            logger.info('photo_submit_skipped', question_id=question_id, status=question.status)
+            return
+
+        game = get_game_by_id(question.game_id)
+        if not game:
+            logger.warning('photo_submit_game_not_found', game_id=str(question.game_id))
+            return
+
+        params = question.photo_params
+        assert params is not None
+        game_id = str(question.game_id)
+
+        if params.photo_object_key is not None or params.is_null_answer:
+            auto_submit_photo(question)
+            assert params.submitted_at is not None
+            review_deadline = params.submitted_at + timedelta(
+                seconds=effective_photo_review_sec(game)
+            )
+            emit_gameplay(
+                PhotoSubmittedEvent.from_question(question, review_deadline=review_deadline)
+            )
+            send_push.delay(  # type: ignore[attr-defined]
+                game_id,
+                PushEventType.photo_submitted,
+                alert=f'A {params.subject.value} photo has been submitted.',
+                question_id=question_id,
+            )
+        else:
+            abandon_question(question)
+            emit_gameplay(QuestionAbandonedEvent.from_question(question))
+            send_push.delay(  # type: ignore[attr-defined]
+                game_id,
+                PushEventType.question_abandoned,
+                alert="The hider didn't submit a photo in time.",
+                question_id=question_id,
+                question_type=question.question_type,
+            )
+
+
+@app.task
+def auto_accept_photo(question_id: str) -> None:
+    """Auto-accept a submitted photo whose review window expired.
+
+    Idempotent: no-op if the question is no longer in `submitted` status.
+    """
+    with session_scope():
+        question = get_question(uuid.UUID(question_id))
+        if not question:
+            logger.warning('photo_review_question_not_found', question_id=question_id)
+            return
+        if (
+            question.status != QuestionStatus.submitted
+            or question.question_type != QuestionType.photo
+        ):
+            logger.info('photo_review_skipped', question_id=question_id, status=question.status)
+            return
+
+        game = get_game_by_id(question.game_id)
+        if not game:
+            logger.warning('photo_review_game_not_found', game_id=str(question.game_id))
+            return
+
+        accept_photo(question, game, reviewer_id=None)
+        game_id = str(question.game_id)
+        logger.info('photo_auto_accepted', question_id=question_id, game_id=game_id)
+
+        emit_gameplay(HiderQuestionAnsweredEvent.from_question(question))
+        emit_gameplay(SeekerQuestionAnsweredEvent.from_question(question))
+        send_push.delay(  # type: ignore[attr-defined]
+            game_id,
+            PushEventType.question_answered,
+            alert='A submitted photo was auto-accepted.',
+            question_id=question_id,
+            question_type=question.question_type,
+            answer=question.answer,
+        )
 
 
 @app.task

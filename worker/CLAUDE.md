@@ -33,6 +33,8 @@ src/hideandseek_worker/
 | `transition_hiding_to_seeking` | `hiding_timer:{game_id}` | Flip game to seeking after hiding timer |
 | `auto_answer_question` | `answer_deadline:{question_id}` | Auto-answer after question deadline |
 | `auto_dismiss_found_claim` | `found_claim:{game_id}` | Clear a pending found claim after 2 min |
+| `auto_resolve_photo_submit` | `photo_submit:{question_id}` | After photo submit window: auto-submit if a photo is queued, else abandon |
+| `auto_accept_photo` | `photo_review:{question_id}` | After photo review window: auto-accept a submitted photo |
 
 All tasks are idempotent: they re-check preconditions inside `session_scope()` and no-op if the state has already moved on.
 

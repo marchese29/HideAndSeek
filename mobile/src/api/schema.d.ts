@@ -677,6 +677,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/questions/{question_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Photo Endpoint
+         * @description Seeker accepts a submitted photo — flips to `answered`, fires answered events.
+         */
+        post: operations["accept_photo_endpoint_games__game_id__questions__question_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/games/{game_id}/questions/{question_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Photo Endpoint
+         * @description Seeker rejects a submitted photo — bounces back to `answerable`.
+         */
+        post: operations["reject_photo_endpoint_games__game_id__questions__question_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/endgame-exclusions": {
         parameters: {
             query?: never;
@@ -1327,6 +1367,24 @@ export interface components {
              * @default null
              */
             question_deadline: string | null;
+            /**
+             * Submitted At
+             * @description Photo questions only: when the hider submitted.
+             * @default null
+             */
+            submitted_at: string | null;
+            /**
+             * Is Null Answer
+             * @description Photo questions only: true for null submissions.
+             * @default null
+             */
+            is_null_answer: boolean | null;
+            /**
+             * Review Deadline
+             * @description Photo questions only: when auto-accept fires for a submitted photo.
+             * @default null
+             */
+            review_deadline: string | null;
         };
         /**
          * HiderGameStateResponse
@@ -2024,6 +2082,37 @@ export interface components {
             uploaded_at: string;
         };
         /**
+         * PhotoRejectedEvent
+         * @description A seeker rejected a submitted photo — both channels.
+         *
+         *     Status reverts to `answerable` and `new_submit_deadline` is the fresh
+         *     submit-window expiry both clients should render against.
+         */
+        PhotoRejectedEvent: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Reviewed By
+             * Format: uuid
+             */
+            reviewed_by: string;
+            /**
+             * Rejected At
+             * Format: date-time
+             */
+            rejected_at: string;
+            /**
+             * New Submit Deadline
+             * Format: date-time
+             */
+            new_submit_deadline: string;
+        };
+        /**
          * PhotoSubject
          * @enum {string}
          */
@@ -2469,6 +2558,24 @@ export interface components {
              * @default null
              */
             question_deadline: string | null;
+            /**
+             * Submitted At
+             * @description Photo questions only: when the hider submitted.
+             * @default null
+             */
+            submitted_at: string | null;
+            /**
+             * Is Null Answer
+             * @description Photo questions only: true for null submissions.
+             * @default null
+             */
+            is_null_answer: boolean | null;
+            /**
+             * Review Deadline
+             * @description Photo questions only: when auto-accept fires for a submitted photo.
+             * @default null
+             */
+            review_deadline: string | null;
         };
         /**
          * SeekerGameStateResponse
@@ -4046,6 +4153,72 @@ export interface operations {
         };
     };
     unqueue_photo_endpoint_games__game_id__questions__question_id__photo_delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                question_id: string;
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_photo_endpoint_games__game_id__questions__question_id__accept_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                question_id: string;
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_photo_endpoint_games__game_id__questions__question_id__reject_post: {
         parameters: {
             query?: never;
             header: {

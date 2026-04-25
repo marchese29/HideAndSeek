@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from geojson_pydantic import Point as GeoJSONPoint
 from shapely.geometry import Point as ShapelyPoint
 from shapely.geometry import mapping
+from sqlalchemy import select
 from starlette.datastructures import UploadFile
 
 from hideandseek.dependencies import (
@@ -37,6 +38,7 @@ from hideandseek_core.broadcast.emit import emit_gameplay
 from hideandseek_core.broadcast.events import (
     HiderQuestionAnsweredEvent,
     PhotoQueuedEvent,
+    PhotoRejectedEvent,
     PhotoSubmittedEvent,
     PhotoUnqueuedEvent,
     QuestionAbandonedEvent,
@@ -46,7 +48,11 @@ from hideandseek_core.broadcast.events import (
     SeekerQuestionAnsweredEvent,
 )
 from hideandseek_core.config import load_s3_config
-from hideandseek_core.conventions import effective_photo_review_sec, format_distance_label
+from hideandseek_core.conventions import (
+    effective_photo_review_sec,
+    effective_photo_submit_min,
+    format_distance_label,
+)
 from hideandseek_core.db import get_session, session_dependency
 from hideandseek_core.geo_helpers import geom_or_none
 from hideandseek_core.logic.answer import (
@@ -70,8 +76,10 @@ from hideandseek_core.logic.ask import (
     randomize_question,
 )
 from hideandseek_core.logic.photo import (
+    accept_photo,
     clear_queued_photo,
     queue_photo,
+    reject_photo,
     submit_photo_question,
 )
 from hideandseek_core.logic.preview import preview_question
@@ -672,8 +680,7 @@ def _send_photo_submitted_push(game: Game, question: Question) -> None:
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.photo_submitted,
-        role_filter='seeker',
-        alert=f'A {pp.subject.value} photo has been submitted. Tap to review.',
+        alert=f'A {pp.subject.value} photo has been submitted.',
         question_id=str(question.id),
     )
 
@@ -801,4 +808,71 @@ def fetch_photo_endpoint(
             'Content-Length': str(obj['ContentLength']),
             'Cache-Control': 'private, max-age=3600',
         },
+    )
+
+
+def _load_photo_question_for_review(question_id: uuid.UUID, game: Game) -> Question:
+    """Load a submitted photo question with a row-level lock for review.
+
+    `SELECT … FOR UPDATE` serializes concurrent accept/reject calls — the second
+    transaction blocks until the first commits, then reads the new status and
+    409s. Returns 404/422 for the same reasons as `_load_photo_question`, plus
+    409 if the question is no longer in `submitted` status.
+    """
+    session = get_session()
+    question = session.execute(
+        select(Question).where(Question.id == question_id).with_for_update()
+    ).scalar_one_or_none()
+    if question is None:
+        raise HTTPException(status_code=404, detail='Question not found.')
+    if question.game_id != game.id:
+        raise HTTPException(status_code=422, detail='Question does not belong to this game.')
+    if question.question_type != QuestionType.photo:
+        raise HTTPException(status_code=422, detail='Question is not a photo question.')
+    if question.status != QuestionStatus.submitted:
+        raise HTTPException(status_code=409, detail=f'question is {question.status.value}')
+    return question
+
+
+@router.post('/questions/{question_id}/accept', status_code=204)
+def accept_photo_endpoint(
+    question_id: uuid.UUID,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_seeker_in_game),
+) -> None:
+    """Seeker accepts a submitted photo — flips to `answered`, fires answered events."""
+    question = _load_photo_question_for_review(question_id, game)
+    accept_photo(question, game, reviewer_id=player.id)
+
+    emit_gameplay(HiderQuestionAnsweredEvent.from_question(question))
+    emit_gameplay(SeekerQuestionAnsweredEvent.from_question(question))
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.question_answered,
+        alert='A seeker accepted the photo.',
+        question_id=str(question.id),
+        question_type=question.question_type,
+        answer=question.answer,
+    )
+
+
+@router.post('/questions/{question_id}/reject', status_code=204)
+def reject_photo_endpoint(
+    question_id: uuid.UUID,
+    game: Game = Depends(get_game),
+    player: Player = Depends(get_seeker_in_game),
+) -> None:
+    """Seeker rejects a submitted photo — bounces back to `answerable`."""
+    question = _load_photo_question_for_review(question_id, game)
+    reject_photo(question, reviewer_id=player.id)
+
+    new_submit_deadline = datetime.now(UTC) + timedelta(minutes=effective_photo_submit_min(game))
+    emit_gameplay(
+        PhotoRejectedEvent.from_question(question, new_submit_deadline=new_submit_deadline)
+    )
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.photo_rejected,
+        alert='A seeker rejected the photo. Hider must submit again.',
+        question_id=str(question.id),
     )

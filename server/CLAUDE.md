@@ -290,7 +290,22 @@ curl -s -o out.jpg localhost:8000/games/<game_id>/questions/<question_id>/photo 
 # → 200 + bytes. Pre-submit: hider only (seeker → 403). Post-submit: both roles.
 # → 404 if null answer or no photo queued.
 
-# → Seeker accept/reject flow lands in cycle z32.5.
+# Seeker accepts a submitted photo → flips to "answered"; both Answered events emitted.
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/accept \
+  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
+# → 204. answer = photo_object_key (or 'null' for null submits); review_decision = "accepted".
+
+# Seeker rejects a submitted photo → bounces back to "answerable" with a fresh submit window.
+curl -s -X POST localhost:8000/games/<game_id>/questions/<question_id>/reject \
+  -H "X-Player-Id: $SEEKER_PLAYER_ID" -H "X-Player-Secret: $SEEKER_SECRET"
+# → 204. PhotoRejectedEvent on both channels with new_submit_deadline; submission state nulled.
+
+# Auto-resolve (no explicit endpoint — fired by the reconciler):
+# - Submit window expires in "answerable":
+#     queued photo present → photo_submitted (auto-submit, submitted_by IS NULL)
+#     nothing queued       → question_abandoned
+# - Review window expires in "submitted":
+#     auto-accept (review_decision = "auto_accepted", reviewed_by IS NULL)
 ```
 
 ### Question preview

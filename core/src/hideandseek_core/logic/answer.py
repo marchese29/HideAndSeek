@@ -30,7 +30,7 @@ from hideandseek_models.types import QuestionStatus, QuestionType
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
-def _log_question_answered(question: Question) -> None:
+def log_question_answered(question: Question) -> None:
     logger.info(
         'question_answered',
         game_id=str(question.game_id),
@@ -40,7 +40,7 @@ def _log_question_answered(question: Question) -> None:
     )
 
 
-def _accumulate_exclusion(game: Game, exclusion: BaseGeometry | None) -> BaseGeometry | None:
+def accumulate_exclusion(game: Game, exclusion: BaseGeometry | None) -> BaseGeometry | None:
     """Compute cumulative total_exclusion by unioning with previous."""
     prev = get_latest_total_exclusion(game)
     if exclusion is None:
@@ -70,10 +70,10 @@ def answer_radar(question: Question, game: Game) -> None:
 
     question.answer = answer
     question.exclusion = exclusion
-    question.total_exclusion = _accumulate_exclusion(game, exclusion)
+    question.total_exclusion = accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
-    _log_question_answered(question)
+    log_question_answered(question)
 
 
 def answer_thermometer(question: Question, game: Game) -> None:
@@ -98,10 +98,10 @@ def answer_thermometer(question: Question, game: Game) -> None:
 
     question.answer = answer
     question.exclusion = exclusion
-    question.total_exclusion = _accumulate_exclusion(game, exclusion)
+    question.total_exclusion = accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
-    _log_question_answered(question)
+    log_question_answered(question)
 
 
 def answer_matching(question: Question, game: Game) -> None:
@@ -150,10 +150,10 @@ def answer_matching(question: Question, game: Game) -> None:
 
     question.answer = answer
     question.exclusion = exclusion
-    question.total_exclusion = _accumulate_exclusion(game, exclusion)
+    question.total_exclusion = accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
-    _log_question_answered(question)
+    log_question_answered(question)
 
 
 def answer_measuring(question: Question, game: Game) -> None:
@@ -193,10 +193,10 @@ def answer_measuring(question: Question, game: Game) -> None:
 
     question.answer = answer
     question.exclusion = exclusion
-    question.total_exclusion = _accumulate_exclusion(game, exclusion)
+    question.total_exclusion = accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
-    _log_question_answered(question)
+    log_question_answered(question)
 
 
 def answer_tentacles(question: Question, game: Game) -> None:
@@ -222,10 +222,10 @@ def answer_tentacles(question: Question, game: Game) -> None:
         exclusion = exclude_radar(boundary, question.seeker_location_start, distance_m, hit=False)
         question.answer = 'miss'
         question.exclusion = exclusion
-        question.total_exclusion = _accumulate_exclusion(game, exclusion)
+        question.total_exclusion = accumulate_exclusion(game, exclusion)
         question.answered_at = datetime.now(UTC)
         question.status = QuestionStatus.answered
-        _log_question_answered(question)
+        log_question_answered(question)
         return
 
     # Phase 1: distance check
@@ -236,10 +236,10 @@ def answer_tentacles(question: Question, game: Game) -> None:
         exclusion = exclude_radar(boundary, question.seeker_location_start, distance_m, hit=False)
         question.answer = 'miss'
         question.exclusion = exclusion
-        question.total_exclusion = _accumulate_exclusion(game, exclusion)
+        question.total_exclusion = accumulate_exclusion(game, exclusion)
         question.answered_at = datetime.now(UTC)
         question.status = QuestionStatus.answered
-        _log_question_answered(question)
+        log_question_answered(question)
         return
 
     # Phase 2: hit — find nearest POI (ordered by DB)
@@ -256,10 +256,10 @@ def answer_tentacles(question: Question, game: Game) -> None:
 
     question.answer = nearest.stable_id
     question.exclusion = exclusion
-    question.total_exclusion = _accumulate_exclusion(game, exclusion)
+    question.total_exclusion = accumulate_exclusion(game, exclusion)
     question.answered_at = datetime.now(UTC)
     question.status = QuestionStatus.answered
-    _log_question_answered(question)
+    log_question_answered(question)
 
 
 def veto_immediate(question: Question) -> None:

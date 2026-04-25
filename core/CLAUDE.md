@@ -100,10 +100,15 @@ Tier thresholds: `entered` ≤ 1× radius, `near` ≤ 2×, `approaching` ≤ 4×
 
 ## Logic — Photo Submission
 
-`logic/photo.py` owns photo-question state transitions on the hider's side (kept out of the already-busy `logic/answer.py`):
+`logic/photo.py` owns photo-question state transitions for both hider submission and seeker review (kept out of the already-busy `logic/answer.py`):
 - `queue_photo(question, player, object_key)` — persist a queued (not yet submitted) photo. Caller has already uploaded bytes to S3; overwriting an existing key is intentional (the previous S3 object is retained — photos kept forever per design §10).
 - `clear_queued_photo(question)` — zero out the queued key and `is_null_answer` flag (DELETE endpoint).
 - `submit_photo_question(question, player, *, is_null_answer)` — flip status to `submitted`, stamp `submitted_at` / `submitted_by`. For `is_null_answer=True` also clears any queued key; otherwise the caller must have queued a photo first.
+- `auto_submit_photo(question)` — reconciler-driven variant when the submit window expires with content queued; `submitted_by` stays NULL so audit trails distinguish auto from manual.
+- `accept_photo(question, game, *, reviewer_id)` — flips `submitted` → `answered`, sets `review_decision = accepted` (manual) or `auto_accepted` (when `reviewer_id is None`), records the photo object key (or `'null'`) as `answer`, no exclusion (`total_exclusion` carries forward via `accumulate_exclusion(game, None)`).
+- `reject_photo(question, *, reviewer_id)` — flips `submitted` back to `answerable`; nulls submission state and resets `answerable_at` so the reconciler's submit-window timer restarts.
+
+Reconciler queries in `logic/timers.py`: `find_overdue_answerable_questions` excludes `QuestionType.photo` (those are auto-answered through the dispatcher and would otherwise misfire); `find_overdue_photo_submissions` and `find_overdue_photo_reviews` cover the two photo-specific deadlines (Python-side filter using `effective_photo_submit_min` / `effective_photo_review_sec`). Reused helpers in `logic/answer.py` were renamed from underscore-prefixed (`accumulate_exclusion`, `log_question_answered`) so cross-module callers don't reach for private API.
 
 `conventions.effective_photo_review_sec(game)` and `effective_photo_submit_min(game)` wrap the lower-level `resolve_photo_*` helpers with the standard three-level fallback (request override → map default → code default). Callers on the game critical path should use the `effective_*` wrappers.
 

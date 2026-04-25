@@ -274,6 +274,9 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           question_deadline: delta.question_deadline,
           parameters: delta.parameters,
           seeker_location_start: delta.seeker_location_start,
+          submitted_at: null,
+          is_null_answer: null,
+          review_deadline: null,
         };
         return {
           ...prev,
@@ -290,6 +293,9 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         question_deadline: delta.question_deadline,
         parameters: delta.parameters,
         seeker_location_start: delta.seeker_location_start,
+        submitted_at: null,
+        is_null_answer: null,
+        review_deadline: null,
       };
       // Update ask_count on the matching inventory slot
       const inventory = prev.state.inventory.map((slot) =>

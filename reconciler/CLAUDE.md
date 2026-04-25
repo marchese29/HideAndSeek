@@ -8,6 +8,8 @@ Celery's Redis broker hands ETA tasks to a worker immediately; the worker holds 
 - `game.hiding_started_at + hiding_time_min` → hiding→seeking transition
 - `question.answerable_at + base_question_delay_min` → auto-answer deadline
 - `game.found_claim_at + 120s` → found-claim expiry
+- `question.answerable_at + effective_photo_submit_min` → photo submit window (task `photo_submit:{qid}`)
+- `photo_params.submitted_at + effective_photo_review_sec` → photo review window (task `photo_review:{qid}`)
 
 A tiny poller that checks these columns every second and enqueues the existing Celery tasks is resilient: a restart means timers fire N seconds late, never lost. Celery stays as a worker pool — it just stops being the scheduler.
 

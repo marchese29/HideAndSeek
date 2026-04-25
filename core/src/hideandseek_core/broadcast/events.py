@@ -488,6 +488,35 @@ class PhotoSubmittedEvent(GameplayEventSchema):
         )
 
 
+class PhotoRejectedEvent(GameplayEventSchema):
+    """A seeker rejected a submitted photo — both channels.
+
+    Status reverts to `answerable` and `new_submit_deadline` is the fresh
+    submit-window expiry both clients should render against.
+    """
+
+    question_id: uuid.UUID
+    sequence: int
+    reviewed_by: uuid.UUID
+    rejected_at: datetime
+    new_submit_deadline: datetime
+
+    @staticmethod
+    def from_question(question: Question, *, new_submit_deadline: datetime) -> PhotoRejectedEvent:
+        pp = question.photo_params
+        assert pp is not None
+        assert pp.reviewed_by is not None
+        assert pp.reviewed_at is not None
+        return PhotoRejectedEvent(
+            game_id=question.game_id,
+            question_id=question.id,
+            sequence=question.sequence,
+            reviewed_by=pp.reviewed_by,
+            rejected_at=pp.reviewed_at,
+            new_submit_deadline=new_submit_deadline,
+        )
+
+
 GameplayEvent = (
     PlayerLocationEvent
     | QuestionAskedEvent
@@ -511,4 +540,5 @@ GameplayEvent = (
     | PhotoQueuedEvent
     | PhotoUnqueuedEvent
     | PhotoSubmittedEvent
+    | PhotoRejectedEvent
 )

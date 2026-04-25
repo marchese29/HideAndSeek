@@ -308,8 +308,14 @@ def randomize_question(question: Question, game: Game) -> Question:
     assert original_slot is not None
     original_slot.ask_count -= 1
 
-    # Pick a random replacement slot
+    # Pick a random replacement slot. For photo questions, exclude the original
+    # slot's subject — a photo "randomize" is meaningless if it lands on the same
+    # subject. Other question types restore the original to the eligible pool.
     eligible = get_eligible_randomize_slots(game, question.question_type)
+    if question.question_type == QuestionType.photo:
+        filtered = [s for s in eligible if s.slot_index != question.slot_index]
+        if filtered:
+            eligible = filtered
     replacement_slot = random.choice(eligible)  # noqa: S311
 
     # Determine seeker location

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from geojson_pydantic import MultiPolygon as GeoJSONMultiPolygon
@@ -24,6 +25,7 @@ from hideandseek.schemas.response import (
     SeekerQuestionHistoryEntry,
     StopResponse,
 )
+from hideandseek_core.conventions import effective_photo_review_sec
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_core.logic.answer import preview_answer
 from hideandseek_core.logic.station import (
@@ -43,6 +45,7 @@ from hideandseek_core.queries.questions import (
 from hideandseek_core.queries.routes import get_gameplay_routes
 from hideandseek_core.queries.stops import get_playable_stops
 from hideandseek_models.game import Game, Player
+from hideandseek_models.question import Question
 from hideandseek_models.types import (
     PlayerRole,
     ProximityTier,
@@ -64,6 +67,32 @@ def _compute_deadline(answerable_at: datetime | None, delay_min: int) -> datetim
     if answerable_at is None:
         return None
     return answerable_at + timedelta(minutes=delay_min)
+
+
+@dataclass(frozen=True)
+class _PhotoReviewFields:
+    submitted_at: datetime | None
+    is_null_answer: bool | None
+    review_deadline: datetime | None
+
+
+def _photo_review_fields(question: Question, game: Game) -> _PhotoReviewFields:
+    """Return photo-review fields for the active-question snapshot.
+
+    Populated only for photo questions in `submitted` status — the window where
+    the seeker's review banner needs to render against authoritative timing.
+    All-None for non-photo or non-submitted questions.
+    """
+    if question.question_type != QuestionType.photo or question.status != QuestionStatus.submitted:
+        return _PhotoReviewFields(None, None, None)
+    pp = question.photo_params
+    assert pp is not None
+    assert pp.submitted_at is not None
+    return _PhotoReviewFields(
+        submitted_at=pp.submitted_at,
+        is_null_answer=pp.is_null_answer,
+        review_deadline=pp.submitted_at + timedelta(seconds=effective_photo_review_sec(game)),
+    )
 
 
 def build_game_info(game: Game) -> GameInfoResponse:
@@ -113,6 +142,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
 
     hider_active: HiderActiveQuestion | None = None
     if active_q is not None:
+        photo_fields = _photo_review_fields(active_q, game)
         hider_active = HiderActiveQuestion(
             question_id=active_q.id,
             question_type=active_q.question_type,
@@ -122,6 +152,9 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
             question_deadline=_compute_deadline(
                 active_q.answerable_at, game.base_question_delay_min
             ),
+            submitted_at=photo_fields.submitted_at,
+            is_null_answer=photo_fields.is_null_answer,
+            review_deadline=photo_fields.review_deadline,
         )
 
     history = []
@@ -251,6 +284,7 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
 
     seeker_active: SeekerActiveQuestion | None = None
     if active_q is not None:
+        photo_fields = _photo_review_fields(active_q, game)
         seeker_active = SeekerActiveQuestion(
             question_id=active_q.id,
             question_type=active_q.question_type,
@@ -259,6 +293,9 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
             question_deadline=_compute_deadline(
                 active_q.answerable_at, game.base_question_delay_min
             ),
+            submitted_at=photo_fields.submitted_at,
+            is_null_answer=photo_fields.is_null_answer,
+            review_deadline=photo_fields.review_deadline,
         )
 
     history = [

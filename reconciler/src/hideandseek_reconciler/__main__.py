@@ -30,10 +30,14 @@ from hideandseek_core.logic.timers import (
     find_overdue_answerable_questions,
     find_overdue_found_claims,
     find_overdue_hiding_games,
+    find_overdue_photo_reviews,
+    find_overdue_photo_submissions,
 )
 from hideandseek_worker.tasks.game_timers import (
+    auto_accept_photo,
     auto_answer_question,
     auto_dismiss_found_claim,
+    auto_resolve_photo_submit,
     transition_hiding_to_seeking,
 )
 
@@ -59,6 +63,8 @@ def tick() -> None:
         hiding_ids = find_overdue_hiding_games()
         question_ids = find_overdue_answerable_questions()
         claim_ids = find_overdue_found_claims()
+        photo_submit_ids = find_overdue_photo_submissions()
+        photo_review_ids = find_overdue_photo_reviews()
 
     for gid in hiding_ids:
         if _shutdown.is_set():
@@ -86,6 +92,24 @@ def tick() -> None:
             task_id=f'found_claim:{gid}',
         )
         logger.info('reconcile_enqueue_found_claim_expiry', game_id=str(gid))
+
+    for qid in photo_submit_ids:
+        if _shutdown.is_set():
+            return
+        auto_resolve_photo_submit.apply_async(  # type: ignore[attr-defined]
+            args=[str(qid)],
+            task_id=f'photo_submit:{qid}',
+        )
+        logger.info('reconcile_enqueue_photo_submit', question_id=str(qid))
+
+    for qid in photo_review_ids:
+        if _shutdown.is_set():
+            return
+        auto_accept_photo.apply_async(  # type: ignore[attr-defined]
+            args=[str(qid)],
+            task_id=f'photo_review:{qid}',
+        )
+        logger.info('reconcile_enqueue_photo_review', question_id=str(qid))
 
 
 def main() -> None:

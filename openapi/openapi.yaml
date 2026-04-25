@@ -1559,6 +1559,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}/accept:
+    post:
+      tags:
+      - questions
+      summary: Accept Photo Endpoint
+      description: "Seeker accepts a submitted photo \u2014 flips to `answered`, fires\
+        \ answered events."
+      operationId: accept_photo_endpoint_games__game_id__questions__question_id__accept_post
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/questions/{question_id}/reject:
+    post:
+      tags:
+      - questions
+      summary: Reject Photo Endpoint
+      description: "Seeker rejects a submitted photo \u2014 bounces back to `answerable`."
+      operationId: reject_photo_endpoint_games__game_id__questions__question_id__reject_post
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Question Id
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/endgame-exclusions:
     get:
       tags:
@@ -2509,6 +2598,30 @@ components:
           default: null
           description: When auto-answer fires (null if timer not started).
           title: Question Deadline
+        submitted_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: when the hider submitted.'
+          title: Submitted At
+        is_null_answer:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: true for null submissions.'
+          title: Is Null Answer
+        review_deadline:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: when auto-accept fires for a submitted
+            photo.'
+          title: Review Deadline
       required:
       - question_id
       - question_type
@@ -3473,6 +3586,38 @@ components:
       - uploaded_at
       title: PhotoQueuedEvent
       type: object
+    PhotoRejectedEvent:
+      description: "A seeker rejected a submitted photo \u2014 both channels.\n\n\
+        Status reverts to `answerable` and `new_submit_deadline` is the fresh\nsubmit-window\
+        \ expiry both clients should render against."
+      properties:
+        question_id:
+          format: uuid
+          title: Question Id
+          type: string
+        sequence:
+          title: Sequence
+          type: integer
+        reviewed_by:
+          format: uuid
+          title: Reviewed By
+          type: string
+        rejected_at:
+          format: date-time
+          title: Rejected At
+          type: string
+        new_submit_deadline:
+          format: date-time
+          title: New Submit Deadline
+          type: string
+      required:
+      - question_id
+      - sequence
+      - reviewed_by
+      - rejected_at
+      - new_submit_deadline
+      title: PhotoRejectedEvent
+      type: object
     PhotoSubject:
       type: string
       enum:
@@ -4147,6 +4292,30 @@ components:
           default: null
           description: When auto-answer fires (null if timer not started).
           title: Question Deadline
+        submitted_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: when the hider submitted.'
+          title: Submitted At
+        is_null_answer:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: true for null submissions.'
+          title: Is Null Answer
+        review_deadline:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: when auto-accept fires for a submitted
+            photo.'
+          title: Review Deadline
       required:
       - question_id
       - question_type
