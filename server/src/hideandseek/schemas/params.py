@@ -49,6 +49,13 @@ class FeatureParamsResponse(BaseModel):
     )
 
 
+class PhotoParamsResponse(BaseModel):
+    """Parameters for a photo question."""
+
+    type: Literal['photo'] = 'photo'
+    subject: str = Field(description='Photo subject identifier.')
+
+
 class TentacleParamsResponse(BaseModel):
     """Parameters for a tentacles question."""
 
@@ -65,7 +72,11 @@ class TentacleParamsResponse(BaseModel):
 
 
 QuestionParamsResponse = (
-    RadarParamsResponse | ThermometerParamsResponse | FeatureParamsResponse | TentacleParamsResponse
+    RadarParamsResponse
+    | ThermometerParamsResponse
+    | FeatureParamsResponse
+    | TentacleParamsResponse
+    | PhotoParamsResponse
 )
 
 
@@ -79,6 +90,10 @@ def build_question_params(question: QuestionModel) -> QuestionParamsResponse:
         tp = question.thermometer_params
         assert tp is not None
         return ThermometerParamsResponse(min_travel=tp.min_travel)
+    elif question.question_type == QuestionType.photo:
+        pp = question.photo_params
+        assert pp is not None
+        return PhotoParamsResponse(subject=str(pp.subject))
     elif question.question_type == QuestionType.tentacles:
         tp = question.tentacle_params
         assert tp is not None

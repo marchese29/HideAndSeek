@@ -9,6 +9,8 @@ import type {
   HiderQuestionAnsweredDelta,
   HiderQuestionHistoryEntry,
   PhaseChangedDelta,
+  PhotoRejectedDelta,
+  PhotoSubmittedDelta,
   PreviewQuestion,
   QuestionAnswerableDelta,
   QuestionAskedDelta,
@@ -42,6 +44,13 @@ export interface FoundClaimPending {
   deadlineUtc: string;
 }
 
+export interface PhotoViewerState {
+  questionId: string;
+  subject: string | null;
+  submittedBy: string | null;
+  submittedAt: string | null;
+}
+
 interface GameplayActions {
   hydrate: (role: 'hider' | 'seeker', data: HiderGameState | SeekerGameState) => void;
   reset: () => void;
@@ -67,6 +76,10 @@ interface GameplayActions {
   updateEndgameView: (safeZone: GeoJSONGeometry, totalExclusion: GeoJSONGeometry | null) => void;
   setFoundClaimPending: (seekerPlayerId: string, deadlineUtc: string) => void;
   clearFoundClaim: () => void;
+  applyPhotoSubmitted: (delta: PhotoSubmittedDelta) => void;
+  applyPhotoRejected: (delta: PhotoRejectedDelta) => void;
+  openPhotoViewer: (viewer: PhotoViewerState) => void;
+  closePhotoViewer: () => void;
 }
 
 type GameplayStore = GameplayData & {
@@ -74,6 +87,7 @@ type GameplayStore = GameplayData & {
   previewQuestion: PreviewQuestion | null;
   endgameView: EndgameView | null;
   foundClaimPending: FoundClaimPending | null;
+  photoViewer: PhotoViewerState | null;
 } & GameplayActions;
 
 const initialState: GameplayData & {
@@ -81,12 +95,14 @@ const initialState: GameplayData & {
   previewQuestion: PreviewQuestion | null;
   endgameView: EndgameView | null;
   foundClaimPending: FoundClaimPending | null;
+  photoViewer: PhotoViewerState | null;
 } = {
   status: 'connecting',
   selfLocation: null,
   previewQuestion: null,
   endgameView: null,
   foundClaimPending: null,
+  photoViewer: null,
 };
 
 /** Shallow-compare two string arrays (or nulls). */
@@ -220,6 +236,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           previewQuestion: null,
           endgameView: null,
           foundClaimPending: prev.foundClaimPending,
+          photoViewer: prev.photoViewer,
         };
       }
       return {
@@ -230,6 +247,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         previewQuestion: null,
         endgameView,
         foundClaimPending: prev.foundClaimPending,
+        photoViewer: prev.photoViewer,
       };
     });
   },
@@ -542,5 +560,53 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
 
   clearFoundClaim: () => {
     set({ foundClaimPending: null });
+  },
+
+  applyPhotoSubmitted: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || !prev.state.active_question) return prev;
+      if (prev.state.active_question.question_id !== delta.question_id) return prev;
+      const patch = {
+        status: delta.status,
+        submitted_at: delta.submitted_at,
+        is_null_answer: delta.is_null_answer,
+        review_deadline: delta.review_deadline,
+        question_deadline: null,
+      };
+      if (prev.role === 'hider') {
+        const activeQuestion: HiderActiveQuestion = { ...prev.state.active_question, ...patch };
+        return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+      }
+      const activeQuestion: SeekerActiveQuestion = { ...prev.state.active_question, ...patch };
+      return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+    });
+  },
+
+  applyPhotoRejected: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || !prev.state.active_question) return prev;
+      if (prev.state.active_question.question_id !== delta.question_id) return prev;
+      const patch = {
+        status: 'answerable' as const,
+        question_deadline: delta.new_submit_deadline,
+        submitted_at: null,
+        is_null_answer: null,
+        review_deadline: null,
+      };
+      if (prev.role === 'hider') {
+        const activeQuestion: HiderActiveQuestion = { ...prev.state.active_question, ...patch };
+        return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+      }
+      const activeQuestion: SeekerActiveQuestion = { ...prev.state.active_question, ...patch };
+      return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+    });
+  },
+
+  openPhotoViewer: (viewer) => {
+    set({ photoViewer: viewer });
+  },
+
+  closePhotoViewer: () => {
+    set({ photoViewer: null });
   },
 }));

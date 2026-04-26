@@ -8,6 +8,7 @@ import { FoundClaimModal } from '@/components/FoundClaimModal';
 import { FreezeWarningBanner } from '@/components/FreezeWarningBanner';
 import { GameMap } from '@/components/GameMap';
 import { LocationDeniedBanner } from '@/components/LocationDeniedBanner';
+import { PhotoViewerModal } from '@/components/PhotoViewerModal';
 import { QuestionBanner } from '@/components/question-banner';
 import { QuestionCutoffModal } from '@/components/QuestionCutoffModal';
 import { SeekerFoundClaimWaitingModal } from '@/components/SeekerFoundClaimWaitingModal';
@@ -230,6 +231,7 @@ export default function GameplayScreen() {
 
       <FoundClaimModal />
       <SeekerFoundClaimWaitingModal />
+      <PhotoViewerModal gameId={game_id} />
 
       <ToastHost />
     </SafeAreaView>

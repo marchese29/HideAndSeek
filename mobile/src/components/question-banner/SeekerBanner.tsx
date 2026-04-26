@@ -1,10 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { authHeader } from '@/api/auth';
-import { api } from '@/api/client';
-import { abandonQuestion, lockInThermometer } from '@/api/questions';
+import { api, API_BASE_URL } from '@/api/client';
+import { abandonQuestion, acceptPhoto, lockInThermometer, rejectPhoto } from '@/api/questions';
 import { getTypeColors } from '@/constants/questionColors';
 import { useGameInfo } from '@/hooks/useGameInfo';
 import { usePreviewBoundary } from '@/hooks/usePreviewBoundary';
@@ -17,6 +17,7 @@ import type {
   ThermometerEventParams,
 } from '@/types/gameplay';
 import { haversineMeters, metersToConvention } from '@/utils/geo';
+import { photoSubjectLabel } from '@/utils/photoSubjects';
 
 import { BannerCountdown } from './BannerCountdown';
 
@@ -47,6 +48,7 @@ const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.gl
   matching: 'map-marker-multiple',
   measuring: 'ruler',
   tentacles: 'asterisk',
+  photo: 'camera',
 };
 
 function questionTypeIcon(questionType: string): keyof typeof MaterialCommunityIcons.glyphMap {
@@ -66,6 +68,9 @@ function formatQuestionLabel(
   slot: InventorySlotResponse | undefined,
   convention: string,
 ): string {
+  if (questionType === 'photo' && slot?.photo_subject) {
+    return photoSubjectLabel(slot.photo_subject);
+  }
   const typeName = questionType.charAt(0).toUpperCase() + questionType.slice(1);
   if (!slot) return typeName;
   const unit = convention === 'metric' ? 'km' : 'mi';
@@ -122,6 +127,54 @@ export const SeekerBanner = memo(function SeekerBanner({
     ]);
   }, [activeQuestion, gameId]);
 
+  const onAcceptPhoto = useCallback(() => {
+    if (!activeQuestion) return;
+    Alert.alert('Accept Photo', 'Accept this photo? The question will be answered.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Accept',
+        onPress: () => {
+          setActionInProgress(true);
+          void acceptPhoto(gameId, activeQuestion.question_id).finally(() =>
+            setActionInProgress(false),
+          );
+        },
+      },
+    ]);
+  }, [activeQuestion, gameId]);
+
+  const onRejectPhoto = useCallback(() => {
+    if (!activeQuestion) return;
+    Alert.alert('Reject Photo', 'Reject this photo? The hider will need to submit a new one.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: () => {
+          setActionInProgress(true);
+          void rejectPhoto(gameId, activeQuestion.question_id).finally(() =>
+            setActionInProgress(false),
+          );
+        },
+      },
+    ]);
+  }, [activeQuestion, gameId]);
+
+  const onOpenPhotoViewer = useCallback(() => {
+    if (!activeQuestion) return;
+    const subject =
+      activeSlot?.photo_subject ??
+      (activeQuestion.parameters && 'subject' in activeQuestion.parameters
+        ? (activeQuestion.parameters as { subject: string }).subject
+        : null);
+    useGameplayStore.getState().openPhotoViewer({
+      questionId: activeQuestion.question_id,
+      subject,
+      submittedBy: null,
+      submittedAt: activeQuestion.submitted_at ?? null,
+    });
+  }, [activeQuestion, activeSlot]);
+
   const onLockIn = useCallback(() => {
     if (!activeQuestion) return;
     Alert.alert('Lock In', 'Lock in your current position?', [
@@ -148,6 +201,19 @@ export const SeekerBanner = memo(function SeekerBanner({
           const location = useGameplayStore.getState().selfLocation?.coordinates;
           if (!location) {
             Alert.alert('Location Unavailable', 'Cannot determine your position. Try again.');
+            return;
+          }
+          if (previewQuestion.question_type === 'photo') {
+            setActionInProgress(true);
+            void api
+              .POST('/games/{game_id}/questions/photo', {
+                params: { path: { game_id: gameId }, header: authHeader() },
+                body: { slot_index: previewQuestion.slot_index, location },
+              })
+              .then(({ error }) => {
+                if (error) Alert.alert('Error', 'Failed to ask question.');
+              })
+              .finally(() => setActionInProgress(false));
             return;
           }
           const path = ASK_PATHS[previewQuestion.question_type as keyof typeof ASK_PATHS];
@@ -302,6 +368,107 @@ export const SeekerBanner = memo(function SeekerBanner({
     );
   }
 
+  // Photo question — answerable: waiting for hider to submit a photo
+  if (activeQuestion.question_type === 'photo' && activeQuestion.status === 'answerable') {
+    const photoColors = getTypeColors('photo');
+    const subjectText = formatQuestionLabel('photo', activeSlot, convention);
+    return (
+      <View style={styles.container}>
+        <MaterialCommunityIcons name="camera" size={20} color={photoColors.onActive} />
+        <Text style={[styles.label, { color: photoColors.onActive }]} numberOfLines={1}>
+          {subjectText} — waiting for photo...
+        </Text>
+        <BannerCountdown
+          deadlineIso={activeQuestion.question_deadline}
+          color={photoColors.onActive}
+        />
+        <Pressable
+          style={({ pressed }) => [
+            styles.iconButton,
+            buttonStyle(photoColors.onActive),
+            isDisabled && styles.disabled,
+            pressed && !isDisabled && buttonPressedStyle(photoColors.onActive),
+          ]}
+          disabled={isDisabled}
+          onPress={onAbandon}
+        >
+          <MaterialCommunityIcons name="close" size={18} color={photoColors.onActive} />
+        </Pressable>
+      </View>
+    );
+  }
+
+  // Photo question — submitted: seeker reviews thumbnail (or "null") and accepts/rejects
+  if (activeQuestion.question_type === 'photo' && activeQuestion.status === 'submitted') {
+    const photoColors = getTypeColors('photo');
+    const isNull = activeQuestion.is_null_answer === true;
+    const photoUrl = `${API_BASE_URL}/games/${gameId}/questions/${activeQuestion.question_id}/photo`;
+    return (
+      <View style={styles.container}>
+        <MaterialCommunityIcons name="camera" size={20} color={photoColors.onActive} />
+        {isNull ? (
+          <View style={styles.nullThumbnail}>
+            <Text style={styles.nullThumbnailText}>null</Text>
+          </View>
+        ) : (
+          <Pressable onPress={onOpenPhotoViewer}>
+            <Image
+              source={{ uri: photoUrl, headers: authHeader() }}
+              style={styles.thumbnail}
+              resizeMode="cover"
+            />
+          </Pressable>
+        )}
+        <BannerCountdown
+          deadlineIso={activeQuestion.review_deadline}
+          color={photoColors.onActive}
+        />
+        <View style={styles.actions}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.iconButton,
+              buttonStyle(photoColors.onActive),
+              isDisabled && styles.disabled,
+              pressed && !isDisabled && buttonPressedStyle(photoColors.onActive),
+            ]}
+            disabled={isDisabled}
+            onPress={onAcceptPhoto}
+          >
+            <MaterialCommunityIcons name="check" size={20} color={photoColors.onActive} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.iconButton,
+              buttonStyle(photoColors.onActive),
+              isDisabled && styles.disabled,
+              pressed && !isDisabled && buttonPressedStyle(photoColors.onActive),
+            ]}
+            disabled={isDisabled}
+            onPress={onRejectPhoto}
+          >
+            <MaterialCommunityIcons name="close" size={20} color={photoColors.onActive} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.iconButton,
+              buttonStyle(photoColors.onActive),
+              isDisabled && styles.disabled,
+              pressed && !isDisabled && buttonPressedStyle(photoColors.onActive),
+            ]}
+            disabled={isDisabled}
+            onPress={onAbandon}
+          >
+            <MaterialCommunityIcons
+              name="trash-can-outline"
+              size={18}
+              color={photoColors.onActive}
+            />
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   // Active question (asked or answerable): waiting for hider to answer
   const activeColors = getTypeColors(activeQuestion.question_type);
   return (
@@ -343,6 +510,11 @@ const styles = StyleSheet.create({
     minHeight: 48,
     gap: 8,
   },
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 'auto',
+  },
   label: {
     flex: 1,
     color: '#fff',
@@ -381,6 +553,26 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.5,
+  },
+  thumbnail: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
+  nullThumbnail: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nullThumbnailText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    fontStyle: 'italic',
   },
 });
 

@@ -153,11 +153,7 @@ def ask_radar_question(
         question_status=QuestionStatus.answerable,
     )
 
-    emit_gameplay(
-        QuestionAskedEvent.from_question(
-            question, base_question_delay_min=game.base_question_delay_min
-        )
-    )
+    emit_gameplay(QuestionAskedEvent.from_question(question, game=game))
 
 
 @router.post('/questions/thermometer', status_code=204)
@@ -188,11 +184,7 @@ def ask_thermometer_question(
         question_status=QuestionStatus.in_progress,
     )
 
-    emit_gameplay(
-        QuestionAskedEvent.from_question(
-            question, base_question_delay_min=game.base_question_delay_min
-        )
-    )
+    emit_gameplay(QuestionAskedEvent.from_question(question, game=game))
 
 
 @router.post('/questions/matching', status_code=204)
@@ -226,11 +218,7 @@ def ask_matching_question(
         question_status=QuestionStatus.answerable,
     )
 
-    emit_gameplay(
-        QuestionAskedEvent.from_question(
-            question, base_question_delay_min=game.base_question_delay_min
-        )
-    )
+    emit_gameplay(QuestionAskedEvent.from_question(question, game=game))
 
 
 @router.post('/questions/measuring', status_code=204)
@@ -267,11 +255,7 @@ def ask_measuring_question(
         question_status=QuestionStatus.answerable,
     )
 
-    emit_gameplay(
-        QuestionAskedEvent.from_question(
-            question, base_question_delay_min=game.base_question_delay_min
-        )
-    )
+    emit_gameplay(QuestionAskedEvent.from_question(question, game=game))
 
 
 @router.post('/questions/tentacles', status_code=204)
@@ -308,11 +292,7 @@ def ask_tentacles_question(
         question_status=QuestionStatus.answerable,
     )
 
-    emit_gameplay(
-        QuestionAskedEvent.from_question(
-            question, base_question_delay_min=game.base_question_delay_min
-        )
-    )
+    emit_gameplay(QuestionAskedEvent.from_question(question, game=game))
 
 
 @router.post('/questions/photo', status_code=204)
@@ -340,11 +320,7 @@ def ask_photo_question(
         question_status=QuestionStatus.answerable,
     )
 
-    emit_gameplay(
-        QuestionAskedEvent.from_question(
-            question, base_question_delay_min=game.base_question_delay_min
-        )
-    )
+    emit_gameplay(QuestionAskedEvent.from_question(question, game=game))
 
 
 # ── Preview ─────────────────────────────────────────────────────────────
@@ -449,11 +425,7 @@ def lock_in_question(
         question_id=str(question.id),
     )
 
-    emit_gameplay(
-        QuestionAnswerableEvent.from_question(
-            question, base_question_delay_min=game.base_question_delay_min
-        )
-    )
+    emit_gameplay(QuestionAnswerableEvent.from_question(question, game=game))
 
 
 @router.post(
@@ -603,11 +575,7 @@ def randomize_question_endpoint(
         question_type=replacement.question_type,
     )
 
-    emit_gameplay(
-        QuestionAskedEvent.from_question(
-            replacement, base_question_delay_min=game.base_question_delay_min
-        )
-    )
+    emit_gameplay(QuestionAskedEvent.from_question(replacement, game=game))
 
 
 # ── Photo submission ────────────────────────────────────────────────────

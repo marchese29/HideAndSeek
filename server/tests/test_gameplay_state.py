@@ -18,6 +18,7 @@ from hideandseek_core.broadcast.events import (
     ThermometerEventParams,
     build_event_params,
 )
+from hideandseek_core.conventions import effective_photo_submit_min
 from hideandseek_models.question_params import FeatureQuestionParams
 from hideandseek_models.types import (
     FeatureCategory,
@@ -521,9 +522,7 @@ class TestQuestionAskedEvent:
             answerable_at=now,
         )
 
-        event = QuestionAskedEvent.from_question(
-            q, base_question_delay_min=game.base_question_delay_min
-        )
+        event = QuestionAskedEvent.from_question(q, game=game)
         assert event.sequence == 3
         assert event.ask_count == 2
         assert event.asked_at == q.asked_at
@@ -533,6 +532,28 @@ class TestQuestionAskedEvent:
         assert event.question_deadline is not None
         assert q.answerable_at is not None
         assert event.question_deadline == q.answerable_at + timedelta(
+            minutes=game.base_question_delay_min
+        )
+
+    def test_photo_deadline_uses_submit_window(self, session: Session) -> None:
+        game, _hider, seeker, _ds = _create_active_game(session)
+        now = datetime.now(UTC)
+        q = create_question(
+            session,
+            game.id,
+            question_type=QuestionType.photo,
+            status=QuestionStatus.answerable,
+            asked_by=seeker.id,
+            answerable_at=now,
+        )
+        event = QuestionAskedEvent.from_question(q, game=game)
+        assert event.question_deadline is not None
+        assert q.answerable_at is not None
+        assert event.question_deadline == q.answerable_at + timedelta(
+            minutes=effective_photo_submit_min(game)
+        )
+        # And not the base_question_delay_min path:
+        assert event.question_deadline != q.answerable_at + timedelta(
             minutes=game.base_question_delay_min
         )
 

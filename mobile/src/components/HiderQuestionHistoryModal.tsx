@@ -1,6 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRef } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { type PhotoViewerState, useGameplayStore } from '@/stores/gameplayStore';
 import type { HiderQuestionHistoryEntry } from '@/types/gameplay';
 
 import { QuestionHistoryRow } from './QuestionHistoryRow';
@@ -10,6 +12,7 @@ interface HiderQuestionHistoryModalProps {
   onClose: () => void;
   questions: HiderQuestionHistoryEntry[];
   convention: string;
+  gameId: string;
 }
 
 export function HiderQuestionHistoryModal({
@@ -17,8 +20,19 @@ export function HiderQuestionHistoryModal({
   onClose,
   questions,
   convention,
+  gameId,
 }: HiderQuestionHistoryModalProps) {
   const unit = convention === 'metric' ? 'km' : 'mi';
+  const pendingPhotoViewerRef = useRef<PhotoViewerState | null>(null);
+
+  const handleDismiss = () => {
+    onClose();
+    const pending = pendingPhotoViewerRef.current;
+    if (pending) {
+      pendingPhotoViewerRef.current = null;
+      useGameplayStore.getState().openPhotoViewer(pending);
+    }
+  };
 
   return (
     <Modal
@@ -26,6 +40,7 @@ export function HiderQuestionHistoryModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      onDismiss={handleDismiss}
     >
       <View style={styles.container}>
         <View style={styles.header}>
@@ -39,7 +54,22 @@ export function HiderQuestionHistoryModal({
           data={questions}
           keyExtractor={(item) => item.question_id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => <QuestionHistoryRow entry={item} unit={unit} />}
+          renderItem={({ item }) => (
+            <QuestionHistoryRow
+              entry={item}
+              unit={unit}
+              gameId={gameId}
+              onPhotoTap={(params) => {
+                pendingPhotoViewerRef.current = {
+                  questionId: params.questionId,
+                  subject: params.subject,
+                  submittedBy: params.submittedBy,
+                  submittedAt: params.submittedAt,
+                };
+                onClose();
+              }}
+            />
+          )}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No questions answered yet.</Text>

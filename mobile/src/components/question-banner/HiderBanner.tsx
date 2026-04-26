@@ -48,6 +48,7 @@ const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.gl
   matching: 'map-marker-multiple',
   measuring: 'ruler',
   tentacles: 'asterisk',
+  photo: 'camera',
 };
 
 function questionTypeIcon(questionType: string): keyof typeof MaterialCommunityIcons.glyphMap {

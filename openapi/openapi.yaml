@@ -2869,6 +2869,7 @@ components:
           - $ref: '#/components/schemas/ThermometerParamsResponse'
           - $ref: '#/components/schemas/FeatureParamsResponse'
           - $ref: '#/components/schemas/TentacleParamsResponse'
+          - $ref: '#/components/schemas/PhotoParamsResponse'
           description: Type-specific question parameters.
           title: Parameters
         seeker_location_start:
@@ -3559,6 +3560,22 @@ components:
       required:
       - subject
       title: PhotoEventParams
+      type: object
+    PhotoParamsResponse:
+      description: Parameters for a photo question.
+      properties:
+        type:
+          const: photo
+          default: photo
+          title: Type
+          type: string
+        subject:
+          description: Photo subject identifier.
+          title: Subject
+          type: string
+      required:
+      - subject
+      title: PhotoParamsResponse
       type: object
     PhotoQueuedEvent:
       description: "A hider uploaded a photo but did not submit \u2014 hider channel\
@@ -4565,6 +4582,7 @@ components:
           - $ref: '#/components/schemas/ThermometerParamsResponse'
           - $ref: '#/components/schemas/FeatureParamsResponse'
           - $ref: '#/components/schemas/TentacleParamsResponse'
+          - $ref: '#/components/schemas/PhotoParamsResponse'
           description: Type-specific question parameters.
           title: Parameters
         answer:

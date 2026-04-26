@@ -1,8 +1,12 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { authHeader } from '@/api/auth';
+import { API_BASE_URL } from '@/api/client';
 import { getTypeColors } from '@/constants/questionColors';
+import { useGameplayStore } from '@/stores/gameplayStore';
 import type { HiderQuestionHistoryEntry } from '@/types/gameplay';
+import { photoSubjectLabel } from '@/utils/photoSubjects';
 
 export const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
   radar: 'radar',
@@ -10,6 +14,7 @@ export const QUESTION_TYPE_ICONS: Record<string, keyof typeof MaterialCommunityI
   matching: 'map-marker-multiple',
   measuring: 'ruler',
   tentacles: 'asterisk',
+  photo: 'camera',
 };
 
 export function answerLabel(answer: string | null): string {
@@ -51,6 +56,10 @@ export function paramSummary(entry: QuestionHistoryRowEntry, unit: string): stri
     case 'measuring':
     case 'tentacles':
       return String(p.category ?? '').replace(/_/g, ' ');
+    case 'photo': {
+      const subject = (p as { subject?: string }).subject;
+      return subject ? photoSubjectLabel(subject) : 'Photo';
+    }
     default:
       return '';
   }
@@ -60,12 +69,53 @@ interface QuestionHistoryRowProps {
   entry: QuestionHistoryRowEntry;
   unit: string;
   onPress?: () => void;
+  /** When provided, photo answered rows render a tappable thumbnail. */
+  gameId?: string;
+  /**
+   * Override for the thumbnail tap. Used by history modals to close themselves
+   * before opening the photo viewer (iOS allows only one Modal at a time).
+   * Receives the resolved viewer params; the override is responsible for
+   * eventually invoking `openPhotoViewer`.
+   */
+  onPhotoTap?: (params: {
+    questionId: string;
+    subject: string | null;
+    submittedBy: string | null;
+    submittedAt: string | null;
+  }) => void;
 }
 
-export function QuestionHistoryRow({ entry, unit, onPress }: QuestionHistoryRowProps) {
+export function QuestionHistoryRow({
+  entry,
+  unit,
+  onPress,
+  gameId,
+  onPhotoTap: onPhotoTapOverride,
+}: QuestionHistoryRowProps) {
   const colors = getTypeColors(entry.question_type);
   const icon = QUESTION_TYPE_ICONS[entry.question_type] ?? 'help-circle';
   const summary = paramSummary(entry, unit);
+
+  const isPhoto = entry.question_type === 'photo';
+  const isAnswered = entry.status === 'answered';
+  const isPhotoNull = isPhoto && isAnswered && entry.answer === 'null';
+  const showPhotoThumbnail = isPhoto && isAnswered && !isPhotoNull && !!gameId;
+
+  const onPhotoTap = () => {
+    if (!gameId) return;
+    const subject = (entry.parameters as { subject?: string }).subject ?? null;
+    const params = {
+      questionId: entry.question_id,
+      subject,
+      submittedBy: null,
+      submittedAt: null,
+    };
+    if (onPhotoTapOverride) {
+      onPhotoTapOverride(params);
+      return;
+    }
+    useGameplayStore.getState().openPhotoViewer(params);
+  };
 
   const inner = (
     <>
@@ -74,7 +124,22 @@ export function QuestionHistoryRow({ entry, unit, onPress }: QuestionHistoryRowP
       </View>
       <Text style={questionHistoryRowStyles.sequence}>Q{entry.sequence}</Text>
       <Text style={questionHistoryRowStyles.paramSummary}>{summary}</Text>
-      {entry.status === 'answered' ? (
+      {showPhotoThumbnail && gameId ? (
+        <Pressable onPress={onPhotoTap} hitSlop={8}>
+          <Image
+            source={{
+              uri: `${API_BASE_URL}/games/${gameId}/questions/${entry.question_id}/photo`,
+              headers: authHeader(),
+            }}
+            style={questionHistoryRowStyles.thumbnail}
+            resizeMode="cover"
+          />
+        </Pressable>
+      ) : isPhotoNull ? (
+        <Text style={questionHistoryRowStyles.nullAnswer}>null</Text>
+      ) : isPhoto && isAnswered ? (
+        <Text style={questionHistoryRowStyles.answer}>Accepted</Text>
+      ) : isAnswered ? (
         <Text style={questionHistoryRowStyles.answer}>{answerLabel(entry.answer)}</Text>
       ) : (
         <Text style={questionHistoryRowStyles.statusLabel}>
@@ -143,5 +208,17 @@ export const questionHistoryRowStyles = StyleSheet.create({
     fontWeight: '500',
     fontStyle: 'italic',
     color: 'rgba(255,255,255,0.5)',
+  },
+  thumbnail: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  nullAnswer: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    color: 'rgba(255,255,255,0.7)',
   },
 });

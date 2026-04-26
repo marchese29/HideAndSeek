@@ -25,7 +25,7 @@ from hideandseek.schemas.response import (
     SeekerQuestionHistoryEntry,
     StopResponse,
 )
-from hideandseek_core.conventions import effective_photo_review_sec
+from hideandseek_core.conventions import effective_photo_review_sec, effective_question_deadline
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_core.logic.answer import preview_answer
 from hideandseek_core.logic.station import (
@@ -60,13 +60,6 @@ _TERMINAL_STATUSES = {
     QuestionStatus.abandoned,
     QuestionStatus.randomized,
 }
-
-
-def _compute_deadline(answerable_at: datetime | None, delay_min: int) -> datetime | None:
-    """Compute auto-answer deadline from answerable_at + base delay."""
-    if answerable_at is None:
-        return None
-    return answerable_at + timedelta(minutes=delay_min)
 
 
 @dataclass(frozen=True)
@@ -149,9 +142,7 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
             status=active_q.status,
             asked_by=active_q.asked_by,
             slot_index=active_q.slot_index,
-            question_deadline=_compute_deadline(
-                active_q.answerable_at, game.base_question_delay_min
-            ),
+            question_deadline=effective_question_deadline(active_q, game),
             submitted_at=photo_fields.submitted_at,
             is_null_answer=photo_fields.is_null_answer,
             review_deadline=photo_fields.review_deadline,
@@ -290,9 +281,7 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
             question_type=active_q.question_type,
             status=active_q.status,
             slot_index=active_q.slot_index,
-            question_deadline=_compute_deadline(
-                active_q.answerable_at, game.base_question_delay_min
-            ),
+            question_deadline=effective_question_deadline(active_q, game),
             submitted_at=photo_fields.submitted_at,
             is_null_answer=photo_fields.is_null_answer,
             review_deadline=photo_fields.review_deadline,

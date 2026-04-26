@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { getTypeColors } from '@/constants/questionColors';
 import type { InventorySlotResponse } from '@/types/gameplay';
+import { photoSubjectShortLabel } from '@/utils/photoSubjects';
 
 interface ParamPickerProps {
   slots: InventorySlotResponse[];
@@ -15,6 +16,9 @@ interface ParamPickerProps {
 }
 
 function formatSlotLabel(slot: InventorySlotResponse, convention: string): string {
+  if (slot.question_type === 'photo' && slot.photo_subject) {
+    return photoSubjectShortLabel(slot.photo_subject);
+  }
   const unit = convention === 'metric' ? 'km' : 'mi';
   // Tentacles: both category and distance are set
   if (slot.category && slot.distance !== null) {

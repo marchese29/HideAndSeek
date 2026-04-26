@@ -40,6 +40,12 @@ const QUESTION_TYPE_COLORS: Record<string, QuestionTypeColors> = {
     inactive: 'rgb(183, 152, 217)',
     onActive: '#fff',
   },
+  photo: {
+    rgb: [156, 190, 208],
+    active: 'rgb(156, 190, 208)',
+    inactive: 'rgb(199, 216, 225)',
+    onActive: '#fff',
+  },
 };
 
 const FALLBACK = QUESTION_TYPE_COLORS.matching;

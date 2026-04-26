@@ -62,3 +62,25 @@ export async function lockInThermometer(gameId: string, questionId: string): Pro
   });
   return !error;
 }
+
+/** Accept a submitted photo as seeker. Returns true on success. */
+export async function acceptPhoto(gameId: string, questionId: string): Promise<boolean> {
+  const { error } = await api.POST('/games/{game_id}/questions/{question_id}/accept', {
+    params: {
+      path: { game_id: gameId, question_id: questionId },
+      header: authHeader(),
+    },
+  });
+  return !error;
+}
+
+/** Reject a submitted photo as seeker. Returns true on success. */
+export async function rejectPhoto(gameId: string, questionId: string): Promise<boolean> {
+  const { error } = await api.POST('/games/{game_id}/questions/{question_id}/reject', {
+    params: {
+      path: { game_id: gameId, question_id: questionId },
+      header: authHeader(),
+    },
+  });
+  return !error;
+}

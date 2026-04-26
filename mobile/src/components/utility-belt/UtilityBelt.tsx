@@ -321,6 +321,7 @@ export const UtilityBelt = memo(function UtilityBelt({
           onClose={() => setHistoryVisible(false)}
           questions={(state as HiderGameState).question_history ?? []}
           convention={gameInfo.distance_convention}
+          gameId={gameId}
         />
       )}
 
@@ -330,6 +331,7 @@ export const UtilityBelt = memo(function UtilityBelt({
           onClose={() => setSeekerHistoryVisible(false)}
           questions={(state as SeekerGameState).question_history ?? []}
           gameInfo={gameInfo}
+          gameId={gameId}
         />
       )}
     </View>
@@ -341,7 +343,7 @@ const EMPTY_INVENTORY: never[] = [];
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: '#C5D4DE',
+    backgroundColor: '#DEE1E3',
   },
   left: {
     width: 120,

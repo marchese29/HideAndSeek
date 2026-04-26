@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from geojson_pydantic import Point as GeoJSONPoint
@@ -18,7 +18,7 @@ from geojson_pydantic.geometries import Geometry as GeoJSONGeometry
 from pydantic import BaseModel, ConfigDict, Field
 from shapely.geometry import mapping
 
-from hideandseek_core.conventions import resolve_tentacle_distance
+from hideandseek_core.conventions import effective_question_deadline, resolve_tentacle_distance
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_models.types import (
     EndReason,
@@ -32,6 +32,7 @@ from hideandseek_models.types import (
 )
 
 if TYPE_CHECKING:
+    from hideandseek_models.game import Game
     from hideandseek_models.question import Question
 
 
@@ -192,12 +193,8 @@ class QuestionAskedEvent(GameplayEventSchema):
     question_deadline: datetime | None
 
     @staticmethod
-    def from_question(question: Question, *, base_question_delay_min: int) -> QuestionAskedEvent:
-        deadline = (
-            question.answerable_at + timedelta(minutes=base_question_delay_min)
-            if question.answerable_at
-            else None
-        )
+    def from_question(question: Question, *, game: Game) -> QuestionAskedEvent:
+        deadline = effective_question_deadline(question, game)
         return QuestionAskedEvent(
             game_id=question.game_id,
             question_id=question.id,
@@ -224,18 +221,17 @@ class QuestionAnswerableEvent(GameplayEventSchema):
     question_deadline: datetime
 
     @staticmethod
-    def from_question(
-        question: Question, *, base_question_delay_min: int
-    ) -> QuestionAnswerableEvent:
+    def from_question(question: Question, *, game: Game) -> QuestionAnswerableEvent:
         assert question.seeker_location_end is not None
-        assert question.answerable_at is not None
+        deadline = effective_question_deadline(question, game)
+        assert deadline is not None
         return QuestionAnswerableEvent(
             game_id=question.game_id,
             question_id=question.id,
             question_type=question.question_type,
             status=question.status,
             seeker_location_end=GeoJSONPoint(**mapping(question.seeker_location_end)),
-            question_deadline=question.answerable_at + timedelta(minutes=base_question_delay_min),
+            question_deadline=deadline,
         )
 
 

@@ -1564,7 +1564,7 @@ export interface components {
              * Parameters
              * @description Type-specific question parameters.
              */
-            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"] | components["schemas"]["TentacleParamsResponse"];
+            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"] | components["schemas"]["TentacleParamsResponse"] | components["schemas"]["PhotoParamsResponse"];
             /** @description GeoJSON Point — seeker position when asked. */
             seeker_location_start: components["schemas"]["Point"];
             /**
@@ -2057,6 +2057,23 @@ export interface components {
              */
             type: "photo";
             subject: components["schemas"]["PhotoSubject"];
+        };
+        /**
+         * PhotoParamsResponse
+         * @description Parameters for a photo question.
+         */
+        PhotoParamsResponse: {
+            /**
+             * Type
+             * @default photo
+             * @constant
+             */
+            type: "photo";
+            /**
+             * Subject
+             * @description Photo subject identifier.
+             */
+            subject: string;
         };
         /**
          * PhotoQueuedEvent
@@ -2727,7 +2744,7 @@ export interface components {
              * Parameters
              * @description Type-specific question parameters.
              */
-            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"] | components["schemas"]["TentacleParamsResponse"];
+            parameters: components["schemas"]["RadarParamsResponse"] | components["schemas"]["ThermometerParamsResponse"] | components["schemas"]["FeatureParamsResponse"] | components["schemas"]["TentacleParamsResponse"] | components["schemas"]["PhotoParamsResponse"];
             /**
              * Answer
              * @description yes/no/closer/farther or null if vetoed/abandoned.

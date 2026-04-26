@@ -21,6 +21,7 @@ const ALL_QUESTION_TYPES: {
   { type: 'matching', icon: 'map-marker-multiple', label: 'Match' },
   { type: 'measuring', icon: 'ruler', label: 'Measure' },
   { type: 'tentacles', icon: 'asterisk', label: 'Tentacles' },
+  { type: 'photo', icon: 'camera', label: 'Photo' },
 ];
 
 export const QuestionTypeBar = memo(function QuestionTypeBar({

@@ -72,6 +72,12 @@ function buildPreview(slot: InventorySlotResponse): PreviewQuestion {
           poi_names: [],
         },
       };
+    case 'photo':
+      return {
+        question_type: 'photo',
+        slot_index: slot.slot_index,
+        parameters: { type: 'photo', subject: slot.photo_subject! },
+      };
     default:
       // matching / measuring
       return {

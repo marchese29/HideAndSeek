@@ -18,6 +18,8 @@ import type {
   HidingZoneExpandedDelta,
   HostChangedDelta,
   PhaseChangedDelta,
+  PhotoRejectedDelta,
+  PhotoSubmittedDelta,
   PlayerLeftDelta,
   PlayerLocationDelta,
   ProximityDeescalatedDelta,
@@ -65,7 +67,9 @@ type GameplayEventType =
   | 'proximity_deescalated'
   | 'found_claim'
   | 'found_claim_rejected'
-  | 'found_claim_expired';
+  | 'found_claim_expired'
+  | 'photo_submitted'
+  | 'photo_rejected';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
@@ -283,6 +287,22 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
               }
             }
           }
+        }),
+      );
+
+      es.addEventListener(
+        'photo_submitted',
+        seq.wrap((event) => {
+          const data = parseData<PhotoSubmittedDelta>(event);
+          if (data) useGameplayStore.getState().applyPhotoSubmitted(data);
+        }),
+      );
+
+      es.addEventListener(
+        'photo_rejected',
+        seq.wrap((event) => {
+          const data = parseData<PhotoRejectedDelta>(event);
+          if (data) useGameplayStore.getState().applyPhotoRejected(data);
         }),
       );
 

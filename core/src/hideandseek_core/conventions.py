@@ -7,6 +7,7 @@ Conversion happens at the boundary in logic.py.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from hideandseek_models.game_map import GameMap
@@ -14,11 +15,14 @@ from hideandseek_models.types import (
     DistanceConvention,
     FeatureCategory,
     MapSize,
+    QuestionStatus,
+    QuestionType,
     subjects_for_size,
 )
 
 if TYPE_CHECKING:
     from hideandseek_models.game import Game
+    from hideandseek_models.question import Question
 
 _MILES_PER_METER = 1609.344
 
@@ -160,6 +164,22 @@ def effective_photo_submit_min(game: Game) -> int:
         map_default=game.game_map.default_photo_submit_min,
         size=game.size,
     )
+
+
+def effective_question_deadline(question: Question, game: Game) -> datetime | None:
+    """Auto-resolve deadline for an active question — photo-aware.
+
+    Photo questions in `answerable` use the submit window; everything else
+    uses `base_question_delay_min` from `answerable_at`.
+    """
+    if question.answerable_at is None:
+        return None
+    if (
+        question.question_type == QuestionType.photo
+        and question.status == QuestionStatus.answerable
+    ):
+        return question.answerable_at + timedelta(minutes=effective_photo_submit_min(game))
+    return question.answerable_at + timedelta(minutes=game.base_question_delay_min)
 
 
 def get_default_hiding_zone_radius(convention: DistanceConvention, size: MapSize) -> float:

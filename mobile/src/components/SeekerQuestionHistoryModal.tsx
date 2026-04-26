@@ -4,6 +4,7 @@ import { Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-na
 import MapView from 'react-native-maps';
 
 import { getTypeColors } from '@/constants/questionColors';
+import { type PhotoViewerState, useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, GeoJSONGeometry, SeekerQuestionHistoryEntry } from '@/types/gameplay';
 import { regionFromBoundary } from '@/utils/geo';
 import { geometryDifference } from '@/utils/geometryDifference';
@@ -21,6 +22,7 @@ interface SeekerQuestionHistoryModalProps {
   onClose: () => void;
   questions: SeekerQuestionHistoryEntry[];
   gameInfo: GameInfo;
+  gameId: string;
 }
 
 export function SeekerQuestionHistoryModal({
@@ -28,6 +30,7 @@ export function SeekerQuestionHistoryModal({
   onClose,
   questions,
   gameInfo,
+  gameId,
 }: SeekerQuestionHistoryModalProps) {
   const unit = gameInfo.distance_convention === 'metric' ? 'km' : 'mi';
   const initialRegion = useMemo(() => regionFromBoundary(gameInfo.boundary), [gameInfo.boundary]);
@@ -54,6 +57,17 @@ export function SeekerQuestionHistoryModal({
     [currentCumulative, priorCumulative],
   );
 
+  const pendingPhotoViewerRef = useRef<PhotoViewerState | null>(null);
+
+  const handleDismiss = () => {
+    onClose();
+    const pending = pendingPhotoViewerRef.current;
+    if (pending) {
+      pendingPhotoViewerRef.current = null;
+      useGameplayStore.getState().openPhotoViewer(pending);
+    }
+  };
+
   const typeColors = currentEntry ? getTypeColors(currentEntry.question_type) : null;
   const deltaFill = typeColors
     ? `rgba(${typeColors.rgb[0]}, ${typeColors.rgb[1]}, ${typeColors.rgb[2]}, 0.55)`
@@ -68,6 +82,7 @@ export function SeekerQuestionHistoryModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      onDismiss={handleDismiss}
     >
       <View style={styles.container}>
         <View style={styles.header}>
@@ -111,7 +126,20 @@ export function SeekerQuestionHistoryModal({
 
             <View style={styles.cardSlot}>
               {currentEntry ? (
-                <QuestionHistoryRow entry={currentEntry} unit={unit} />
+                <QuestionHistoryRow
+                  entry={currentEntry}
+                  unit={unit}
+                  gameId={gameId}
+                  onPhotoTap={(params) => {
+                    pendingPhotoViewerRef.current = {
+                      questionId: params.questionId,
+                      subject: params.subject,
+                      submittedBy: params.submittedBy,
+                      submittedAt: params.submittedAt,
+                    };
+                    onClose();
+                  }}
+                />
               ) : (
                 <View style={styles.startCard}>
                   <Text style={styles.startLabel}>Start</Text>
@@ -208,9 +236,6 @@ function Scrubber({ questions, position, onChange }: ScrubberProps) {
       </View>
       <View style={styles.scrubberLabels} pointerEvents="none">
         <Text style={styles.scrubberLabel}>Start</Text>
-        <Text style={styles.scrubberLabel}>
-          {position === 0 ? 'Start' : `Q${questions[position - 1].sequence}`}
-        </Text>
         <Text style={styles.scrubberLabel}>{n >= 1 ? `Q${questions[n - 1].sequence}` : ''}</Text>
       </View>
     </View>
