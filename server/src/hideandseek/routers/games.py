@@ -129,6 +129,8 @@ def create_game(
         size=size,
         excluded_stop_ids=body.excluded_stop_ids,
         excluded_route_ids=body.excluded_route_ids,
+        photo_submit_min=body.photo_submit_min,
+        photo_review_sec=body.photo_review_sec,
     )
 
     if body.device_token:

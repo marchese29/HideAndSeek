@@ -915,6 +915,16 @@ export interface components {
              * @description Override auto-answer delay. Defaults to 5 minutes.
              */
             base_question_delay_min?: number | null;
+            /**
+             * Photo Submit Min
+             * @description Override photo submit window (minutes). Defaults to map size.
+             */
+            photo_submit_min?: number | null;
+            /**
+             * Photo Review Sec
+             * @description Override photo review window (seconds). Defaults to 30.
+             */
+            photo_review_sec?: number | null;
         };
         /**
          * EffectiveMapResponse
@@ -1859,6 +1869,16 @@ export interface components {
              * @description Map-level auto-answer delay override (minutes).
              */
             default_base_question_delay_min?: number | null;
+            /**
+             * Default Photo Submit Min
+             * @description Map-level photo submit window override (minutes).
+             */
+            default_photo_submit_min?: number | null;
+            /**
+             * Default Photo Review Sec
+             * @description Map-level photo review window override (seconds).
+             */
+            default_photo_review_sec?: number | null;
             /** Notes */
             notes: string | null;
         };
@@ -1923,6 +1943,16 @@ export interface components {
              * @description Map-level question delay override (minutes). Null means use code default.
              */
             default_base_question_delay_min?: number | null;
+            /**
+             * Default Photo Submit Min
+             * @description Map-level photo submit window override (minutes). Null = code default.
+             */
+            default_photo_submit_min?: number | null;
+            /**
+             * Default Photo Review Sec
+             * @description Map-level photo review window override (seconds). Null = code default.
+             */
+            default_photo_review_sec?: number | null;
         };
         /**
          * MultiLineString

@@ -44,6 +44,16 @@ class CreateGameRequest(BaseModel):
     base_question_delay_min: int | None = Field(
         default=None, ge=1, description='Override auto-answer delay. Defaults to 5 minutes.'
     )
+    photo_submit_min: int | None = Field(
+        default=None,
+        ge=1,
+        description='Override photo submit window (minutes). Defaults to map size.',
+    )
+    photo_review_sec: int | None = Field(
+        default=None,
+        ge=1,
+        description='Override photo review window (seconds). Defaults to 30.',
+    )
 
 
 class JoinGameRequest(BaseModel):

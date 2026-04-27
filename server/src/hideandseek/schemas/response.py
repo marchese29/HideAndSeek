@@ -64,6 +64,14 @@ class MapSummary(BaseModel):
         default=None,
         description='Map-level question delay override (minutes). Null means use code default.',
     )
+    default_photo_submit_min: int | None = Field(
+        default=None,
+        description='Map-level photo submit window override (minutes). Null = code default.',
+    )
+    default_photo_review_sec: int | None = Field(
+        default=None,
+        description='Map-level photo review window override (seconds). Null = code default.',
+    )
 
     @staticmethod
     def from_model(game_map: GameMapModel, region: str) -> MapSummary:
@@ -74,6 +82,8 @@ class MapSummary(BaseModel):
             region=region,
             default_hiding_time_min=game_map.default_hiding_time_min,
             default_base_question_delay_min=game_map.default_base_question_delay_min,
+            default_photo_submit_min=game_map.default_photo_submit_min,
+            default_photo_review_sec=game_map.default_photo_review_sec,
         )
 
 
@@ -94,6 +104,12 @@ class MapDetail(BaseModel):
     default_base_question_delay_min: int | None = Field(
         default=None, description='Map-level auto-answer delay override (minutes).'
     )
+    default_photo_submit_min: int | None = Field(
+        default=None, description='Map-level photo submit window override (minutes).'
+    )
+    default_photo_review_sec: int | None = Field(
+        default=None, description='Map-level photo review window override (seconds).'
+    )
     notes: str | None
 
     @staticmethod
@@ -109,6 +125,8 @@ class MapDetail(BaseModel):
             default_inventory=gm.default_inventory,
             default_hiding_time_min=gm.default_hiding_time_min,
             default_base_question_delay_min=gm.default_base_question_delay_min,
+            default_photo_submit_min=gm.default_photo_submit_min,
+            default_photo_review_sec=gm.default_photo_review_sec,
             notes=gm.notes,
         )
 

@@ -22,6 +22,8 @@ type MapSize = 'small' | 'medium' | 'large';
 
 const HIDING_TIME_DEFAULTS: Record<MapSize, number> = { small: 30, medium: 60, large: 180 };
 const DEFAULT_QUESTION_DELAY = 5;
+const PHOTO_SUBMIT_DEFAULTS: Record<MapSize, number> = { small: 10, medium: 10, large: 20 };
+const DEFAULT_PHOTO_REVIEW_SEC = 30;
 const SELECTABLE_SIZES: MapSize[] = ['small', 'medium', 'large'];
 
 function resolveHidingTime(mapOverride: number | null | undefined, size: MapSize): number {
@@ -30,6 +32,14 @@ function resolveHidingTime(mapOverride: number | null | undefined, size: MapSize
 
 function resolveQuestionDelay(mapOverride: number | null | undefined): number {
   return mapOverride ?? DEFAULT_QUESTION_DELAY;
+}
+
+function resolvePhotoSubmit(mapOverride: number | null | undefined, size: MapSize): number {
+  return mapOverride ?? PHOTO_SUBMIT_DEFAULTS[size];
+}
+
+function resolvePhotoReview(mapOverride: number | null | undefined): number {
+  return mapOverride ?? DEFAULT_PHOTO_REVIEW_SEC;
 }
 
 export default function CreateGameScreen() {
@@ -41,6 +51,8 @@ export default function CreateGameScreen() {
   const [selectedSize, setSelectedSize] = useState<MapSize | null>(null);
   const [hidingTime, setHidingTime] = useState('');
   const [questionDelay, setQuestionDelay] = useState('');
+  const [photoSubmit, setPhotoSubmit] = useState('');
+  const [photoReview, setPhotoReview] = useState('');
 
   const { data: maps, isLoading: mapsLoading } = useQuery<MapSummary[]>({
     queryKey: ['maps'],
@@ -63,17 +75,22 @@ export default function CreateGameScreen() {
       setSelectedSize(null);
       setHidingTime(String(map.default_hiding_time_min ?? ''));
       setQuestionDelay(String(resolveQuestionDelay(map.default_base_question_delay_min)));
+      setPhotoSubmit(String(map.default_photo_submit_min ?? ''));
+      setPhotoReview(String(resolvePhotoReview(map.default_photo_review_sec)));
     } else {
       const size = map.size as MapSize;
       setSelectedSize(size);
       setHidingTime(String(resolveHidingTime(map.default_hiding_time_min, size)));
       setQuestionDelay(String(resolveQuestionDelay(map.default_base_question_delay_min)));
+      setPhotoSubmit(String(resolvePhotoSubmit(map.default_photo_submit_min, size)));
+      setPhotoReview(String(resolvePhotoReview(map.default_photo_review_sec)));
     }
   }
 
   function handleSizeChange(size: MapSize) {
     setSelectedSize(size);
     setHidingTime(String(resolveHidingTime(selectedMap?.default_hiding_time_min ?? null, size)));
+    setPhotoSubmit(String(resolvePhotoSubmit(selectedMap?.default_photo_submit_min ?? null, size)));
   }
 
   async function handleCreate() {
@@ -86,6 +103,8 @@ export default function CreateGameScreen() {
     const { pushToken, pushProvider } = useAppStore.getState();
     const parsedHidingTime = parseInt(hidingTime, 10);
     const parsedQuestionDelay = parseInt(questionDelay, 10);
+    const parsedPhotoSubmit = parseInt(photoSubmit, 10);
+    const parsedPhotoReview = parseInt(photoReview, 10);
 
     const { data, error: apiError } = await api.POST('/games', {
       body: {
@@ -96,6 +115,8 @@ export default function CreateGameScreen() {
         base_question_delay_min: Number.isFinite(parsedQuestionDelay)
           ? parsedQuestionDelay
           : undefined,
+        photo_submit_min: Number.isFinite(parsedPhotoSubmit) ? parsedPhotoSubmit : undefined,
+        photo_review_sec: Number.isFinite(parsedPhotoReview) ? parsedPhotoReview : undefined,
         device_token: pushToken ?? undefined,
         device_token_provider: pushProvider ?? 'apns',
       },
@@ -206,6 +227,34 @@ export default function CreateGameScreen() {
                   maxLength={4}
                 />
                 <Text style={styles.unitText}>min</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.timingRow}>
+            <View style={styles.timingField}>
+              <Text style={styles.label}>Photo Submit</Text>
+              <View style={styles.inputWithUnit}>
+                <TextInput
+                  style={styles.timingInput}
+                  value={photoSubmit}
+                  onChangeText={setPhotoSubmit}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                />
+                <Text style={styles.unitText}>min</Text>
+              </View>
+            </View>
+            <View style={styles.timingField}>
+              <Text style={styles.label}>Photo Review</Text>
+              <View style={styles.inputWithUnit}>
+                <TextInput
+                  style={styles.timingInput}
+                  value={photoReview}
+                  onChangeText={setPhotoReview}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                />
+                <Text style={styles.unitText}>sec</Text>
               </View>
             </View>
           </View>

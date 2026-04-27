@@ -1936,6 +1936,20 @@ components:
           - type: 'null'
           title: Base Question Delay Min
           description: Override auto-answer delay. Defaults to 5 minutes.
+        photo_submit_min:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Photo Submit Min
+          description: Override photo submit window (minutes). Defaults to map size.
+        photo_review_sec:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Photo Review Sec
+          description: Override photo review window (seconds). Defaults to 30.
       type: object
       required:
       - map_id
@@ -3248,6 +3262,18 @@ components:
           - type: 'null'
           title: Default Base Question Delay Min
           description: Map-level auto-answer delay override (minutes).
+        default_photo_submit_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Photo Submit Min
+          description: Map-level photo submit window override (minutes).
+        default_photo_review_sec:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Photo Review Sec
+          description: Map-level photo review window override (seconds).
         notes:
           anyOf:
           - type: string
@@ -3335,6 +3361,20 @@ components:
           title: Default Base Question Delay Min
           description: Map-level question delay override (minutes). Null means use
             code default.
+        default_photo_submit_min:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Photo Submit Min
+          description: Map-level photo submit window override (minutes). Null = code
+            default.
+        default_photo_review_sec:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Photo Review Sec
+          description: Map-level photo review window override (seconds). Null = code
+            default.
       type: object
       required:
       - id

@@ -78,6 +78,8 @@ def create_game_with_host(
     size: MapSize,
     excluded_stop_ids: list[uuid.UUID],
     excluded_route_ids: list[uuid.UUID],
+    photo_submit_min: int | None = None,
+    photo_review_sec: int | None = None,
 ) -> tuple[Game, Player]:
     """Create a game and its host player with an auto-assigned color.
 
@@ -95,6 +97,8 @@ def create_game_with_host(
         size=size,
         excluded_stop_ids=excluded_stop_ids,
         excluded_route_ids=excluded_route_ids,
+        photo_submit_min=photo_submit_min,
+        photo_review_sec=photo_review_sec,
     )
     color = assign_color(game)
     player = add_player(
