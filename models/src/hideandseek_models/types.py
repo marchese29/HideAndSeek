@@ -320,6 +320,12 @@ class EndReason(StrEnum):
     dissolved = 'dissolved'
 
 
+class PauseReason(StrEnum):
+    photo_question_open = 'photo_question_open'
+    host = 'host'
+    rest_period = 'rest_period'
+
+
 class LobbyEventType(StrEnum):
     game_state = 'game_state'
     player_joined = 'player_joined'

@@ -53,6 +53,7 @@ Minimal — only what the ORM models need:
 - Two spatial column types: `ShapelyGeography` (distance/proximity) and `ShapelyGeometry` (topological). See `geo_types.py`.
 - `GameMap.boundary` is `MULTIPOLYGON` — always stored as `MultiPolygon` (single polygons wrapped at creation via `MultiPolygon([polygon])`).
 - Enum-value extension caveat: the existing Postgres native enum types (`questiontype`, `questionstatus`, etc.) were created by the initial migration via `sa.Enum(name=...)`. Adding new values to those enums requires `ALTER TYPE ... ADD VALUE` in an `op.get_context().autocommit_block()` (see `alembic/versions/022e24f069e7_*`). New StrEnum fields added since the initial migration store as VARCHAR per `type_annotation_map={StrEnum: String}` — no new native enum types are created going forward.
+- Future-deadline columns: live future events use `*_ends_at` / `*_expires_at` / `*_deadline_at` (mutate-while-future, freeze-once-elapsed). Existing `*_started_at` / `*_at` columns stay as immutable audit anchors. See `design/2026-04-25-game-timer-pause.md`.
 - No business logic — models define schema only
 - Style rules match the server (ruff + pyright, single quotes, 100 char line length)
 

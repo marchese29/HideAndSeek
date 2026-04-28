@@ -44,7 +44,11 @@ class Game(Base):
     size: Mapped[MapSize] = mapped_column(default=MapSize.medium)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
     hiding_started_at: Mapped[datetime | None] = mapped_column(default=None)
+    hiding_ends_at: Mapped[datetime | None] = mapped_column(default=None)
     seeking_started_at: Mapped[datetime | None] = mapped_column(default=None)
+    paused_at: Mapped[datetime | None] = mapped_column(default=None)
+    active_pause_reasons: Mapped[list] = mapped_column(sa.JSON, default=list)
+    seeking_pause_accumulated_sec: Mapped[int] = mapped_column(default=0)
     hider_station_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('stop.id'), default=None)
     station_election_status: Mapped[StationElectionStatus] = mapped_column(
         default=StationElectionStatus.pending
@@ -56,6 +60,7 @@ class Game(Base):
     proximity_tier: Mapped[ProximityTier] = mapped_column(default=ProximityTier.none)
     end_reason: Mapped[EndReason | None] = mapped_column(default=None)
     found_claim_at: Mapped[datetime | None] = mapped_column(default=None)
+    found_claim_expires_at: Mapped[datetime | None] = mapped_column(default=None)
     found_claim_player_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
 
     game_map: Mapped[GameMap] = relationship(back_populates='games')

@@ -39,6 +39,7 @@ class Question(Base):
         ShapelyGeography('POINT', srid=4326), nullable=True, default=None
     )
     answerable_at: Mapped[datetime | None] = mapped_column(default=None)
+    deadline_at: Mapped[datetime | None] = mapped_column(default=None)
     answered_at: Mapped[datetime | None] = mapped_column(default=None)
     hider_location: Mapped[Point | None] = mapped_column(
         ShapelyGeography('POINT', srid=4326), nullable=True, default=None
