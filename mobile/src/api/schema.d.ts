@@ -1395,6 +1395,23 @@ export interface components {
              * @default null
              */
             review_deadline: string | null;
+            /**
+             * @description Photo questions only: subject the seeker requested.
+             * @default null
+             */
+            photo_subject: components["schemas"]["PhotoSubject"] | null;
+            /**
+             * Photo Queued By
+             * @description Photo questions only: hider who uploaded the queued photo.
+             * @default null
+             */
+            photo_queued_by: string | null;
+            /**
+             * Photo Uploaded At
+             * @description Photo questions only: when the queued photo was uploaded (cache-bust key).
+             * @default null
+             */
+            photo_uploaded_at: string | null;
         };
         /**
          * HiderGameStateResponse

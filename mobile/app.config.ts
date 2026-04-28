@@ -25,6 +25,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: 'dev.marchese.hideandseek',
     infoPlist: {
       UIBackgroundModes: ['location'],
+      NSPhotoLibraryUsageDescription:
+        'HideAndSeek needs access to your photo library so you can submit photos as evidence during the game.',
     },
   },
   android: {
@@ -60,6 +62,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-notifications',
       {
         color: '#3498DB',
+      },
+    ],
+    [
+      'expo-image-picker',
+      {
+        photosPermission:
+          'HideAndSeek needs access to your photo library so you can submit photos as evidence during the game.',
       },
     ],
   ],

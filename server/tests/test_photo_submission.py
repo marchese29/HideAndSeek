@@ -634,3 +634,101 @@ def test_submit_sets_review_deadline(
     deadline = datetime.fromisoformat(data['review_deadline'].replace('Z', '+00:00'))
     delta = (deadline - submitted).total_seconds()
     assert 29 <= delta <= 31
+
+
+# ── Submit-already-queued (multipart, no file) ─────────────────────────
+
+
+def test_submit_queued_via_multipart_no_file(
+    client: TestClient,
+    session: Session,
+    fake_s3: FakeS3,
+    _patch_redis: fakeredis.FakeRedis,
+):
+    """Hider A queues; hider B submits via multipart submit=true with no file."""
+    game, hider_a, seeker, question = _setup_photo_question(client, session)
+    hider_b = create_player(session, game.id, name='B', role=PlayerRole.hider)
+
+    # A queues
+    resp = client.post(
+        f'/games/{game.id}/questions/{question.id}/photo',
+        files={'file': ('a.jpg', _JPEG_HEADER, 'image/jpeg')},
+        data={'submit': 'false'},
+        headers=_headers(hider_a.id),
+    )
+    assert resp.status_code == 204
+    session.refresh(question)
+    assert question.photo_params is not None
+    queued_key = question.photo_params.photo_object_key
+    assert queued_key is not None
+
+    # B submits without re-uploading — files= forces multipart encoding
+    resp = client.post(
+        f'/games/{game.id}/questions/{question.id}/photo',
+        files={'submit': (None, 'true')},
+        headers=_headers(hider_b.id),
+    )
+    assert resp.status_code == 204, resp.text
+    session.refresh(question)
+    assert question.status == QuestionStatus.submitted
+    assert question.photo_params is not None
+    assert question.photo_params.submitted_by == hider_b.id
+    # S3 object key unchanged — bytes were not re-uploaded
+    assert question.photo_params.photo_object_key == queued_key
+
+
+def test_submit_queued_no_file_no_queued_is_422(
+    client: TestClient,
+    session: Session,
+    fake_s3: FakeS3,
+):
+    """submit=true with no file and nothing queued → 422."""
+    game, hider, seeker, question = _setup_photo_question(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/{question.id}/photo',
+        files={'submit': (None, 'true')},
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 422
+
+
+def test_submit_queued_no_file_no_submit_is_422(
+    client: TestClient,
+    session: Session,
+    fake_s3: FakeS3,
+):
+    """multipart with no file and submit=false → 422."""
+    game, hider, seeker, question = _setup_photo_question(client, session)
+    resp = client.post(
+        f'/games/{game.id}/questions/{question.id}/photo',
+        files={'submit': (None, 'false')},
+        headers=_headers(hider.id),
+    )
+    assert resp.status_code == 422
+
+
+def test_submit_queued_409_after_submitted(
+    client: TestClient,
+    session: Session,
+    fake_s3: FakeS3,
+):
+    """Once submitted, second hider's no-file submit → 409."""
+    game, hider_a, seeker, question = _setup_photo_question(client, session)
+    hider_b = create_player(session, game.id, name='B', role=PlayerRole.hider)
+
+    # A queues + submits
+    resp = client.post(
+        f'/games/{game.id}/questions/{question.id}/photo',
+        files={'file': ('a.jpg', _JPEG_HEADER, 'image/jpeg')},
+        data={'submit': 'true'},
+        headers=_headers(hider_a.id),
+    )
+    assert resp.status_code == 204
+
+    # B tries to submit-the-already-queued — but it's already submitted
+    resp = client.post(
+        f'/games/{game.id}/questions/{question.id}/photo',
+        files={'submit': (None, 'true')},
+        headers=_headers(hider_b.id),
+    )
+    assert resp.status_code == 409

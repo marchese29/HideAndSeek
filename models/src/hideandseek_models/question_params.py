@@ -100,6 +100,8 @@ class PhotoQuestionParams(Base):
     subject: Mapped[PhotoSubject]
     photo_object_key: Mapped[str | None] = mapped_column(default=None)
     is_null_answer: Mapped[bool] = mapped_column(default=False)
+    queued_at: Mapped[datetime | None] = mapped_column(default=None)
+    queued_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('player.id'), default=None)
     submitted_at: Mapped[datetime | None] = mapped_column(default=None)
     submitted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('player.id'), default=None)
     review_decision: Mapped[PhotoReviewDecision | None] = mapped_column(default=None)

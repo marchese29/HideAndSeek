@@ -56,6 +56,8 @@ export type FoundClaimRejectedDelta = S['FoundClaimRejectedEvent'];
 export type FoundClaimExpiredDelta = S['FoundClaimExpiredEvent'];
 export type PhotoSubmittedDelta = S['PhotoSubmittedEvent'];
 export type PhotoRejectedDelta = S['PhotoRejectedEvent'];
+export type PhotoQueuedDelta = S['PhotoQueuedEvent'];
+export type PhotoUnqueuedDelta = S['PhotoUnqueuedEvent'];
 export type PhotoEventParams = S['PhotoEventParams'];
 
 // ── Question Event Parameters ───────────────────────────────────────────────

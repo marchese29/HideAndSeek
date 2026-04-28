@@ -33,6 +33,8 @@ def queue_photo(question: Question, player: Player, object_key: str) -> None:
     assert params is not None
     params.photo_object_key = object_key
     params.is_null_answer = False
+    params.queued_at = datetime.now(UTC)
+    params.queued_by = player.id
     logger.info(
         'photo_queued',
         game_id=str(question.game_id),
@@ -49,6 +51,8 @@ def clear_queued_photo(question: Question) -> None:
     assert params is not None
     params.photo_object_key = None
     params.is_null_answer = False
+    params.queued_at = None
+    params.queued_by = None
     logger.info(
         'photo_unqueued',
         game_id=str(question.game_id),
@@ -76,6 +80,8 @@ def submit_photo_question(question: Question, player: Player, *, is_null_answer:
 
     params.submitted_at = datetime.now(UTC)
     params.submitted_by = player.id
+    params.queued_at = None
+    params.queued_by = None
     question.status = QuestionStatus.submitted
 
     logger.info(
@@ -101,6 +107,8 @@ def auto_submit_photo(question: Question) -> None:
 
     params.submitted_at = datetime.now(UTC)
     params.submitted_by = None
+    params.queued_at = None
+    params.queued_by = None
     question.status = QuestionStatus.submitted
 
     logger.info(
@@ -158,6 +166,8 @@ def reject_photo(question: Question, *, reviewer_id: uuid.UUID) -> None:
     params.reviewed_at = now
     params.photo_object_key = None
     params.is_null_answer = False
+    params.queued_at = None
+    params.queued_by = None
     params.submitted_at = None
     params.submitted_by = None
 

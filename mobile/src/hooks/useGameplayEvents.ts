@@ -18,8 +18,10 @@ import type {
   HidingZoneExpandedDelta,
   HostChangedDelta,
   PhaseChangedDelta,
+  PhotoQueuedDelta,
   PhotoRejectedDelta,
   PhotoSubmittedDelta,
+  PhotoUnqueuedDelta,
   PlayerLeftDelta,
   PlayerLocationDelta,
   ProximityDeescalatedDelta,
@@ -69,7 +71,9 @@ type GameplayEventType =
   | 'found_claim_rejected'
   | 'found_claim_expired'
   | 'photo_submitted'
-  | 'photo_rejected';
+  | 'photo_rejected'
+  | 'photo_queued'
+  | 'photo_unqueued';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
@@ -276,6 +280,11 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
             const data = parseData<HiderQuestionAnsweredDelta>(event);
             if (data) {
               useGameplayStore.getState().applyQuestionAnswered(data);
+              if (data.question_type === 'photo') {
+                useToastStore
+                  .getState()
+                  .push({ message: 'Seeker accepted your photo.', severity: 'info' });
+              }
             }
           } else {
             const data = parseData<SeekerQuestionAnsweredDelta>(event);
@@ -302,7 +311,31 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
         'photo_rejected',
         seq.wrap((event) => {
           const data = parseData<PhotoRejectedDelta>(event);
-          if (data) useGameplayStore.getState().applyPhotoRejected(data);
+          if (data) {
+            useGameplayStore.getState().applyPhotoRejected(data);
+            if (role === 'hider') {
+              useToastStore.getState().push({
+                message: 'Seeker rejected your photo — try again.',
+                severity: 'warning',
+              });
+            }
+          }
+        }),
+      );
+
+      es.addEventListener(
+        'photo_queued',
+        seq.wrap((event) => {
+          const data = parseData<PhotoQueuedDelta>(event);
+          if (data) useGameplayStore.getState().applyPhotoQueued(data);
+        }),
+      );
+
+      es.addEventListener(
+        'photo_unqueued',
+        seq.wrap((event) => {
+          const data = parseData<PhotoUnqueuedDelta>(event);
+          if (data) useGameplayStore.getState().applyPhotoUnqueued(data);
         }),
       );
 

@@ -561,6 +561,18 @@ class HiderActiveQuestion(BaseModel):
         default=None,
         description='Photo questions only: when auto-accept fires for a submitted photo.',
     )
+    photo_subject: PhotoSubject | None = Field(
+        default=None,
+        description='Photo questions only: subject the seeker requested.',
+    )
+    photo_queued_by: uuid.UUID | None = Field(
+        default=None,
+        description='Photo questions only: hider who uploaded the queued photo.',
+    )
+    photo_uploaded_at: datetime | None = Field(
+        default=None,
+        description='Photo questions only: when the queued photo was uploaded (cache-bust key).',
+    )
 
 
 class SeekerActiveQuestion(BaseModel):

@@ -9,8 +9,10 @@ import type {
   HiderQuestionAnsweredDelta,
   HiderQuestionHistoryEntry,
   PhaseChangedDelta,
+  PhotoQueuedDelta,
   PhotoRejectedDelta,
   PhotoSubmittedDelta,
+  PhotoUnqueuedDelta,
   PreviewQuestion,
   QuestionAnswerableDelta,
   QuestionAskedDelta,
@@ -78,6 +80,8 @@ interface GameplayActions {
   clearFoundClaim: () => void;
   applyPhotoSubmitted: (delta: PhotoSubmittedDelta) => void;
   applyPhotoRejected: (delta: PhotoRejectedDelta) => void;
+  applyPhotoQueued: (delta: PhotoQueuedDelta) => void;
+  applyPhotoUnqueued: (delta: PhotoUnqueuedDelta) => void;
   openPhotoViewer: (viewer: PhotoViewerState) => void;
   closePhotoViewer: () => void;
 }
@@ -283,6 +287,7 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
       if (prev.status !== 'connected') return prev;
 
       if (prev.role === 'hider') {
+        const photoSubject = delta.parameters?.type === 'photo' ? delta.parameters.subject : null;
         const activeQuestion: HiderActiveQuestion = {
           question_id: delta.question_id,
           question_type: delta.question_type,
@@ -295,6 +300,9 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
           submitted_at: null,
           is_null_answer: null,
           review_deadline: null,
+          photo_subject: photoSubject,
+          photo_queued_by: null,
+          photo_uploaded_at: null,
         };
         return {
           ...prev,
@@ -574,7 +582,12 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         question_deadline: null,
       };
       if (prev.role === 'hider') {
-        const activeQuestion: HiderActiveQuestion = { ...prev.state.active_question, ...patch };
+        const activeQuestion: HiderActiveQuestion = {
+          ...prev.state.active_question,
+          ...patch,
+          photo_queued_by: null,
+          photo_uploaded_at: null,
+        };
         return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
       }
       const activeQuestion: SeekerActiveQuestion = { ...prev.state.active_question, ...patch };
@@ -594,10 +607,43 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         review_deadline: null,
       };
       if (prev.role === 'hider') {
-        const activeQuestion: HiderActiveQuestion = { ...prev.state.active_question, ...patch };
+        const activeQuestion: HiderActiveQuestion = {
+          ...prev.state.active_question,
+          ...patch,
+          photo_queued_by: null,
+          photo_uploaded_at: null,
+        };
         return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
       }
       const activeQuestion: SeekerActiveQuestion = { ...prev.state.active_question, ...patch };
+      return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+    });
+  },
+
+  applyPhotoQueued: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
+      if (!prev.state.active_question) return prev;
+      if (prev.state.active_question.question_id !== delta.question_id) return prev;
+      const activeQuestion: HiderActiveQuestion = {
+        ...prev.state.active_question,
+        photo_queued_by: delta.queued_by,
+        photo_uploaded_at: delta.uploaded_at,
+      };
+      return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+    });
+  },
+
+  applyPhotoUnqueued: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected' || prev.role !== 'hider') return prev;
+      if (!prev.state.active_question) return prev;
+      if (prev.state.active_question.question_id !== delta.question_id) return prev;
+      const activeQuestion: HiderActiveQuestion = {
+        ...prev.state.active_question,
+        photo_queued_by: null,
+        photo_uploaded_at: null,
+      };
       return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
     });
   },

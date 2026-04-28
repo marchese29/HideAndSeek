@@ -2636,6 +2636,29 @@ components:
           description: 'Photo questions only: when auto-accept fires for a submitted
             photo.'
           title: Review Deadline
+        photo_subject:
+          anyOf:
+          - $ref: '#/components/schemas/PhotoSubject'
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: subject the seeker requested.'
+        photo_queued_by:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: hider who uploaded the queued photo.'
+          title: Photo Queued By
+        photo_uploaded_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: 'Photo questions only: when the queued photo was uploaded (cache-bust
+            key).'
+          title: Photo Uploaded At
       required:
       - question_id
       - question_type

@@ -206,6 +206,74 @@ class TestBuildHiderGameState:
         assert len(state.question_history) == 1
         assert state.active_question is not None
 
+    def test_hider_snapshot_carries_queued_state(self, session: Session) -> None:
+        game, hider, seeker, _ds = _create_active_game(session)
+        q = create_question(
+            session,
+            game.id,
+            question_type=QuestionType.photo,
+            status=QuestionStatus.answerable,
+            asked_by=seeker.id,
+            answerable_at=datetime.now(UTC),
+        )
+        assert q.photo_params is not None
+        q.photo_params.photo_object_key = 'env/test/photo.jpg'
+        q.photo_params.queued_by = hider.id
+        q.photo_params.queued_at = datetime.now(UTC)
+        session.flush()
+
+        state = build_hider_game_state(game, hider)
+        assert state.active_question is not None
+        assert state.active_question.photo_subject is not None
+        assert state.active_question.photo_queued_by == hider.id
+        assert state.active_question.photo_uploaded_at is not None
+
+    def test_hider_snapshot_clears_queued_state_after_submit(self, session: Session) -> None:
+        game, hider, seeker, _ds = _create_active_game(session)
+        q = create_question(
+            session,
+            game.id,
+            question_type=QuestionType.photo,
+            status=QuestionStatus.submitted,
+            asked_by=seeker.id,
+            answerable_at=datetime.now(UTC),
+        )
+        assert q.photo_params is not None
+        q.photo_params.photo_object_key = 'env/test/photo.jpg'
+        q.photo_params.submitted_at = datetime.now(UTC)
+        q.photo_params.submitted_by = hider.id
+        # queued_at/by stay None — submit_photo_question clears them
+        session.flush()
+
+        state = build_hider_game_state(game, hider)
+        assert state.active_question is not None
+        assert state.active_question.photo_subject is not None
+        assert state.active_question.photo_queued_by is None
+        assert state.active_question.photo_uploaded_at is None
+        # but submitted/review fields are populated
+        assert state.active_question.submitted_at is not None
+        assert state.active_question.review_deadline is not None
+
+    def test_hider_snapshot_clears_queued_state_when_unqueued(self, session: Session) -> None:
+        game, hider, seeker, _ds = _create_active_game(session)
+        q = create_question(
+            session,
+            game.id,
+            question_type=QuestionType.photo,
+            status=QuestionStatus.answerable,
+            asked_by=seeker.id,
+            answerable_at=datetime.now(UTC),
+        )
+        assert q.photo_params is not None
+        # No photo_object_key — represents unqueued state
+        session.flush()
+
+        state = build_hider_game_state(game, hider)
+        assert state.active_question is not None
+        assert state.active_question.photo_subject is not None
+        assert state.active_question.photo_queued_by is None
+        assert state.active_question.photo_uploaded_at is None
+
 
 # ── Static Game Info Tests ──────────────────────────────────────────────────
 

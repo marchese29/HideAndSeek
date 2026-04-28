@@ -136,6 +136,16 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
     hider_active: HiderActiveQuestion | None = None
     if active_q is not None:
         photo_fields = _photo_review_fields(active_q, game)
+        photo_subject = None
+        photo_queued_by = None
+        photo_uploaded_at = None
+        if active_q.question_type == QuestionType.photo:
+            pp = active_q.photo_params
+            assert pp is not None
+            photo_subject = pp.subject
+            if active_q.status == QuestionStatus.answerable and pp.photo_object_key is not None:
+                photo_queued_by = pp.queued_by
+                photo_uploaded_at = pp.queued_at
         hider_active = HiderActiveQuestion(
             question_id=active_q.id,
             question_type=active_q.question_type,
@@ -146,6 +156,9 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
             submitted_at=photo_fields.submitted_at,
             is_null_answer=photo_fields.is_null_answer,
             review_deadline=photo_fields.review_deadline,
+            photo_subject=photo_subject,
+            photo_queued_by=photo_queued_by,
+            photo_uploaded_at=photo_uploaded_at,
         )
 
     history = []

@@ -686,12 +686,33 @@ async def submit_photo_endpoint(
     if content_type.startswith('multipart/form-data'):
         form = await request.form()
         upload = form.get('file')
-        if not isinstance(upload, UploadFile):
-            raise HTTPException(status_code=422, detail='multipart body requires a "file" field')
         submit_flag_raw = form.get('submit', 'false')
         submit_flag = (
             submit_flag_raw.lower() == 'true' if isinstance(submit_flag_raw, str) else False
         )
+
+        if not isinstance(upload, UploadFile):
+            # Submit-already-queued path: any hider can finalize a queued upload
+            # without re-uploading the bytes (PhotoQueuedEvent fans out to all hiders).
+            if not submit_flag:
+                raise HTTPException(
+                    status_code=422,
+                    detail='multipart body requires a "file" field, or submit=true to '
+                    'submit an already-queued photo',
+                )
+            params = question.photo_params
+            assert params is not None
+            if params.photo_object_key is None:
+                raise HTTPException(status_code=422, detail='no photo queued to submit')
+            submit_photo_question(question, player, is_null_answer=False)
+            review_deadline = datetime.now(UTC) + timedelta(
+                seconds=effective_photo_review_sec(game)
+            )
+            emit_gameplay(
+                PhotoSubmittedEvent.from_question(question, review_deadline=review_deadline)
+            )
+            _send_photo_submitted_push(game, question)
+            return
 
         photo_content_type, ext = _validate_image(upload)
         s3_config = _require_s3_config()
@@ -699,13 +720,16 @@ async def submit_photo_endpoint(
         upload_bytes(s3_config, key, upload.file, photo_content_type)
 
         queue_photo(question, player, key)
+        queued_params = question.photo_params
+        assert queued_params is not None
+        assert queued_params.queued_at is not None
         emit_gameplay(
             PhotoQueuedEvent(
                 game_id=game.id,
                 question_id=question.id,
                 sequence=question.sequence,
                 queued_by=player.id,
-                uploaded_at=datetime.now(UTC),
+                uploaded_at=queued_params.queued_at,
             )
         )
 
