@@ -22,6 +22,7 @@ from hideandseek_core.conventions import effective_question_deadline, resolve_te
 from hideandseek_core.geo_helpers import geom_or_none, point_or_none
 from hideandseek_models.types import (
     EndReason,
+    PauseReason,
     PhotoSubject,
     PlayerColor,
     PlayerRole,
@@ -513,6 +514,31 @@ class PhotoRejectedEvent(GameplayEventSchema):
         )
 
 
+class GameTimerPausedEvent(GameplayEventSchema):
+    """Game clock paused, or pause-reason set changed (still non-empty) — both channels."""
+
+    type: Literal['game_timer_paused'] = 'game_timer_paused'
+    paused_at: datetime
+    active_pause_reasons: list[PauseReason]
+
+
+class GameTimerResumedEvent(GameplayEventSchema):
+    """Game clock fully resumed — both channels.
+
+    Emitted only when the pause-reason set transitions to empty; partial
+    releases that leave reasons active emit `GameTimerPausedEvent` with the
+    reduced list. Carries every shifted deadline so mobile can patch its
+    store in one delta — no need to read snapshot fields.
+    """
+
+    type: Literal['game_timer_resumed'] = 'game_timer_resumed'
+    resumed_at: datetime
+    seeking_pause_accumulated_sec: int
+    hiding_ends_at: datetime | None
+    found_claim_expires_at: datetime | None
+    question_deadlines: dict[uuid.UUID, datetime]
+
+
 GameplayEvent = (
     PlayerLocationEvent
     | QuestionAskedEvent
@@ -537,4 +563,6 @@ GameplayEvent = (
     | PhotoUnqueuedEvent
     | PhotoSubmittedEvent
     | PhotoRejectedEvent
+    | GameTimerPausedEvent
+    | GameTimerResumedEvent
 )

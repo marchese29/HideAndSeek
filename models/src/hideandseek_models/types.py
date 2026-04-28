@@ -359,6 +359,8 @@ class GameplayEventType(StrEnum):
     photo_submitted = 'photo_submitted'
     photo_rejected = 'photo_rejected'
     photo_unqueued = 'photo_unqueued'
+    game_timer_paused = 'game_timer_paused'
+    game_timer_resumed = 'game_timer_resumed'
 
 
 class TokenProvider(StrEnum):

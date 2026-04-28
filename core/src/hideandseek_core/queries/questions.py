@@ -67,6 +67,29 @@ def get_latest_total_exclusion(game: Game) -> BaseGeometry | None:
     return question.total_exclusion if question else None
 
 
+def get_open_questions_with_deadlines(game: Game) -> Sequence[Question]:
+    """Questions whose deadline_at is live and shiftable on game resume.
+
+    Filters on non-terminal status + deadline_at IS NOT NULL — these are the
+    rows the reconciler would fire if the game weren't paused.
+    """
+    session = get_session()
+    return session.scalars(
+        select(Question).where(
+            Question.game_id == game.id,
+            Question.status.not_in(
+                [
+                    QuestionStatus.answered,
+                    QuestionStatus.vetoed,
+                    QuestionStatus.abandoned,
+                    QuestionStatus.randomized,
+                ]
+            ),
+            Question.deadline_at.is_not(None),
+        )
+    ).all()
+
+
 def get_active_question(game: Game) -> Question | None:
     """Return the active (non-terminal) question, or None."""
     session = get_session()

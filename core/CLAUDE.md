@@ -114,6 +114,17 @@ Reconciler queries in `logic/timers.py`: `find_overdue_answerable_questions` exc
 
 `conventions.effective_photo_review_sec(game)` and `effective_photo_submit_min(game)` wrap the lower-level `resolve_photo_*` helpers with the standard three-level fallback (request override → map default → code default). Callers on the game critical path should use the `effective_*` wrappers.
 
+## Logic — Game-Timer Pause
+
+`logic/pause.py` owns the ref-counted pause primitive for the seeking-phase clock. Two public entry points:
+
+- `pause_game(game, reason)` — adds `reason` to `game.active_pause_reasons`; stamps `paused_at` if the set was empty. Idempotent on `reason` (duplicate add is a no-op, no event). Always emits `GameTimerPausedEvent` on the empty→non-empty transition or on adding a new reason to an already-non-empty set, so mobile re-renders the pause-category UI.
+- `resume_game(game, reason)` — removes `reason` from the set. Idempotent (releasing a non-active reason is a no-op). If reasons remain, re-emits `GameTimerPausedEvent` with the reduced list (clock stays paused). If the set becomes empty, shifts every live deadline forward by `now - paused_at`, increments `seeking_pause_accumulated_sec`, clears `paused_at`, and emits `GameTimerResumedEvent` carrying every shifted deadline.
+
+**Mutation order on full resume is load-bearing**: deadlines shift first, accumulator updates next, `paused_at = None` last. The reconciler's overdue queries read `paused_at IS NULL` in a separate transaction, so it sees either "still paused → skip" or "unpaused with already-shifted deadlines" — never a torn middle state.
+
+Today's resume fan-out covers `Game.hiding_ends_at`, `Game.found_claim_expires_at`, and open `Question.deadline_at` (queried via `get_open_questions_with_deadlines`). Photo deadlines (`PhotoQuestionParams.submit_deadline_at` / `review_deadline_at`) join in m8r.nah once those columns exist. Both events are dual-channel (hider + seeker SSE); push dispatch is owned by the calling router (m8r.nah for photo, m8r.8 for host endpoints) per the standard layering.
+
 ## Logic — Answer Previews
 
 `logic/answer.py` provides both mutating answer functions (`answer_radar`, `answer_thermometer`, etc.) and read-only preview variants (`preview_radar`, `preview_thermometer`, `preview_matching`, `preview_measuring`, `preview_tentacles`). Preview functions compute the same answer string without persisting exclusion zones or mutating the question. `preview_answer(question, hider_location, game)` dispatches to the appropriate preview function by question type.

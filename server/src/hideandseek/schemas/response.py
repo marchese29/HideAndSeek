@@ -21,6 +21,7 @@ from hideandseek_core.geo_helpers import geom_or_none
 from hideandseek_models.types import (
     GameStatus,
     MapSize,
+    PauseReason,
     PhotoSubject,
     PlayerColor,
     PlayerRole,
@@ -789,6 +790,20 @@ class HiderGameStateResponse(SSEExposed, BaseModel):
         default=None,
         description='Player IDs of hiders who moved >50m from freeze position during entered tier.',
     )
+    paused: bool = Field(description='Whether the game clock is currently paused.')
+    paused_at: datetime | None = Field(
+        default=None, description='Wall-clock instant the current pause began.'
+    )
+    active_pause_reasons: list[PauseReason] = Field(
+        default_factory=list,
+        description='Reasons currently holding the pause; empty when not paused.',
+    )
+    seeking_pause_accumulated_sec: int = Field(
+        default=0,
+        description=(
+            'Total seconds of pause time during the seeking phase, for client-side elapsed math.'
+        ),
+    )
 
 
 class SeekerGameStateResponse(SSEExposed, BaseModel):
@@ -816,4 +831,18 @@ class SeekerGameStateResponse(SSEExposed, BaseModel):
     )
     hiding_zone_expanded: bool = Field(
         default=False, description='Whether the hiding zone has been expanded.'
+    )
+    paused: bool = Field(description='Whether the game clock is currently paused.')
+    paused_at: datetime | None = Field(
+        default=None, description='Wall-clock instant the current pause began.'
+    )
+    active_pause_reasons: list[PauseReason] = Field(
+        default_factory=list,
+        description='Reasons currently holding the pause; empty when not paused.',
+    )
+    seeking_pause_accumulated_sec: int = Field(
+        default=0,
+        description=(
+            'Total seconds of pause time during the seeking phase, for client-side elapsed math.'
+        ),
     )

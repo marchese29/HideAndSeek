@@ -18,6 +18,8 @@ from hideandseek_core.broadcast.events import (
     GameHostChangedEvent,
     GamePlayerLeftEvent,
     GameplayEvent,
+    GameTimerPausedEvent,
+    GameTimerResumedEvent,
     HiderQuestionAnsweredEvent,
     HidingZoneExpandedEvent,
     PhaseChangedEvent,
@@ -274,3 +276,11 @@ def emit_gameplay(event: GameplayEvent) -> None:
         case PhotoRejectedEvent():
             data = event.model_dump(mode='json')
             _both_channels(event.game_id, GameplayEventType.photo_rejected, data)
+
+        case GameTimerPausedEvent():
+            data = event.model_dump(mode='json')
+            _both_channels(event.game_id, GameplayEventType.game_timer_paused, data)
+
+        case GameTimerResumedEvent():
+            data = event.model_dump(mode='json')
+            _both_channels(event.game_id, GameplayEventType.game_timer_resumed, data)

@@ -249,6 +249,10 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         hiding_zone_expanded=game.hiding_zone_expanded,
         proximity_tier=game.proximity_tier,
         freeze_departed=freeze_departed,
+        paused=game.paused_at is not None,
+        paused_at=game.paused_at,
+        active_pause_reasons=list(game.active_pause_reasons),
+        seeking_pause_accumulated_sec=game.seeking_pause_accumulated_sec,
     )
 
 
@@ -347,4 +351,8 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
         total_exclusion=geom_or_none(total_exclusion),
         inventory=inventory,
         hiding_zone_expanded=game.hiding_zone_expanded,
+        paused=game.paused_at is not None,
+        paused_at=game.paused_at,
+        active_pause_reasons=list(game.active_pause_reasons),
+        seeking_pause_accumulated_sec=game.seeking_pause_accumulated_sec,
     )

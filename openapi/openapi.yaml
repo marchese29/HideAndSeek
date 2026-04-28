@@ -2519,6 +2519,76 @@ components:
       - finished
       - dissolved
       title: GameStatus
+    GameTimerPausedEvent:
+      description: "Game clock paused, or pause-reason set changed (still non-empty)\
+        \ \u2014 both channels."
+      properties:
+        type:
+          const: game_timer_paused
+          default: game_timer_paused
+          title: Type
+          type: string
+        paused_at:
+          format: date-time
+          title: Paused At
+          type: string
+        active_pause_reasons:
+          items:
+            $ref: '#/components/schemas/PauseReason'
+          title: Active Pause Reasons
+          type: array
+      required:
+      - paused_at
+      - active_pause_reasons
+      title: GameTimerPausedEvent
+      type: object
+    GameTimerResumedEvent:
+      description: "Game clock fully resumed \u2014 both channels.\n\nEmitted only\
+        \ when the pause-reason set transitions to empty; partial\nreleases that leave\
+        \ reasons active emit `GameTimerPausedEvent` with the\nreduced list. Carries\
+        \ every shifted deadline so mobile can patch its\nstore in one delta \u2014\
+        \ no need to read snapshot fields."
+      properties:
+        type:
+          const: game_timer_resumed
+          default: game_timer_resumed
+          title: Type
+          type: string
+        resumed_at:
+          format: date-time
+          title: Resumed At
+          type: string
+        seeking_pause_accumulated_sec:
+          title: Seeking Pause Accumulated Sec
+          type: integer
+        hiding_ends_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Hiding Ends At
+        found_claim_expires_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Found Claim Expires At
+        question_deadlines:
+          additionalProperties:
+            format: date-time
+            type: string
+          propertyNames:
+            format: uuid
+          title: Question Deadlines
+          type: object
+      required:
+      - resumed_at
+      - seeking_pause_accumulated_sec
+      - hiding_ends_at
+      - found_claim_expires_at
+      - question_deadlines
+      title: GameTimerResumedEvent
+      type: object
     GeometryCollection:
       properties:
         bbox:
@@ -2785,6 +2855,30 @@ components:
           description: Player IDs of hiders who moved >50m from freeze position during
             entered tier.
           title: Freeze Departed
+        paused:
+          description: Whether the game clock is currently paused.
+          title: Paused
+          type: boolean
+        paused_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Wall-clock instant the current pause began.
+          title: Paused At
+        active_pause_reasons:
+          description: Reasons currently holding the pause; empty when not paused.
+          items:
+            $ref: '#/components/schemas/PauseReason'
+          title: Active Pause Reasons
+          type: array
+        seeking_pause_accumulated_sec:
+          default: 0
+          description: Total seconds of pause time during the seeking phase, for client-side
+            elapsed math.
+          title: Seeking Pause Accumulated Sec
+          type: integer
       required:
       - game_id
       - phase
@@ -2796,6 +2890,7 @@ components:
       - seekers
       - station_election_status
       - question_history
+      - paused
       title: HiderGameStateResponse
       type: object
     HiderQuestionAnsweredEvent:
@@ -3584,6 +3679,13 @@ components:
       - hiding_zone
       title: NearbyStationResponse
       description: A playable stop near a given point, with its hiding zone polygon.
+    PauseReason:
+      enum:
+      - photo_question_open
+      - host
+      - rest_period
+      title: PauseReason
+      type: string
     PhaseChangedEvent:
       description: "Game transitioned from hiding to seeking \u2014 both channels."
       properties:
@@ -4496,6 +4598,30 @@ components:
           description: Whether the hiding zone has been expanded.
           title: Hiding Zone Expanded
           type: boolean
+        paused:
+          description: Whether the game clock is currently paused.
+          title: Paused
+          type: boolean
+        paused_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Wall-clock instant the current pause began.
+          title: Paused At
+        active_pause_reasons:
+          description: Reasons currently holding the pause; empty when not paused.
+          items:
+            $ref: '#/components/schemas/PauseReason'
+          title: Active Pause Reasons
+          type: array
+        seeking_pause_accumulated_sec:
+          default: 0
+          description: Total seconds of pause time during the seeking phase, for client-side
+            elapsed math.
+          title: Seeking Pause Accumulated Sec
+          type: integer
       required:
       - game_id
       - phase
@@ -4507,6 +4633,7 @@ components:
       - seekers
       - question_history
       - inventory
+      - paused
       title: SeekerGameStateResponse
       type: object
     SeekerQuestionAnsweredEvent:

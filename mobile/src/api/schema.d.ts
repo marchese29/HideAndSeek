@@ -1317,6 +1317,57 @@ export interface components {
          */
         GameStatus: "lobby" | "hiding" | "seeking" | "finished" | "dissolved";
         /**
+         * GameTimerPausedEvent
+         * @description Game clock paused, or pause-reason set changed (still non-empty) — both channels.
+         */
+        GameTimerPausedEvent: {
+            /**
+             * Type
+             * @default game_timer_paused
+             * @constant
+             */
+            type: "game_timer_paused";
+            /**
+             * Paused At
+             * Format: date-time
+             */
+            paused_at: string;
+            /** Active Pause Reasons */
+            active_pause_reasons: components["schemas"]["PauseReason"][];
+        };
+        /**
+         * GameTimerResumedEvent
+         * @description Game clock fully resumed — both channels.
+         *
+         *     Emitted only when the pause-reason set transitions to empty; partial
+         *     releases that leave reasons active emit `GameTimerPausedEvent` with the
+         *     reduced list. Carries every shifted deadline so mobile can patch its
+         *     store in one delta — no need to read snapshot fields.
+         */
+        GameTimerResumedEvent: {
+            /**
+             * Type
+             * @default game_timer_resumed
+             * @constant
+             */
+            type: "game_timer_resumed";
+            /**
+             * Resumed At
+             * Format: date-time
+             */
+            resumed_at: string;
+            /** Seeking Pause Accumulated Sec */
+            seeking_pause_accumulated_sec: number;
+            /** Hiding Ends At */
+            hiding_ends_at: string | null;
+            /** Found Claim Expires At */
+            found_claim_expires_at: string | null;
+            /** Question Deadlines */
+            question_deadlines: {
+                [key: string]: string;
+            };
+        };
+        /**
          * GeometryCollection
          * @description GeometryCollection Model
          */
@@ -1506,6 +1557,28 @@ export interface components {
              * @default null
              */
             freeze_departed: string[] | null;
+            /**
+             * Paused
+             * @description Whether the game clock is currently paused.
+             */
+            paused: boolean;
+            /**
+             * Paused At
+             * @description Wall-clock instant the current pause began.
+             * @default null
+             */
+            paused_at: string | null;
+            /**
+             * Active Pause Reasons
+             * @description Reasons currently holding the pause; empty when not paused.
+             */
+            active_pause_reasons?: components["schemas"]["PauseReason"][];
+            /**
+             * Seeking Pause Accumulated Sec
+             * @description Total seconds of pause time during the seeking phase, for client-side elapsed math.
+             * @default 0
+             */
+            seeking_pause_accumulated_sec: number;
         };
         /**
          * HiderQuestionAnsweredEvent
@@ -2077,6 +2150,11 @@ export interface components {
              */
             hiding_zone: components["schemas"]["Point"] | components["schemas"]["MultiPoint"] | components["schemas"]["LineString"] | components["schemas"]["MultiLineString"] | components["schemas"]["Polygon"] | components["schemas"]["MultiPolygon"] | components["schemas"]["GeometryCollection"];
         };
+        /**
+         * PauseReason
+         * @enum {string}
+         */
+        PauseReason: "photo_question_open" | "host" | "rest_period";
         /**
          * PhaseChangedEvent
          * @description Game transitioned from hiding to seeking — both channels.
@@ -2709,6 +2787,28 @@ export interface components {
              * @default false
              */
             hiding_zone_expanded: boolean;
+            /**
+             * Paused
+             * @description Whether the game clock is currently paused.
+             */
+            paused: boolean;
+            /**
+             * Paused At
+             * @description Wall-clock instant the current pause began.
+             * @default null
+             */
+            paused_at: string | null;
+            /**
+             * Active Pause Reasons
+             * @description Reasons currently holding the pause; empty when not paused.
+             */
+            active_pause_reasons?: components["schemas"]["PauseReason"][];
+            /**
+             * Seeking Pause Accumulated Sec
+             * @description Total seconds of pause time during the seeking phase, for client-side elapsed math.
+             * @default 0
+             */
+            seeking_pause_accumulated_sec: number;
         };
         /**
          * SeekerQuestionAnsweredEvent
