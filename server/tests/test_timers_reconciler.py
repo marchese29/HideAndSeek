@@ -9,6 +9,7 @@ from shapely.geometry import Point
 from sqlalchemy.orm import Session
 
 from hideandseek_core.db import _session_var
+from hideandseek_core.logic.endgame import FOUND_CLAIM_TIMEOUT_SECONDS
 from hideandseek_core.logic.timers import (
     find_overdue_answerable_questions,
     find_overdue_found_claims,
@@ -39,6 +40,7 @@ def test_overdue_hiding_game_returned(session: Session):
         status=GameStatus.hiding,
         hiding_time_min=1,
         hiding_started_at=datetime.now(UTC) - timedelta(minutes=2),
+        hiding_ends_at=datetime.now(UTC) - timedelta(minutes=1),
     )
     session.commit()
     assert game.id in find_overdue_hiding_games()
@@ -50,6 +52,7 @@ def test_hiding_game_not_yet_due_skipped(session: Session):
         status=GameStatus.hiding,
         hiding_time_min=10,
         hiding_started_at=datetime.now(UTC),
+        hiding_ends_at=datetime.now(UTC) + timedelta(minutes=10),
     )
     session.commit()
     assert game.id not in find_overdue_hiding_games()
@@ -63,6 +66,7 @@ def test_finished_game_skipped(session: Session):
         join_code=None,
         hiding_time_min=1,
         hiding_started_at=datetime.now(UTC) - timedelta(minutes=5),
+        hiding_ends_at=datetime.now(UTC) - timedelta(minutes=4),
     )
     session.commit()
     assert game.id not in find_overdue_hiding_games()
@@ -74,6 +78,7 @@ def test_seeking_game_skipped(session: Session):
         status=GameStatus.seeking,
         hiding_time_min=1,
         hiding_started_at=datetime.now(UTC) - timedelta(minutes=5),
+        hiding_ends_at=datetime.now(UTC) - timedelta(minutes=4),
     )
     session.commit()
     assert game.id not in find_overdue_hiding_games()
@@ -95,6 +100,7 @@ def _make_answerable_question(
         asked_by=seeker.id,
         seeker_location_start=Point(0.0, 0.0),
         answerable_at=answerable_at,
+        deadline_at=answerable_at + timedelta(minutes=1),
     )
     session.add(question)
     session.flush()
@@ -147,20 +153,24 @@ def test_already_answered_question_skipped(session: Session):
 
 
 def test_overdue_found_claim_returned(session: Session):
+    found_claim_at = datetime.now(UTC) - timedelta(seconds=121)
     game = create_game(
         session,
         status=GameStatus.seeking,
-        found_claim_at=datetime.now(UTC) - timedelta(seconds=121),
+        found_claim_at=found_claim_at,
+        found_claim_expires_at=found_claim_at + timedelta(seconds=FOUND_CLAIM_TIMEOUT_SECONDS),
     )
     session.commit()
     assert game.id in find_overdue_found_claims()
 
 
 def test_fresh_found_claim_skipped(session: Session):
+    found_claim_at = datetime.now(UTC)
     game = create_game(
         session,
         status=GameStatus.seeking,
-        found_claim_at=datetime.now(UTC),
+        found_claim_at=found_claim_at,
+        found_claim_expires_at=found_claim_at + timedelta(seconds=FOUND_CLAIM_TIMEOUT_SECONDS),
     )
     session.commit()
     assert game.id not in find_overdue_found_claims()
@@ -174,11 +184,13 @@ def test_no_found_claim_skipped(session: Session):
 
 def test_found_claim_on_finished_game_skipped(session: Session):
     """Hider confirm/reject clears found_claim_at, but even if it didn't, status gate skips."""
+    found_claim_at = datetime.now(UTC) - timedelta(seconds=300)
     game = create_game(
         session,
         status=GameStatus.finished,
         join_code=None,
-        found_claim_at=datetime.now(UTC) - timedelta(seconds=300),
+        found_claim_at=found_claim_at,
+        found_claim_expires_at=found_claim_at + timedelta(seconds=FOUND_CLAIM_TIMEOUT_SECONDS),
     )
     session.commit()
     assert game.id not in find_overdue_found_claims()

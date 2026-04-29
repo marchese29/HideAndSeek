@@ -5,13 +5,15 @@ Polls Postgres for overdue game timers and enqueues Celery tasks. Replaces Celer
 ## Why a separate process
 
 Celery's Redis broker hands ETA tasks to a worker immediately; the worker holds the timer in memory until fire-time. A worker crash loses the timer. Authoritative fire-times already live in Postgres:
-- `game.hiding_started_at + hiding_time_min` → hiding→seeking transition
-- `question.answerable_at + base_question_delay_min` → auto-answer deadline
-- `game.found_claim_at + 120s` → found-claim expiry
+- `game.hiding_ends_at` → hiding→seeking transition (paused games skipped via `Game.paused_at IS NULL`)
+- `question.deadline_at` → auto-answer deadline (paused games skipped via `Game.paused_at IS NULL`)
+- `game.found_claim_expires_at` → found-claim expiry (paused games skipped via `Game.paused_at IS NULL`)
 - `question.answerable_at + effective_photo_submit_min` → photo submit window (task `photo_submit:{qid}`)
 - `photo_params.submitted_at + effective_photo_review_sec` → photo review window (task `photo_review:{qid}`)
 
 A tiny poller that checks these columns every second and enqueues the existing Celery tasks is resilient: a restart means timers fire N seconds late, never lost. Celery stays as a worker pool — it just stops being the scheduler.
+
+The three non-photo queries read directly from future-deadline columns; pause/resume mutates those columns transactionally (deadlines shift, then `paused_at` clears) so the reconciler sees either "still paused → skip" or "unpaused with already-shifted deadlines" — never a torn middle. The two photo queries still compute deadlines in Python from start anchors + per-game settings; they migrate to dedicated columns in z32.5/m8r.nah, at which point they'll gain the same `paused_at IS NULL` filter.
 
 ## Commands
 

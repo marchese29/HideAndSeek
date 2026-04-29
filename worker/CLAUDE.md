@@ -38,7 +38,7 @@ src/hideandseek_worker/
 
 All tasks are idempotent: they re-check preconditions inside `session_scope()` and no-op if the state has already moved on.
 
-**Scheduling**: these tasks are **not** scheduled with `apply_async(countdown=...)`. They are enqueued for immediate execution by the `hideandseek-reconciler` process, which polls Postgres every second for overdue fire-times (`Game.hiding_started_at`, `Question.answerable_at`, `Game.found_claim_at`). Celery's role is strictly worker pool — the scheduler lives in its own process. See `reconciler/CLAUDE.md`.
+**Scheduling**: these tasks are **not** scheduled with `apply_async(countdown=...)`. They are enqueued for immediate execution by the `hideandseek-reconciler` process, which polls Postgres every second for overdue fire-times. The three non-photo deadlines live on dedicated future-deadline columns (`Game.hiding_ends_at`, `Question.deadline_at`, `Game.found_claim_expires_at`); the reconciler filters `Game.paused_at IS NULL` so paused games are skipped naturally. The two photo deadlines still resolve from start anchors (`Question.answerable_at` for submit, `PhotoQuestionParams.submitted_at` for review) plus per-game settings until z32.5/m8r.nah introduces dedicated columns. Celery's role is strictly worker pool — the scheduler lives in its own process. See `reconciler/CLAUDE.md`.
 
 **Deterministic task IDs** still used (for log-grep observability), but no longer for revocation: the reconciler's query filters naturally skip rows whose state has advanced, so cancellation falls out of state transitions instead of explicit `revoke()` calls.
 

@@ -5,6 +5,12 @@ has passed and whose state is still in the pre-fire status. The reconciler
 enqueues the existing Celery tasks for these IDs; task bodies re-check state
 inside their own transaction, so a row advancing between query and task
 execution is safely a no-op.
+
+The three non-photo queries read from the future-deadline columns
+(`Game.hiding_ends_at`, `Question.deadline_at`, `Game.found_claim_expires_at`)
+and skip paused games via `Game.paused_at IS NULL`. The two photo queries
+still resolve their windows in Python from start anchors + per-game settings;
+they migrate to dedicated deadline columns in m8r.nah / z32.5.
 """
 
 from __future__ import annotations
@@ -17,7 +23,6 @@ from sqlalchemy.orm import selectinload
 
 from hideandseek_core.conventions import effective_photo_review_sec, effective_photo_submit_min
 from hideandseek_core.db import get_session
-from hideandseek_core.logic.endgame import FOUND_CLAIM_TIMEOUT_SECONDS
 from hideandseek_models.game import Game
 from hideandseek_models.question import Question
 from hideandseek_models.question_params import PhotoQuestionParams
@@ -27,14 +32,13 @@ from hideandseek_models.types import GameStatus, QuestionStatus, QuestionType
 def find_overdue_hiding_games() -> list[uuid.UUID]:
     """Games whose hiding→seeking deadline has passed and are still in hiding."""
     session = get_session()
-    # Deadline = hiding_started_at + (hiding_time_min * 1 minute)
-    deadline = Game.hiding_started_at + func.make_interval(0, 0, 0, 0, 0, Game.hiding_time_min)
     return list(
         session.scalars(
             select(Game.id).where(
                 Game.status == GameStatus.hiding,
-                Game.hiding_started_at.is_not(None),
-                deadline <= func.now(),
+                Game.hiding_ends_at.is_not(None),
+                Game.hiding_ends_at <= func.now(),
+                Game.paused_at.is_(None),
             )
         )
     )
@@ -43,15 +47,12 @@ def find_overdue_hiding_games() -> list[uuid.UUID]:
 def find_overdue_answerable_questions() -> list[uuid.UUID]:
     """Answerable questions whose auto-answer deadline has passed.
 
-    Deadline = question.answerable_at + (game.base_question_delay_min * 1 minute).
     Filters by Game.status == seeking so that ending or dissolving a game with
     an active answerable question naturally cancels its auto-answer (instead
-    of requiring an explicit revoke).
+    of requiring an explicit revoke). Paused games are skipped — resume shifts
+    Question.deadline_at forward before clearing Game.paused_at.
     """
     session = get_session()
-    deadline = Question.answerable_at + func.make_interval(
-        0, 0, 0, 0, 0, Game.base_question_delay_min
-    )
     return list(
         session.scalars(
             select(Question.id)
@@ -60,8 +61,9 @@ def find_overdue_answerable_questions() -> list[uuid.UUID]:
                 Game.status == GameStatus.seeking,
                 Question.status == QuestionStatus.answerable,
                 Question.question_type != QuestionType.photo,
-                Question.answerable_at.is_not(None),
-                deadline <= func.now(),
+                Question.deadline_at.is_not(None),
+                Question.deadline_at <= func.now(),
+                Game.paused_at.is_(None),
             )
         )
     )
@@ -131,15 +133,13 @@ def find_overdue_photo_reviews() -> list[uuid.UUID]:
 def find_overdue_found_claims() -> list[uuid.UUID]:
     """Games whose 2-minute found-claim window has elapsed with no resolution."""
     session = get_session()
-    deadline = Game.found_claim_at + func.make_interval(
-        0, 0, 0, 0, 0, 0, FOUND_CLAIM_TIMEOUT_SECONDS
-    )
     return list(
         session.scalars(
             select(Game.id).where(
                 Game.status.in_([GameStatus.hiding, GameStatus.seeking]),
-                Game.found_claim_at.is_not(None),
-                deadline <= func.now(),
+                Game.found_claim_expires_at.is_not(None),
+                Game.found_claim_expires_at <= func.now(),
+                Game.paused_at.is_(None),
             )
         )
     )
