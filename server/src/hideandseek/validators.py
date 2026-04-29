@@ -163,7 +163,7 @@ def validate_found_claim(game: Game, seeker: Player) -> None:
         raise HTTPException(status_code=409, detail='Found claims are only allowed during seeking.')
     if game.hider_station is None:
         raise HTTPException(status_code=409, detail='No station has been elected yet.')
-    if game.found_claim_at is not None:
+    if game.found_claim_expires_at is not None:
         raise HTTPException(status_code=409, detail='A found claim is already pending.')
     if not seeker_inside_hiding_zone(game, seeker):
         raise HTTPException(
@@ -175,5 +175,5 @@ def validate_found_decision(game: Game) -> None:
     """Hider-side confirm/reject: game still seeking with a live pending claim."""
     if not game.status.is_seeking:
         raise HTTPException(status_code=409, detail='No active found claim.')
-    if game.found_claim_at is None:
+    if game.found_claim_expires_at is None:
         raise HTTPException(status_code=409, detail='No pending found claim.')

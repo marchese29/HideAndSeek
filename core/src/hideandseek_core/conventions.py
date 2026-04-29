@@ -179,7 +179,7 @@ def effective_question_deadline(question: Question, game: Game) -> datetime | No
         and question.status == QuestionStatus.answerable
     ):
         return question.answerable_at + timedelta(minutes=effective_photo_submit_min(game))
-    return question.answerable_at + timedelta(minutes=game.base_question_delay_min)
+    return question.deadline_at
 
 
 def get_default_hiding_zone_radius(convention: DistanceConvention, size: MapSize) -> float:

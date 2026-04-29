@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from shapely.geometry.base import BaseGeometry
@@ -87,7 +87,9 @@ def seeker_inside_hiding_zone(game: Game, seeker: Player) -> bool:
 
 def record_found_claim(game: Game, seeker: Player) -> None:
     """Mark a pending found claim. Caller validates preconditions."""
-    game.found_claim_at = datetime.now(UTC)
+    found_claim_at = datetime.now(UTC)
+    game.found_claim_at = found_claim_at
+    game.found_claim_expires_at = found_claim_at + timedelta(seconds=FOUND_CLAIM_TIMEOUT_SECONDS)
     game.found_claim_player_id = seeker.id
     logger.info(
         'found_claim_recorded',
@@ -100,6 +102,7 @@ def confirm_found_claim(game: Game) -> None:
     """Finish the game with reason=found. Clears claim state."""
     seeker_id = game.found_claim_player_id
     game.found_claim_at = None
+    game.found_claim_expires_at = None
     game.found_claim_player_id = None
     game.end_reason = EndReason.found
     update_game_status(game, GameStatus.finished)
@@ -119,6 +122,7 @@ def reject_found_claim(game: Game) -> None:
     """Dismiss the pending claim. No game status change."""
     seeker_id = game.found_claim_player_id
     game.found_claim_at = None
+    game.found_claim_expires_at = None
     game.found_claim_player_id = None
     logger.info(
         'found_claim_rejected',
@@ -136,6 +140,7 @@ def expire_found_claim(game: Game) -> bool:
     if game.found_claim_at is None or not game.status.is_active:
         return False
     game.found_claim_at = None
+    game.found_claim_expires_at = None
     game.found_claim_player_id = None
     logger.info('found_claim_expired', game_id=str(game.id))
     return True

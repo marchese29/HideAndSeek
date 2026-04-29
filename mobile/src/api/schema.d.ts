@@ -1579,6 +1579,18 @@ export interface components {
              * @default 0
              */
             seeking_pause_accumulated_sec: number;
+            /**
+             * Hiding Ends At
+             * @description Wall-clock deadline for the hiding phase; shifts forward on pause/resume.
+             * @default null
+             */
+            hiding_ends_at: string | null;
+            /**
+             * Found Claim Expires At
+             * @description Wall-clock deadline at which a pending found claim auto-dismisses.
+             * @default null
+             */
+            found_claim_expires_at: string | null;
         };
         /**
          * HiderQuestionAnsweredEvent
@@ -2809,6 +2821,18 @@ export interface components {
              * @default 0
              */
             seeking_pause_accumulated_sec: number;
+            /**
+             * Hiding Ends At
+             * @description Wall-clock deadline for the hiding phase; shifts forward on pause/resume.
+             * @default null
+             */
+            hiding_ends_at: string | null;
+            /**
+             * Found Claim Expires At
+             * @description Wall-clock deadline at which a pending found claim auto-dismisses.
+             * @default null
+             */
+            found_claim_expires_at: string | null;
         };
         /**
          * SeekerQuestionAnsweredEvent

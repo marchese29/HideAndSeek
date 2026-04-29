@@ -253,6 +253,8 @@ def build_hider_game_state(game: Game, player: Player) -> HiderGameStateResponse
         paused_at=game.paused_at,
         active_pause_reasons=list(game.active_pause_reasons),
         seeking_pause_accumulated_sec=game.seeking_pause_accumulated_sec,
+        hiding_ends_at=game.hiding_ends_at,
+        found_claim_expires_at=game.found_claim_expires_at,
     )
 
 
@@ -355,4 +357,6 @@ def build_seeker_game_state(game: Game, player: Player) -> SeekerGameStateRespon
         paused_at=game.paused_at,
         active_pause_reasons=list(game.active_pause_reasons),
         seeking_pause_accumulated_sec=game.seeking_pause_accumulated_sec,
+        hiding_ends_at=game.hiding_ends_at,
+        found_claim_expires_at=game.found_claim_expires_at,
     )

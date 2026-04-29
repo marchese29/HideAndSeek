@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from shapely import Point
@@ -51,6 +51,7 @@ def ask_radar(
     """Create a radar question: use slot, persist. Immediately answerable."""
     slot.ask_count += 1
 
+    answerable_at = datetime.now(UTC)
     question = register(
         Question(
             game=game,
@@ -61,7 +62,8 @@ def ask_radar(
             seeker_location_start=seeker_location,
             ask_count=slot.ask_count,
             slot_index=slot.slot_index,
-            answerable_at=datetime.now(UTC),
+            answerable_at=answerable_at,
+            deadline_at=answerable_at + timedelta(minutes=game.base_question_delay_min),
             radar_params=RadarParams(radius=slot.distance or custom_distance),
         )
     )
@@ -119,6 +121,7 @@ def ask_matching(
 
     slot.ask_count += 1
 
+    answerable_at = datetime.now(UTC)
     question = register(
         Question(
             game=game,
@@ -129,7 +132,8 @@ def ask_matching(
             seeker_location_start=seeker_location,
             ask_count=slot.ask_count,
             slot_index=slot.slot_index,
-            answerable_at=datetime.now(UTC),
+            answerable_at=answerable_at,
+            deadline_at=answerable_at + timedelta(minutes=game.base_question_delay_min),
             feature_params=FeatureQuestionParams(
                 category=slot.category,
                 feature_class=slot.feature_class,
@@ -162,6 +166,7 @@ def ask_measuring(
 
     slot.ask_count += 1
 
+    answerable_at = datetime.now(UTC)
     question = register(
         Question(
             game=game,
@@ -172,7 +177,8 @@ def ask_measuring(
             seeker_location_start=seeker_location,
             ask_count=slot.ask_count,
             slot_index=slot.slot_index,
-            answerable_at=datetime.now(UTC),
+            answerable_at=answerable_at,
+            deadline_at=answerable_at + timedelta(minutes=game.base_question_delay_min),
             feature_params=FeatureQuestionParams(
                 category=slot.category,
                 feature_class=slot.feature_class,
@@ -214,6 +220,7 @@ def ask_tentacles(
 
     slot.ask_count += 1
 
+    answerable_at = datetime.now(UTC)
     question = register(
         Question(
             game=game,
@@ -224,7 +231,8 @@ def ask_tentacles(
             seeker_location_start=seeker_location,
             ask_count=slot.ask_count,
             slot_index=slot.slot_index,
-            answerable_at=datetime.now(UTC),
+            answerable_at=answerable_at,
+            deadline_at=answerable_at + timedelta(minutes=game.base_question_delay_min),
             tentacle_params=TentacleQuestionParams(
                 category=slot.category,
                 poi_ids=[f.stable_id for f in features],
@@ -266,11 +274,13 @@ def ask_photo(
     return question
 
 
-def lock_in_thermometer(question: Question, seeker_end: Point) -> None:
+def lock_in_thermometer(question: Question, seeker_end: Point, game: Game) -> None:
     """Lock in the seeker's end position for a thermometer question."""
+    answerable_at = datetime.now(UTC)
     question.seeker_location_end = seeker_end
     question.status = QuestionStatus.answerable
-    question.answerable_at = datetime.now(UTC)
+    question.answerable_at = answerable_at
+    question.deadline_at = answerable_at + timedelta(minutes=game.base_question_delay_min)
     logger.info(
         'thermometer_locked_in',
         game_id=str(question.game_id),

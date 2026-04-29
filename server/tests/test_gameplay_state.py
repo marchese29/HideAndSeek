@@ -126,6 +126,7 @@ class TestBuildHiderGameState:
             status=QuestionStatus.answerable,
             asked_by=seeker.id,
             answerable_at=answerable_at,
+            deadline_at=answerable_at + timedelta(minutes=game.base_question_delay_min),
             slot_index=2,
         )
 
@@ -588,6 +589,7 @@ class TestQuestionAskedEvent:
             sequence=3,
             ask_count=2,
             answerable_at=now,
+            deadline_at=now + timedelta(minutes=game.base_question_delay_min),
         )
 
         event = QuestionAskedEvent.from_question(q, game=game)

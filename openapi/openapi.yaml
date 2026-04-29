@@ -2879,6 +2879,23 @@ components:
             elapsed math.
           title: Seeking Pause Accumulated Sec
           type: integer
+        hiding_ends_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Wall-clock deadline for the hiding phase; shifts forward on
+            pause/resume.
+          title: Hiding Ends At
+        found_claim_expires_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Wall-clock deadline at which a pending found claim auto-dismisses.
+          title: Found Claim Expires At
       required:
       - game_id
       - phase
@@ -4622,6 +4639,23 @@ components:
             elapsed math.
           title: Seeking Pause Accumulated Sec
           type: integer
+        hiding_ends_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Wall-clock deadline for the hiding phase; shifts forward on
+            pause/resume.
+          title: Hiding Ends At
+        found_claim_expires_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Wall-clock deadline at which a pending found claim auto-dismisses.
+          title: Found Claim Expires At
       required:
       - game_id
       - phase

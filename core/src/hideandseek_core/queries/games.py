@@ -7,7 +7,7 @@ import random
 import secrets
 import string
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -138,7 +138,9 @@ def update_game_status(game: Game, status: GameStatus) -> Game:
     session = get_session()
     game.status = status
     if status.is_hiding:
-        game.hiding_started_at = datetime.now(UTC)
+        hiding_started_at = datetime.now(UTC)
+        game.hiding_started_at = hiding_started_at
+        game.hiding_ends_at = hiding_started_at + timedelta(minutes=game.hiding_time_min)
         game.join_code = None
     elif status.is_seeking:
         game.seeking_started_at = datetime.now(UTC)

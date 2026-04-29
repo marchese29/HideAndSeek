@@ -804,6 +804,14 @@ class HiderGameStateResponse(SSEExposed, BaseModel):
             'Total seconds of pause time during the seeking phase, for client-side elapsed math.'
         ),
     )
+    hiding_ends_at: datetime | None = Field(
+        default=None,
+        description='Wall-clock deadline for the hiding phase; shifts forward on pause/resume.',
+    )
+    found_claim_expires_at: datetime | None = Field(
+        default=None,
+        description='Wall-clock deadline at which a pending found claim auto-dismisses.',
+    )
 
 
 class SeekerGameStateResponse(SSEExposed, BaseModel):
@@ -845,4 +853,12 @@ class SeekerGameStateResponse(SSEExposed, BaseModel):
         description=(
             'Total seconds of pause time during the seeking phase, for client-side elapsed math.'
         ),
+    )
+    hiding_ends_at: datetime | None = Field(
+        default=None,
+        description='Wall-clock deadline for the hiding phase; shifts forward on pause/resume.',
+    )
+    found_claim_expires_at: datetime | None = Field(
+        default=None,
+        description='Wall-clock deadline at which a pending found claim auto-dismisses.',
     )

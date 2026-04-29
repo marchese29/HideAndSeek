@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -26,7 +25,6 @@ from hideandseek_core.broadcast.events import (
 )
 from hideandseek_core.db import session_dependency
 from hideandseek_core.logic.endgame import (
-    FOUND_CLAIM_TIMEOUT_SECONDS,
     confirm_found_claim,
     get_endgame_exclusions,
     record_found_claim,
@@ -69,8 +67,8 @@ def claim_found(
     """Seeker claims to have found the hiders. Opens a 2-minute hider decision window."""
     validate_found_claim(game, seeker)
     record_found_claim(game, seeker)
-    assert game.found_claim_at is not None  # just set by record_found_claim
-    deadline = game.found_claim_at + timedelta(seconds=FOUND_CLAIM_TIMEOUT_SECONDS)
+    assert game.found_claim_expires_at is not None  # just set by record_found_claim
+    deadline = game.found_claim_expires_at
 
     emit_gameplay(
         FoundClaimEvent(game_id=game.id, seeker_player_id=seeker.id, deadline_utc=deadline)

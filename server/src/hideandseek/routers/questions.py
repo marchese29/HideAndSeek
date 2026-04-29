@@ -415,7 +415,7 @@ def lock_in_question(
     """Lock in the seeker's end position for a thermometer question."""
     question, seeker_end = validate_lock_in_request(question_id, game, player)
 
-    lock_in_thermometer(question, seeker_end)
+    lock_in_thermometer(question, seeker_end, game)
 
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
