@@ -1,6 +1,10 @@
+import type { MaterialCommunityIcons } from '@expo/vector-icons';
+
 import type { components } from '@/api/schema';
 
 export type PhotoSubject = components['schemas']['PhotoSubject'];
+
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 export const PHOTO_SUBJECT_LABELS: Record<PhotoSubject, string> = {
   tree: 'A tree',
@@ -43,6 +47,32 @@ export const PHOTO_SUBJECT_SHORT_LABELS: Record<PhotoSubject, string> = {
   biggest_body_of_water: 'Body of water',
   five_buildings: 'Five buildings',
 };
+
+export const PHOTO_SUBJECT_ICONS: Record<PhotoSubject, IconName> = {
+  tree: 'tree',
+  sky: 'weather-sunny',
+  selfie: 'camera-front',
+  widest_street: 'road',
+  tallest_structure_in_sightline: 'tower-fire',
+  any_building_from_station: 'office-building',
+  tallest_building_from_station: 'office-building',
+  nearest_street_trace: 'map-marker-path',
+  two_buildings: 'office-building-outline',
+  restaurant_interior: 'silverware-fork-knife',
+  train_platform: 'train',
+  park: 'pine-tree',
+  grocery_aisle: 'cart',
+  place_of_worship: 'church',
+  half_mile_streets_traced: 'map-marker-distance',
+  tallest_mountain_from_station: 'image-filter-hdr',
+  biggest_body_of_water: 'water',
+  five_buildings: 'domain',
+};
+
+export function photoSubjectIcon(subject: string | null | undefined): IconName {
+  if (!subject) return 'camera';
+  return (PHOTO_SUBJECT_ICONS as Record<string, IconName>)[subject] ?? 'camera';
+}
 
 export function photoSubjectLabel(subject: string | null | undefined): string {
   if (!subject) return 'Photo';

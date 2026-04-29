@@ -7,8 +7,10 @@ import { expandHidingZone } from '@/api/powers';
 import { useQuestionSelection } from '@/hooks/useQuestionSelection';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { GameInfo, HiderGameState, SeekerGameState, StopResponse } from '@/types/gameplay';
+import type { PhotoSubject } from '@/utils/photoSubjects';
 
 import { HiderQuestionHistoryModal } from '../HiderQuestionHistoryModal';
+import { QuestionPickerModal } from '../question-picker-modal';
 import { SeekerQuestionHistoryModal } from '../SeekerQuestionHistoryModal';
 import { BeltActions } from './BeltActions';
 import { BeltUtilities } from './BeltUtilities';
@@ -60,6 +62,8 @@ export const UtilityBelt = memo(function UtilityBelt({
 
   const [historyVisible, setHistoryVisible] = useState(false);
   const [seekerHistoryVisible, setSeekerHistoryVisible] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerSubject, setPickerSubject] = useState<PhotoSubject | null>(null);
 
   const endgameView = useGameplayStore((s) => s.endgameView);
 
@@ -201,7 +205,13 @@ export const UtilityBelt = memo(function UtilityBelt({
     if (selection.state.step === 'type') {
       return (
         <QuestionTypeBar
-          onSelectType={selection.selectType}
+          onSelectType={(type) => {
+            if (type === 'photo') {
+              setPickerVisible(true);
+            } else {
+              selection.selectType(type);
+            }
+          }}
           selectedType={selectedType}
           disabled={disabled}
           availableTypes={availableTypes}
@@ -332,6 +342,18 @@ export const UtilityBelt = memo(function UtilityBelt({
           questions={(state as SeekerGameState).question_history ?? []}
           gameInfo={gameInfo}
           gameId={gameId}
+        />
+      )}
+
+      {role === 'seeker' && (
+        <QuestionPickerModal
+          visible={pickerVisible}
+          questionType="photo"
+          gameId={gameId}
+          inventory={seekerState?.inventory ?? EMPTY_INVENTORY}
+          selectedSubject={pickerSubject}
+          onSelectSubject={setPickerSubject}
+          onClose={() => setPickerVisible(false)}
         />
       )}
     </View>
