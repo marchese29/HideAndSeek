@@ -455,6 +455,83 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/pause:
+    post:
+      tags:
+      - games
+      summary: Pause Game
+      description: Host pauses the game clock. Host-only; allowed during hiding or
+        seeking.
+      operationId: pause_game_games__game_id__pause_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /games/{game_id}/resume:
+    post:
+      tags:
+      - games
+      summary: Resume Game
+      description: "Host releases the host pause reason. Host-only; allowed during\
+        \ hiding or seeking.\n\nOther pause reasons (e.g. photo_question_open) remain\
+        \ in effect \u2014 the\nclock stays paused until every reason is released."
+      operationId: resume_game_games__game_id__resume_post
+      parameters:
+      - name: game_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Game Id
+      - name: x-player-id
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: X-Player-Id
+      - name: x-player-secret
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Player-Secret
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /games/{game_id}/hider-station:
     post:
       tags:

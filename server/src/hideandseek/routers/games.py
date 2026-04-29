@@ -67,6 +67,8 @@ from hideandseek_core.logic.endgame import expand_hiding_zone as logic_expand_hi
 from hideandseek_core.logic.lobby import create_game_with_host, swap_color
 from hideandseek_core.logic.lobby import join_game as lobby_join_game
 from hideandseek_core.logic.lobby import remove_player as lobby_remove_player
+from hideandseek_core.logic.pause import pause_game as logic_pause_game
+from hideandseek_core.logic.pause import resume_game as logic_resume_game
 from hideandseek_core.logic.push_registration import register_push_endpoint
 from hideandseek_core.logic.station import validate_station_election
 from hideandseek_core.queries.effective_map import get_effective_map_data
@@ -86,6 +88,7 @@ from hideandseek_models.types import (
     EndReason,
     GameStatus,
     MapSize,
+    PauseReason,
     PlayerRole,
     PushEventType,
     StationElectionStatus,
@@ -357,6 +360,52 @@ def end_game(
         str(game.id),
         PushEventType.game_ended,
         alert='The host has ended the game.',
+    )
+
+
+@router.post('/{game_id}/pause', status_code=204)
+def pause_game(
+    game: Game = Depends(get_game),
+    auth_player_id: uuid.UUID = Depends(get_authenticated_player_id),
+) -> None:
+    """Host pauses the game clock. Host-only; allowed during hiding or seeking."""
+    if auth_player_id != game.host_player_id:
+        raise HTTPException(status_code=403, detail='Only the host can pause the game.')
+    if not game.status.is_active:
+        raise HTTPException(status_code=409, detail=f'Cannot pause game in {game.status} state.')
+    if PauseReason.host in game.active_pause_reasons:
+        raise HTTPException(status_code=409, detail='Game is already host-paused.')
+
+    logic_pause_game(game, PauseReason.host)
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.game_timer_paused,
+        alert='The host has paused the game.',
+    )
+
+
+@router.post('/{game_id}/resume', status_code=204)
+def resume_game(
+    game: Game = Depends(get_game),
+    auth_player_id: uuid.UUID = Depends(get_authenticated_player_id),
+) -> None:
+    """Host releases the host pause reason. Host-only; allowed during hiding or seeking.
+
+    Other pause reasons (e.g. photo_question_open) remain in effect — the
+    clock stays paused until every reason is released.
+    """
+    if auth_player_id != game.host_player_id:
+        raise HTTPException(status_code=403, detail='Only the host can resume the game.')
+    if not game.status.is_active:
+        raise HTTPException(status_code=409, detail=f'Cannot resume game in {game.status} state.')
+    if PauseReason.host not in game.active_pause_reasons:
+        raise HTTPException(status_code=409, detail='Game is not host-paused.')
+
+    logic_resume_game(game, PauseReason.host)
+    send_push.delay(  # type: ignore[attr-defined]
+        str(game.id),
+        PushEventType.game_timer_resumed,
+        alert='The host has resumed the game.',
     )
 
 

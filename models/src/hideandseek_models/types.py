@@ -392,6 +392,8 @@ class PushEventType(StrEnum):
     found_claim_expired = 'found_claim_expired'
     photo_submitted = 'photo_submitted'
     photo_rejected = 'photo_rejected'
+    game_timer_paused = 'game_timer_paused'
+    game_timer_resumed = 'game_timer_resumed'
 
 
 # ── Value objects (stored as JSON columns) ─────────────────────────────────────

@@ -228,6 +228,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/games/{game_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause Game
+         * @description Host pauses the game clock. Host-only; allowed during hiding or seeking.
+         */
+        post: operations["pause_game_games__game_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/games/{game_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Game
+         * @description Host releases the host pause reason. Host-only; allowed during hiding or seeking.
+         *
+         *     Other pause reasons (e.g. photo_question_open) remain in effect — the
+         *     clock stays paused until every reason is released.
+         */
+        post: operations["resume_game_games__game_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games/{game_id}/hider-station": {
         parameters: {
             query?: never;
@@ -3528,6 +3571,70 @@ export interface operations {
         };
     };
     end_game_games__game_id__end_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_game_games__game_id__pause_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-player-id": string;
+                "x-player-secret": string;
+            };
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_game_games__game_id__resume_post: {
         parameters: {
             query?: never;
             header: {
