@@ -17,7 +17,13 @@ from hideandseek_core.logic.timers import (
 )
 from hideandseek_models.question import Question
 from hideandseek_models.question_params import RadarParams
-from hideandseek_models.types import GameStatus, PlayerRole, QuestionStatus, QuestionType
+from hideandseek_models.types import (
+    GameStatus,
+    PauseReason,
+    PlayerRole,
+    QuestionStatus,
+    QuestionType,
+)
 from tests.conftest import create_game, create_player
 
 
@@ -191,6 +197,50 @@ def test_found_claim_on_finished_game_skipped(session: Session):
         join_code=None,
         found_claim_at=found_claim_at,
         found_claim_expires_at=found_claim_at + timedelta(seconds=FOUND_CLAIM_TIMEOUT_SECONDS),
+    )
+    session.commit()
+    assert game.id not in find_overdue_found_claims()
+
+
+# ── Paused games are filtered out of all three queries ───────────────────────
+
+
+def test_paused_overdue_hiding_game_skipped(session: Session):
+    game = create_game(
+        session,
+        status=GameStatus.hiding,
+        hiding_time_min=1,
+        hiding_started_at=datetime.now(UTC) - timedelta(minutes=2),
+        hiding_ends_at=datetime.now(UTC) - timedelta(minutes=1),
+        paused_at=datetime.now(UTC) - timedelta(minutes=1),
+        active_pause_reasons=[PauseReason.host.value],
+    )
+    session.commit()
+    assert game.id not in find_overdue_hiding_games()
+
+
+def test_paused_overdue_answerable_question_skipped(session: Session):
+    question = _make_answerable_question(
+        session,
+        game_status=GameStatus.seeking,
+        answerable_at=datetime.now(UTC) - timedelta(minutes=2),
+    )
+    game = question.game
+    game.paused_at = datetime.now(UTC) - timedelta(minutes=1)
+    game.active_pause_reasons = [PauseReason.host.value]
+    session.commit()
+    assert question.id not in find_overdue_answerable_questions()
+
+
+def test_paused_overdue_found_claim_skipped(session: Session):
+    found_claim_at = datetime.now(UTC) - timedelta(seconds=121)
+    game = create_game(
+        session,
+        status=GameStatus.seeking,
+        found_claim_at=found_claim_at,
+        found_claim_expires_at=found_claim_at + timedelta(seconds=FOUND_CLAIM_TIMEOUT_SECONDS),
+        paused_at=datetime.now(UTC) - timedelta(minutes=1),
+        active_pause_reasons=[PauseReason.host.value],
     )
     session.commit()
     assert game.id not in find_overdue_found_claims()
