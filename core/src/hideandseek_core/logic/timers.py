@@ -90,7 +90,7 @@ def find_overdue_photo_submissions() -> list[uuid.UUID]:
             )
         )
     )
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.now(UTC)
     overdue: list[uuid.UUID] = []
     for question, game in rows:
         assert question.answerable_at is not None
@@ -120,7 +120,7 @@ def find_overdue_photo_reviews() -> list[uuid.UUID]:
             )
         )
     )
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.now(UTC)
     overdue: list[uuid.UUID] = []
     for question, params, game in rows:
         assert params.submitted_at is not None

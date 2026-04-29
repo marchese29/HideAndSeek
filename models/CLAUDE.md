@@ -49,6 +49,7 @@ Minimal — only what the ORM models need:
 - `from __future__ import annotations` at top of every module
 - Cross-model references use `TYPE_CHECKING` imports to avoid circular dependencies
 - Enums are `StrEnum` — stored as VARCHAR via `type_annotation_map` on `Base`
+- Datetimes are `TIMESTAMP WITH TIME ZONE` — `type_annotation_map={datetime: DateTime(timezone=True)}` on `Base` makes every `Mapped[datetime]` column tz-aware on read. Schema enforces UTC; code never needs `.replace(tzinfo=None)` to compare against DB values.
 - UUIDs for all PKs except `LocationUpdate` (auto-increment int)
 - Two spatial column types: `ShapelyGeography` (distance/proximity) and `ShapelyGeometry` (topological). See `geo_types.py`.
 - `GameMap.boundary` is `MULTIPOLYGON` — always stored as `MultiPolygon` (single polygons wrapped at creation via `MultiPolygon([polygon])`).

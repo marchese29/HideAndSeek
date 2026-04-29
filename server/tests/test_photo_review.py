@@ -302,7 +302,7 @@ def test_reconciler_excludes_photo_from_answerable_query(
     assert resp.status_code == 204
     question = session.query(Question).filter_by(game_id=game.id).one()
     # Force the photo's answerable_at far back so submit window has lapsed
-    question.answerable_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+    question.answerable_at = datetime.now(UTC) - timedelta(hours=1)
     session.flush()
 
     answerable_overdue = find_overdue_answerable_questions()
@@ -320,7 +320,7 @@ def test_reconciler_finds_overdue_photo_review(
     game, _hider, _seeker, question = _setup_submitted_photo(client, session, fake_s3)
     pp = question.photo_params
     assert pp is not None
-    pp.submitted_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+    pp.submitted_at = datetime.now(UTC) - timedelta(hours=1)
     session.flush()
 
     review_overdue = find_overdue_photo_reviews()

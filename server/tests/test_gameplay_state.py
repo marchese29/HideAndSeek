@@ -136,11 +136,8 @@ class TestBuildHiderGameState:
         assert state.active_question.asked_by == seeker.id
         assert state.active_question.slot_index == 2
         assert state.active_question.question_deadline is not None
-        # DB stores UTC but may return naive — compare without timezone
-        expected_deadline = answerable_at.replace(tzinfo=None) + timedelta(
-            minutes=game.base_question_delay_min
-        )
-        actual_deadline = state.active_question.question_deadline.replace(tzinfo=None)
+        expected_deadline = answerable_at + timedelta(minutes=game.base_question_delay_min)
+        actual_deadline = state.active_question.question_deadline
         assert abs((actual_deadline - expected_deadline).total_seconds()) < 1
 
     def test_thermometer_no_deadline_before_lockin(self, session: Session) -> None:

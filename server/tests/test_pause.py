@@ -29,11 +29,6 @@ from hideandseek_models.types import (
 )
 from tests.conftest import create_game, create_player
 
-# These tests fail until HideAndSeek-7ep migrates datetime columns to timestamptz.
-# Today the columns are TIMESTAMP WITHOUT TIME ZONE, so DB-loaded datetimes are naive
-# and `now(UTC) - paused_at` raises TypeError. Un-skip when 7ep ships.
-TIMESTAMPTZ_SKIP = pytest.mark.skip(reason='blocked on HideAndSeek-7ep (timestamptz migration)')
-
 
 @pytest.fixture(autouse=True)
 def _set_session(session: Session):
@@ -162,7 +157,6 @@ def test_resume_unknown_reason_is_noop(session: Session, captured_events: list):
     assert captured_events == []
 
 
-@TIMESTAMPTZ_SKIP
 def test_resume_one_of_two_reasons_keeps_paused(session: Session, captured_events: list):
     deadline = datetime.now(UTC) + timedelta(minutes=5)
     game = _seeking_game(session, hiding_ends_at=deadline)
@@ -204,7 +198,6 @@ def _assert_close(actual: datetime | None, expected: datetime, *, tol_sec: float
     assert abs((actual - expected).total_seconds()) <= tol_sec, (actual, expected)
 
 
-@TIMESTAMPTZ_SKIP
 def test_resume_shifts_hiding_ends_at(session: Session, captured_events: list):
     original_deadline = datetime.now(UTC) + timedelta(minutes=10)
     game = _seeking_game(session, hiding_ends_at=original_deadline)
@@ -235,7 +228,6 @@ def test_resume_leaves_null_hiding_ends_at_alone(session: Session, captured_even
     assert game.hiding_ends_at is None
 
 
-@TIMESTAMPTZ_SKIP
 def test_resume_shifts_found_claim_expires_at(session: Session, captured_events: list):
     found_at = datetime.now(UTC) - timedelta(seconds=30)
     expires_at = found_at + timedelta(seconds=120)
@@ -255,7 +247,6 @@ def test_resume_shifts_found_claim_expires_at(session: Session, captured_events:
     _assert_close(game.found_claim_expires_at, expires_at + delta)
 
 
-@TIMESTAMPTZ_SKIP
 def test_resume_shifts_open_question_deadline_at(session: Session, captured_events: list):
     game = _seeking_game(session)
     original_deadline = datetime.now(UTC) + timedelta(minutes=5)
@@ -269,6 +260,7 @@ def test_resume_shifts_open_question_deadline_at(session: Session, captured_even
     resume_game(game, PauseReason.host)
     delta = datetime.now(UTC) - pause_at
 
+    session.flush()
     session.refresh(q)
     _assert_close(q.deadline_at, original_deadline + delta)
 
@@ -277,7 +269,6 @@ def test_resume_shifts_open_question_deadline_at(session: Session, captured_even
     _assert_close(resumed.question_deadlines[q.id], original_deadline + delta)
 
 
-@TIMESTAMPTZ_SKIP
 def test_resume_does_not_shift_terminal_question_deadline_at(
     session: Session, captured_events: list
 ):
@@ -328,7 +319,6 @@ def test_resume_increments_seeking_pause_accumulated_sec(session: Session, captu
 # ── Multi-reason ref-count accounting ────────────────────────────────────────
 
 
-@TIMESTAMPTZ_SKIP
 def test_double_acquire_same_reason_no_double_shift_on_release(
     session: Session, captured_events: list
 ):
@@ -348,7 +338,6 @@ def test_double_acquire_same_reason_no_double_shift_on_release(
     _assert_close(game.hiding_ends_at, original_deadline + delta)
 
 
-@TIMESTAMPTZ_SKIP
 def test_two_reasons_one_release_keeps_paused_at_set(session: Session, captured_events: list):
     original_deadline = datetime.now(UTC) + timedelta(minutes=10)
     game = _seeking_game(session, hiding_ends_at=original_deadline)
@@ -374,7 +363,6 @@ def test_two_reasons_one_release_keeps_paused_at_set(session: Session, captured_
 # ── Invariant: shifted deadlines >= now() at commit ──────────────────────────
 
 
-@TIMESTAMPTZ_SKIP
 def test_shifted_deadline_at_least_now_after_resume(session: Session, captured_events: list):
     """Per design: even a paused-while-overdue deadline shifts to >= now()."""
     pause_at = datetime.now(UTC) - timedelta(minutes=5)
