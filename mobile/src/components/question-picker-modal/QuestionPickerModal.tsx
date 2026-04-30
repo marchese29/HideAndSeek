@@ -10,17 +10,26 @@ import { useGameplayStore } from '@/stores/gameplayStore';
 import type { InventorySlotResponse } from '@/types/gameplay';
 import { type PhotoSubject, photoSubjectLabel } from '@/utils/photoSubjects';
 
+import { DistanceFamily } from './DistanceFamily';
 import { PhotoFamily } from './PhotoFamily';
 
 type QuestionType = 'radar' | 'thermometer' | 'matching' | 'measuring' | 'tentacles' | 'photo';
+
+export type PickerSelection =
+  | { kind: 'photo'; subject: PhotoSubject | null }
+  | {
+      kind: 'distance';
+      slot: InventorySlotResponse | null;
+      customValue: number | null;
+    };
 
 interface QuestionPickerModalProps {
   visible: boolean;
   questionType: QuestionType;
   gameId: string;
   inventory: InventorySlotResponse[];
-  selectedSubject: PhotoSubject | null;
-  onSelectSubject: (subject: PhotoSubject | null) => void;
+  selection: PickerSelection;
+  onSelectionChange: (selection: PickerSelection) => void;
   onClose: () => void;
 }
 
@@ -33,13 +42,18 @@ const TYPE_LABELS: Partial<Record<QuestionType, string>> = {
   tentacles: 'Tentacles',
 };
 
+const ASK_PATHS = {
+  radar: '/games/{game_id}/questions/radar',
+  thermometer: '/games/{game_id}/questions/thermometer',
+} as const;
+
 export function QuestionPickerModal({
   visible,
   questionType,
   gameId,
   inventory,
-  selectedSubject,
-  onSelectSubject,
+  selection,
+  onSelectionChange,
   onClose,
 }: QuestionPickerModalProps) {
   const insets = useSafeAreaInsets();
@@ -61,36 +75,61 @@ export function QuestionPickerModal({
     if (visible) setHasInteracted(false);
   }, [visible]);
 
-  const handleSelectSubject = (subject: PhotoSubject | null) => {
-    setHasInteracted(true);
-    onSelectSubject(subject);
-  };
+  const markInteracted = () => setHasInteracted(true);
+
+  const selectionReady =
+    selection.kind === 'photo' ? selection.subject != null : selection.slot != null;
 
   const submitEnabled =
-    !submitting &&
-    selectedSubject != null &&
-    !hasActiveQuestion &&
-    connectionStatus === 'connected';
+    !submitting && selectionReady && !hasActiveQuestion && connectionStatus === 'connected';
 
   const performSubmit = () => {
-    if (!selectedSubject) return;
-    const slot = inventory.find(
-      (s) => s.question_type === 'photo' && s.photo_subject === selectedSubject,
-    );
-    if (!slot) {
-      Alert.alert('Error', 'Selected photo subject is no longer available.');
-      return;
-    }
     const location = useGameplayStore.getState().selfLocation?.coordinates;
     if (!location) {
       Alert.alert('Location Unavailable', 'Cannot determine your position. Try again.');
       return;
     }
+
+    if (selection.kind === 'photo') {
+      if (!selection.subject) return;
+      const slot = inventory.find(
+        (s) => s.question_type === 'photo' && s.photo_subject === selection.subject,
+      );
+      if (!slot) {
+        Alert.alert('Error', 'Selected photo subject is no longer available.');
+        return;
+      }
+      setSubmitting(true);
+      void api
+        .POST('/games/{game_id}/questions/photo', {
+          params: { path: { game_id: gameId }, header: authHeader() },
+          body: { slot_index: slot.slot_index, location },
+        })
+        .then(({ error }) => {
+          if (error) {
+            const detail = (error as { detail?: string }).detail;
+            Alert.alert('Error', detail ?? 'Failed to ask question.');
+          } else {
+            onClose();
+          }
+        })
+        .finally(() => setSubmitting(false));
+      return;
+    }
+
+    // distance: radar | thermometer
+    if (!selection.slot) return;
+    if (questionType !== 'radar' && questionType !== 'thermometer') return;
+    const path = ASK_PATHS[questionType];
     setSubmitting(true);
     void api
-      .POST('/games/{game_id}/questions/photo', {
+      .POST(path, {
         params: { path: { game_id: gameId }, header: authHeader() },
-        body: { slot_index: slot.slot_index, location },
+        body: {
+          slot_index: selection.slot.slot_index,
+          location,
+          custom_distance: selection.customValue,
+        },
       })
       .then(({ error }) => {
         if (error) {
@@ -106,9 +145,8 @@ export function QuestionPickerModal({
   const onSubmitPress = () => {
     if (!submitEnabled) return;
     if (!hasInteracted) {
-      const label = photoSubjectLabel(selectedSubject);
-      const phrased = label.charAt(0).toLowerCase() + label.slice(1);
-      Alert.alert('Confirm', `Ask for a photo of ${phrased}?`, [
+      const promptText = buildConfirmText(questionType, selection);
+      Alert.alert('Confirm', promptText, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Confirm', onPress: performSubmit },
       ]);
@@ -135,13 +173,30 @@ export function QuestionPickerModal({
         </View>
 
         <View style={styles.body}>
-          {questionType === 'photo' && (
+          {questionType === 'photo' && selection.kind === 'photo' && (
             <PhotoFamily
               slots={inventory}
-              selectedSubject={selectedSubject}
-              onSelectSubject={handleSelectSubject}
+              selectedSubject={selection.subject}
+              onSelectSubject={(subject) => {
+                markInteracted();
+                onSelectionChange({ kind: 'photo', subject });
+              }}
             />
           )}
+          {(questionType === 'radar' || questionType === 'thermometer') &&
+            selection.kind === 'distance' && (
+              <DistanceFamily
+                questionType={questionType}
+                gameId={gameId}
+                slots={inventory}
+                selectedSlot={selection.slot}
+                customValue={selection.customValue}
+                onSelect={(slot, customValue) =>
+                  onSelectionChange({ kind: 'distance', slot, customValue })
+                }
+                onInteract={markInteracted}
+              />
+            )}
         </View>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
@@ -169,6 +224,16 @@ export function QuestionPickerModal({
       </View>
     </Modal>
   );
+}
+
+function buildConfirmText(questionType: QuestionType, selection: PickerSelection): string {
+  if (selection.kind === 'photo' && selection.subject) {
+    const label = photoSubjectLabel(selection.subject);
+    const phrased = label.charAt(0).toLowerCase() + label.slice(1);
+    return `Ask for a photo of ${phrased}?`;
+  }
+  const typeLabel = TYPE_LABELS[questionType] ?? questionType;
+  return `Ask ${typeLabel}?`;
 }
 
 const styles = StyleSheet.create({

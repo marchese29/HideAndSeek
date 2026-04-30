@@ -11,30 +11,38 @@ function quantize(value: number): number {
   return Math.round(value * 10_000) / 10_000;
 }
 
-/**
- * Fetches and caches the exclusion boundary preview for the currently selected
- * question slot. Responses are cached by question type + quantized seeker
- * location so browsing slots at the same position avoids redundant requests.
- */
-export function usePreviewBoundary(): {
+export interface PreviewBoundaryInput {
+  questionType: string;
+  slotIndex: number;
+  customDistance: number | null;
+}
+
+export interface PreviewBoundaryResult {
   boundary: GeoJSONGeometry | null;
   questionType: string | null;
   tentaclePois: TentaclePOIPreviewResponse[] | null;
-} {
+}
+
+/**
+ * Parameterized variant — drives the preview from caller-supplied state instead
+ * of `gameplayStore.previewQuestion`. Used by the question picker modal so it
+ * doesn't have to mutate the global preview state (which would also drive the
+ * legacy `'browse'` overlay on the underlying main map).
+ */
+export function usePreviewBoundaryFor(input: PreviewBoundaryInput | null): PreviewBoundaryResult {
   const gameId = useAppStore((s) => s.gameId);
-  const previewQuestion = useGameplayStore((s) => s.previewQuestion);
   const selfLocation = useGameplayStore((s) => s.selfLocation);
 
-  const questionType = previewQuestion?.question_type ?? null;
-  const slotIndex = previewQuestion?.slot_index ?? null;
-  const customDistance = previewQuestion?.custom_distance ?? null;
+  const questionType = input?.questionType ?? null;
+  const slotIndex = input?.slotIndex ?? null;
+  const customDistance = input?.customDistance ?? null;
 
   const lat = selfLocation ? quantize(selfLocation.coordinates.coordinates[1]) : null;
   const lng = selfLocation ? quantize(selfLocation.coordinates.coordinates[0]) : null;
 
   const enabled =
     gameId !== null &&
-    previewQuestion !== null &&
+    input !== null &&
     selfLocation !== null &&
     questionType !== 'thermometer' &&
     lat !== null &&
@@ -73,4 +81,23 @@ export function usePreviewBoundary(): {
     questionType,
     tentaclePois: (data?.tentacle_pois as TentaclePOIPreviewResponse[] | undefined) ?? null,
   };
+}
+
+/**
+ * Fetches and caches the exclusion boundary preview for the currently selected
+ * question slot in the legacy in-belt picker. Reads from
+ * `gameplayStore.previewQuestion`; thin wrapper over `usePreviewBoundaryFor`.
+ *
+ * Slated for removal in muo.4 along with the in-belt `ParamPicker` path.
+ */
+export function usePreviewBoundary(): PreviewBoundaryResult {
+  const previewQuestion = useGameplayStore((s) => s.previewQuestion);
+  const input: PreviewBoundaryInput | null = previewQuestion
+    ? {
+        questionType: previewQuestion.question_type,
+        slotIndex: previewQuestion.slot_index,
+        customDistance: previewQuestion.custom_distance ?? null,
+      }
+    : null;
+  return usePreviewBoundaryFor(input);
 }

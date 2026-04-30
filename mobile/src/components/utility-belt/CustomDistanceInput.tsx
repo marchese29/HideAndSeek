@@ -2,16 +2,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { memo, useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { validateCustomDistance } from '@/utils/distance';
+
 interface CustomDistanceInputProps {
   onSubmit: (distance: number) => void;
   onCancel: () => void;
   convention: string;
-}
-
-function isValidDistance(text: string): boolean {
-  if (!text) return false;
-  const num = Number(text);
-  return !isNaN(num) && num > 0 && num < 100000 && text.length <= 8;
 }
 
 export const CustomDistanceInput = memo(function CustomDistanceInput({
@@ -20,7 +16,7 @@ export const CustomDistanceInput = memo(function CustomDistanceInput({
   convention,
 }: CustomDistanceInputProps) {
   const [text, setText] = useState('');
-  const valid = isValidDistance(text);
+  const valid = validateCustomDistance(text);
   const unit = convention === 'metric' ? 'km' : 'mi';
 
   const handleSubmit = useCallback(() => {

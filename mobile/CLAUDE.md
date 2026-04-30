@@ -94,12 +94,13 @@ src/
     useActiveQuestionBoundary.ts # Fetches + caches exclusion boundary for the active question — seeker only (TanStack Query, ask-time location)
     useHiderQuestionBoundary.ts # Fetches + caches exclusion boundary for the active question — hider only (TanStack Query, seeker event locations)
     useHidingZone.ts           # Fetches + caches hiding zone polygon for a candidate stop (TanStack Query, staleTime=Infinity)
-    usePreviewBoundary.ts      # Fetches + caches exclusion preview boundary for browse slot (TanStack Query, quantized location key)
+    usePreviewBoundary.ts      # Fetches + caches exclusion preview boundary (TanStack Query, quantized location key). Exports `usePreviewBoundary()` (reads `gameplayStore.previewQuestion`, legacy belt path) and `usePreviewBoundaryFor(input)` (parameterized — used by the picker modal so it doesn't drive the underlying main-map `'browse'` overlay)
     useQuestionSelection.ts    # Question selection state machine (belt takeover flow)
     useCandidateStations.ts    # Fetches candidate stations for seeker endgame station picker (TanStack Query, staleTime=30s)
     useEndgameExclusions.ts    # Fetches endgame exclusions for a station + question cutoff, syncs to gameplay store (TanStack Query, staleTime=0)
     usePushToken.ts            # Push permission + native token retrieval (APNs/FCM)
   utils/
+    distance.ts                # validateCustomDistance() — shared between belt CustomDistanceInput and modal CustomChip
     geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary + haversine distance + convention conversion
     locationPermission.ts      # requestLocationPermission() — foreground permission helper
     time.ts                    # parseUtc() — server timestamp parsing (shared by timer hooks)
@@ -143,11 +144,13 @@ src/
       QuestionTypeBar.tsx      # Question type buttons (radar/thermo/match/measure/tentacles), filtered by inventory
       ParamPicker.tsx          # Horizontal scrollable inventory slot picker
       CustomDistanceInput.tsx  # Inline numeric input for custom distance slots
-    question-picker-modal/     # Seeker question picker pageSheet modal (photo family in muo.1; distance + category-with-map land in muo.2/.3)
-      index.ts                 # Barrel export (QuestionPickerModal, SubSheet)
-      QuestionPickerModal.tsx  # pageSheet shell — type-tinted header, family routing, pinned Submit footer with live-reactive gating + first-touch confirm guard
+    question-picker-modal/     # Seeker question picker pageSheet modal (photo + distance families landed in muo.1/muo.2; category-with-map in muo.3)
+      index.ts                 # Barrel export (QuestionPickerModal, PickerSelection, SubSheet)
+      QuestionPickerModal.tsx  # pageSheet shell — type-tinted header, family routing (PhotoFamily | DistanceFamily), pinned Submit footer with live-reactive gating + first-touch confirm guard. Selection is a discriminated union: `{ kind: 'photo'; subject } | { kind: 'distance'; slot; customValue }`
       PhotoFamily.tsx          # Photo family body — vertical FlatList of subject rows (icon square + label + optional ask_count badge), radio selection
-      SubSheet.tsx             # Scaffolded pageSheet-over-pageSheet wrapper for muo.3 category-with-map sub-sheet (not used in muo.1)
+      DistanceFamily.tsx       # Radar/thermometer body — embedded `<MapView>` (boundary + routes + cumulative `total_exclusion`; radar adds active preview boundary) over a DistanceScrubber. Defaults selection to smallest preset on first open. Radar drives `usePreviewBoundaryFor` from local slot/customValue; thermometer skips the preview overlay (boundary is server-null anyway)
+      DistanceScrubber.tsx     # Locks track + custom chip. Preset locks evenly spaced (`i / (N-1)`), drag-and-snap PanResponder. Selected lock larger with white border. Custom chip below the track: empty (tap → editor), filled (tap body → select; pencil → editor; X → clear). Filled chip highlights with type accent when selected (`onActive` text color so thermometer reads black on yellow). Both presets and custom show `xN+1` ask-count badge when used
+      SubSheet.tsx             # Scaffolded pageSheet-over-pageSheet wrapper for muo.3 category-with-map sub-sheet (not used in muo.1/muo.2)
     more-modal/                # More modal — bottom sheet for game meta-actions
       index.ts                 # Barrel export
       MoreModal.tsx            # Modal container, screen state machine, shared header (back/close)

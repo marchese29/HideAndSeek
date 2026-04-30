@@ -1,2 +1,2 @@
-export { QuestionPickerModal } from './QuestionPickerModal';
+export { type PickerSelection, QuestionPickerModal } from './QuestionPickerModal';
 export { SubSheet } from './SubSheet';

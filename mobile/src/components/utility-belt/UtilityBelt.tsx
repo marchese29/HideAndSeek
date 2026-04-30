@@ -6,7 +6,13 @@ import { api } from '@/api/client';
 import { expandHidingZone } from '@/api/powers';
 import { useQuestionSelection } from '@/hooks/useQuestionSelection';
 import { useGameplayStore } from '@/stores/gameplayStore';
-import type { GameInfo, HiderGameState, SeekerGameState, StopResponse } from '@/types/gameplay';
+import type {
+  GameInfo,
+  HiderGameState,
+  InventorySlotResponse,
+  SeekerGameState,
+  StopResponse,
+} from '@/types/gameplay';
 import type { PhotoSubject } from '@/utils/photoSubjects';
 
 import { HiderQuestionHistoryModal } from '../HiderQuestionHistoryModal';
@@ -64,6 +70,13 @@ export const UtilityBelt = memo(function UtilityBelt({
   const [seekerHistoryVisible, setSeekerHistoryVisible] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerSubject, setPickerSubject] = useState<PhotoSubject | null>(null);
+  const [distancePickerType, setDistancePickerType] = useState<'radar' | 'thermometer' | null>(
+    null,
+  );
+  const [radarSlot, setRadarSlot] = useState<InventorySlotResponse | null>(null);
+  const [radarCustom, setRadarCustom] = useState<number | null>(null);
+  const [thermoSlot, setThermoSlot] = useState<InventorySlotResponse | null>(null);
+  const [thermoCustom, setThermoCustom] = useState<number | null>(null);
 
   const endgameView = useGameplayStore((s) => s.endgameView);
 
@@ -208,6 +221,8 @@ export const UtilityBelt = memo(function UtilityBelt({
           onSelectType={(type) => {
             if (type === 'photo') {
               setPickerVisible(true);
+            } else if (type === 'radar' || type === 'thermometer') {
+              setDistancePickerType(type);
             } else {
               selection.selectType(type);
             }
@@ -351,9 +366,36 @@ export const UtilityBelt = memo(function UtilityBelt({
           questionType="photo"
           gameId={gameId}
           inventory={seekerState?.inventory ?? EMPTY_INVENTORY}
-          selectedSubject={pickerSubject}
-          onSelectSubject={setPickerSubject}
+          selection={{ kind: 'photo', subject: pickerSubject }}
+          onSelectionChange={(s) => {
+            if (s.kind === 'photo') setPickerSubject(s.subject);
+          }}
           onClose={() => setPickerVisible(false)}
+        />
+      )}
+
+      {role === 'seeker' && distancePickerType && (
+        <QuestionPickerModal
+          visible
+          questionType={distancePickerType}
+          gameId={gameId}
+          inventory={seekerState?.inventory ?? EMPTY_INVENTORY}
+          selection={
+            distancePickerType === 'radar'
+              ? { kind: 'distance', slot: radarSlot, customValue: radarCustom }
+              : { kind: 'distance', slot: thermoSlot, customValue: thermoCustom }
+          }
+          onSelectionChange={(s) => {
+            if (s.kind !== 'distance') return;
+            if (distancePickerType === 'radar') {
+              setRadarSlot(s.slot);
+              setRadarCustom(s.customValue);
+            } else {
+              setThermoSlot(s.slot);
+              setThermoCustom(s.customValue);
+            }
+          }}
+          onClose={() => setDistancePickerType(null)}
         />
       )}
     </View>
