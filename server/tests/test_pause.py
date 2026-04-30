@@ -40,13 +40,21 @@ def _set_session(session: Session):
 
 
 @pytest.fixture
-def captured_events(monkeypatch: pytest.MonkeyPatch) -> list:
-    events: list = []
-    monkeypatch.setattr(
-        'hideandseek_core.logic.pause.emit_gameplay',
-        lambda event: events.append(event),
-    )
-    return events
+def captured_events() -> list:
+    """Per-test list that test helpers append to via the wrapped pause/resume calls."""
+    return []
+
+
+def _pause_game(game: Game, reason: PauseReason, captured_events: list) -> None:
+    event = pause_game(game, reason)
+    if event is not None:
+        captured_events.append(event)
+
+
+def _resume_game(game: Game, reason: PauseReason, captured_events: list) -> None:
+    event = resume_game(game, reason)
+    if event is not None:
+        captured_events.append(event)
 
 
 def _seeking_game(session: Session, **overrides: object) -> Game:
@@ -98,7 +106,7 @@ def test_pause_from_unpaused_stamps_paused_at_and_emits_event(
 ):
     game = _seeking_game(session)
     before = datetime.now(UTC)
-    pause_game(game, PauseReason.host)
+    _pause_game(game, PauseReason.host, captured_events)
     after = datetime.now(UTC)
 
     assert game.active_pause_reasons == [PauseReason.host]
@@ -113,9 +121,9 @@ def test_pause_from_unpaused_stamps_paused_at_and_emits_event(
 
 def test_pause_idempotent_on_repeat_reason(session: Session, captured_events: list):
     game = _seeking_game(session)
-    pause_game(game, PauseReason.host)
+    _pause_game(game, PauseReason.host, captured_events)
     paused_at_first = game.paused_at
-    pause_game(game, PauseReason.host)
+    _pause_game(game, PauseReason.host, captured_events)
 
     assert game.active_pause_reasons == [PauseReason.host]
     assert game.paused_at == paused_at_first
@@ -124,9 +132,9 @@ def test_pause_idempotent_on_repeat_reason(session: Session, captured_events: li
 
 def test_pause_adds_second_reason_keeps_paused_at(session: Session, captured_events: list):
     game = _seeking_game(session)
-    pause_game(game, PauseReason.host)
+    _pause_game(game, PauseReason.host, captured_events)
     original_paused_at = game.paused_at
-    pause_game(game, PauseReason.photo_question_open)
+    _pause_game(game, PauseReason.photo_question_open, captured_events)
 
     assert game.paused_at == original_paused_at
     assert game.active_pause_reasons == [PauseReason.host, PauseReason.photo_question_open]
@@ -145,12 +153,12 @@ def test_pause_adds_second_reason_keeps_paused_at(session: Session, captured_eve
 
 def test_resume_unknown_reason_is_noop(session: Session, captured_events: list):
     game = _seeking_game(session)
-    pause_game(game, PauseReason.host)
+    _pause_game(game, PauseReason.host, captured_events)
     captured_events.clear()
     snapshot_paused_at = game.paused_at
     snapshot_reasons = list(game.active_pause_reasons)
 
-    resume_game(game, PauseReason.rest_period)
+    _resume_game(game, PauseReason.rest_period, captured_events)
 
     assert game.paused_at == snapshot_paused_at
     assert list(game.active_pause_reasons) == snapshot_reasons
@@ -160,12 +168,12 @@ def test_resume_unknown_reason_is_noop(session: Session, captured_events: list):
 def test_resume_one_of_two_reasons_keeps_paused(session: Session, captured_events: list):
     deadline = datetime.now(UTC) + timedelta(minutes=5)
     game = _seeking_game(session, hiding_ends_at=deadline)
-    pause_game(game, PauseReason.host)
-    pause_game(game, PauseReason.photo_question_open)
+    _pause_game(game, PauseReason.host, captured_events)
+    _pause_game(game, PauseReason.photo_question_open, captured_events)
     original_paused_at = game.paused_at
     captured_events.clear()
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     assert game.active_pause_reasons == [PauseReason.photo_question_open]
     assert game.paused_at == original_paused_at
@@ -179,10 +187,10 @@ def test_resume_last_reason_clears_paused_at_and_emits_resumed(
     session: Session, captured_events: list
 ):
     game = _seeking_game(session)
-    pause_game(game, PauseReason.host)
+    _pause_game(game, PauseReason.host, captured_events)
     captured_events.clear()
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     assert game.paused_at is None
     assert game.active_pause_reasons == []
@@ -207,7 +215,7 @@ def test_resume_shifts_hiding_ends_at(session: Session, captured_events: list):
     session.flush()
 
     before_resume = datetime.now(UTC)
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
     delta = datetime.now(UTC) - pause_at
 
     _assert_close(game.hiding_ends_at, original_deadline + delta)
@@ -223,7 +231,7 @@ def test_resume_leaves_null_hiding_ends_at_alone(session: Session, captured_even
     game.active_pause_reasons = [PauseReason.host]
     session.flush()
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     assert game.hiding_ends_at is None
 
@@ -241,7 +249,7 @@ def test_resume_shifts_found_claim_expires_at(session: Session, captured_events:
     game.active_pause_reasons = [PauseReason.host]
     session.flush()
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
     delta = datetime.now(UTC) - pause_at
 
     _assert_close(game.found_claim_expires_at, expires_at + delta)
@@ -257,7 +265,7 @@ def test_resume_shifts_open_question_deadline_at(session: Session, captured_even
     game.active_pause_reasons = [PauseReason.host]
     session.flush()
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
     delta = datetime.now(UTC) - pause_at
 
     session.flush()
@@ -283,7 +291,7 @@ def test_resume_does_not_shift_terminal_question_deadline_at(
     game.active_pause_reasons = [PauseReason.host]
     session.flush()
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     session.refresh(q)
     assert q.deadline_at == original_deadline
@@ -300,7 +308,7 @@ def test_resume_increments_seeking_pause_accumulated_sec(session: Session, captu
     game.paused_at = pause_at
     game.active_pause_reasons = [PauseReason.host]
     session.flush()
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     first_total = game.seeking_pause_accumulated_sec
     assert 118 <= first_total <= 125
@@ -310,7 +318,7 @@ def test_resume_increments_seeking_pause_accumulated_sec(session: Session, captu
     game.paused_at = pause_at_2
     game.active_pause_reasons = [PauseReason.host]
     session.flush()
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     assert game.seeking_pause_accumulated_sec >= first_total + 58
     assert game.seeking_pause_accumulated_sec <= first_total + 65
@@ -338,7 +346,7 @@ def test_resume_during_hiding_does_not_increment_seeking_accumulator(
     game.active_pause_reasons = [PauseReason.host]
     session.flush()
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     assert game.seeking_pause_accumulated_sec == 0
     # hiding_ends_at still shifts forward — that's the hider clock's mechanism.
@@ -355,12 +363,12 @@ def test_double_acquire_same_reason_no_double_shift_on_release(
     original_deadline = datetime.now(UTC) + timedelta(minutes=10)
     game = _seeking_game(session, hiding_ends_at=original_deadline)
 
-    pause_game(game, PauseReason.host)
-    pause_game(game, PauseReason.host)  # idempotent — no double-add
+    _pause_game(game, PauseReason.host, captured_events)
+    _pause_game(game, PauseReason.host, captured_events)  # idempotent — no double-add
     pause_at = game.paused_at
     assert pause_at is not None
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     assert game.active_pause_reasons == []
     assert game.paused_at is None
@@ -372,18 +380,18 @@ def test_two_reasons_one_release_keeps_paused_at_set(session: Session, captured_
     original_deadline = datetime.now(UTC) + timedelta(minutes=10)
     game = _seeking_game(session, hiding_ends_at=original_deadline)
 
-    pause_game(game, PauseReason.host)
+    _pause_game(game, PauseReason.host, captured_events)
     original_paused_at = game.paused_at
     assert original_paused_at is not None
 
-    pause_game(game, PauseReason.photo_question_open)
-    resume_game(game, PauseReason.host)
+    _pause_game(game, PauseReason.photo_question_open, captured_events)
+    _resume_game(game, PauseReason.host, captured_events)
 
     assert game.paused_at == original_paused_at  # still anchored at first pause
     assert game.active_pause_reasons == [PauseReason.photo_question_open]
     assert game.hiding_ends_at == original_deadline  # not yet shifted
 
-    resume_game(game, PauseReason.photo_question_open)
+    _resume_game(game, PauseReason.photo_question_open, captured_events)
 
     assert game.paused_at is None
     delta = datetime.now(UTC) - original_paused_at
@@ -403,7 +411,7 @@ def test_shifted_deadline_at_least_now_after_resume(session: Session, captured_e
     game.active_pause_reasons = [PauseReason.host]
     session.flush()
 
-    resume_game(game, PauseReason.host)
+    _resume_game(game, PauseReason.host, captured_events)
 
     assert game.hiding_ends_at is not None
     assert game.hiding_ends_at >= datetime.now(UTC) - timedelta(seconds=1)

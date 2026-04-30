@@ -376,7 +376,9 @@ def pause_game(
     if PauseReason.host in game.active_pause_reasons:
         raise HTTPException(status_code=409, detail='Game is already host-paused.')
 
-    logic_pause_game(game, PauseReason.host)
+    event = logic_pause_game(game, PauseReason.host)
+    if event is not None:
+        emit_gameplay(event)
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.game_timer_paused,
@@ -401,7 +403,9 @@ def resume_game(
     if PauseReason.host not in game.active_pause_reasons:
         raise HTTPException(status_code=409, detail='Game is not host-paused.')
 
-    logic_resume_game(game, PauseReason.host)
+    event = logic_resume_game(game, PauseReason.host)
+    if event is not None:
+        emit_gameplay(event)
     send_push.delay(  # type: ignore[attr-defined]
         str(game.id),
         PushEventType.game_timer_resumed,

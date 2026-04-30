@@ -21,8 +21,11 @@ from datetime import UTC, datetime
 
 import structlog
 
-from hideandseek_core.broadcast.emit import emit_gameplay
-from hideandseek_core.broadcast.events import GameTimerPausedEvent, GameTimerResumedEvent
+from hideandseek_core.broadcast.events import (
+    GameplayEvent,
+    GameTimerPausedEvent,
+    GameTimerResumedEvent,
+)
 from hideandseek_core.queries.questions import get_open_questions_with_deadlines
 from hideandseek_models.game import Game
 from hideandseek_models.types import PauseReason
@@ -30,15 +33,16 @@ from hideandseek_models.types import PauseReason
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
-def pause_game(game: Game, reason: PauseReason) -> None:
+def pause_game(game: Game, reason: PauseReason) -> GameplayEvent | None:
     """Add `reason` to the active pause set; stamp `paused_at` if newly paused.
 
-    Idempotent — re-entering with an already-active reason is a no-op (no event).
-    Emits `GameTimerPausedEvent` on every state-changing call so mobile can
-    re-evaluate which pause-category UI to render.
+    Idempotent — re-entering with an already-active reason is a no-op and
+    returns None. Otherwise returns a `GameTimerPausedEvent` so the caller
+    (router or worker task) can emit it from the boundary that owns the
+    transaction. Logic functions don't reach into the broadcast layer.
     """
     if reason in game.active_pause_reasons:
-        return
+        return None
     if game.active_pause_reasons:
         # Invariant: paused_at is set whenever active_pause_reasons is non-empty.
         assert game.paused_at is not None
@@ -53,25 +57,25 @@ def pause_game(game: Game, reason: PauseReason) -> None:
         reason=reason.value,
         active_pause_reasons=list(game.active_pause_reasons),
     )
-    emit_gameplay(
-        GameTimerPausedEvent(
-            game_id=game.id,
-            paused_at=paused_at,
-            active_pause_reasons=list(game.active_pause_reasons),
-        )
+    return GameTimerPausedEvent(
+        game_id=game.id,
+        paused_at=paused_at,
+        active_pause_reasons=list(game.active_pause_reasons),
     )
 
 
-def resume_game(game: Game, reason: PauseReason) -> None:
+def resume_game(game: Game, reason: PauseReason) -> GameplayEvent | None:
     """Remove `reason` from the active pause set; if empty, shift deadlines and clear `paused_at`.
 
-    Idempotent — releasing a reason that isn't active is a no-op (no event).
-    Removing a reason without fully emptying the set still emits a paused
-    event with the reduced list. Removing the last reason emits a resumed
-    event with all shifted deadlines.
+    Idempotent — releasing a reason that isn't active is a no-op and returns
+    None. If the set is non-empty after removal, returns a `GameTimerPausedEvent`
+    with the reduced list (clock stays paused). If the set becomes empty,
+    shifts every live deadline forward by the pause duration and returns a
+    `GameTimerResumedEvent` carrying every shifted deadline. The caller emits
+    the returned event.
     """
     if reason not in game.active_pause_reasons:
-        return
+        return None
     # Invariant: paused_at is set whenever active_pause_reasons is non-empty.
     assert game.paused_at is not None
     paused_at = game.paused_at
@@ -86,14 +90,11 @@ def resume_game(game: Game, reason: PauseReason) -> None:
             reason=reason.value,
             active_pause_reasons=list(remaining),
         )
-        emit_gameplay(
-            GameTimerPausedEvent(
-                game_id=game.id,
-                paused_at=paused_at,
-                active_pause_reasons=list(remaining),
-            )
+        return GameTimerPausedEvent(
+            game_id=game.id,
+            paused_at=paused_at,
+            active_pause_reasons=list(remaining),
         )
-        return
 
     now = datetime.now(UTC)
     delta = now - paused_at
@@ -131,13 +132,11 @@ def resume_game(game: Game, reason: PauseReason) -> None:
         delta_sec=delta.total_seconds(),
         shifted_questions=len(question_deadlines),
     )
-    emit_gameplay(
-        GameTimerResumedEvent(
-            game_id=game.id,
-            resumed_at=now,
-            seeking_pause_accumulated_sec=game.seeking_pause_accumulated_sec,
-            hiding_ends_at=game.hiding_ends_at,
-            found_claim_expires_at=game.found_claim_expires_at,
-            question_deadlines=question_deadlines,
-        )
+    return GameTimerResumedEvent(
+        game_id=game.id,
+        resumed_at=now,
+        seeking_pause_accumulated_sec=game.seeking_pause_accumulated_sec,
+        hiding_ends_at=game.hiding_ends_at,
+        found_claim_expires_at=game.found_claim_expires_at,
+        question_deadlines=question_deadlines,
     )

@@ -7,7 +7,7 @@ from datetime import timedelta
 
 import structlog
 
-from hideandseek_core.broadcast.emit import emit_gameplay
+from hideandseek_core.broadcast.emit import emit_gameplay_now
 from hideandseek_core.broadcast.events import (
     FoundClaimExpiredEvent,
     HiderQuestionAnsweredEvent,
@@ -83,7 +83,7 @@ def transition_hiding_to_seeking(game_id: str) -> None:
                 role_filter='hider',
                 alert=f'Your station was auto-assigned: {stop.name}',
             )
-            emit_gameplay(
+            emit_gameplay_now(
                 StationElectionEvent(
                     game_id=game.id,
                     station_election_status=StationElectionStatus.auto_assigned,
@@ -99,7 +99,7 @@ def transition_hiding_to_seeking(game_id: str) -> None:
                 role_filter='hider',
                 alert='Station could not be determined. Please select your station.',
             )
-            emit_gameplay(
+            emit_gameplay_now(
                 StationElectionEvent(
                     game_id=game.id,
                     station_election_status=StationElectionStatus.ambiguous,
@@ -118,7 +118,7 @@ def transition_hiding_to_seeking(game_id: str) -> None:
         )
 
         assert game.seeking_started_at is not None
-        emit_gameplay(
+        emit_gameplay_now(
             PhaseChangedEvent(
                 game_id=game.id,
                 phase=game.status,
@@ -162,7 +162,7 @@ def auto_answer_question(question_id: str) -> None:
                 question_id=question_id,
                 question_type=question.question_type,
             )
-            emit_gameplay(QuestionVetoedEvent.from_question(question))
+            emit_gameplay_now(QuestionVetoedEvent.from_question(question))
             return
 
         # Resolve ambiguous station before computing the answer
@@ -180,7 +180,7 @@ def auto_answer_question(question_id: str) -> None:
                 role_filter='hider',
                 alert=f'Your station was auto-resolved: {stop.name}',
             )
-            emit_gameplay(
+            emit_gameplay_now(
                 StationElectionEvent(
                     game_id=game.id,
                     station_election_status=StationElectionStatus.auto_assigned,
@@ -228,8 +228,8 @@ def auto_answer_question(question_id: str) -> None:
             answer=question.answer,
         )
 
-        emit_gameplay(HiderQuestionAnsweredEvent.from_question(question))
-        emit_gameplay(SeekerQuestionAnsweredEvent.from_question(question))
+        emit_gameplay_now(HiderQuestionAnsweredEvent.from_question(question))
+        emit_gameplay_now(SeekerQuestionAnsweredEvent.from_question(question))
 
 
 @app.task
@@ -267,7 +267,7 @@ def auto_resolve_photo_submit(question_id: str) -> None:
             review_deadline = params.submitted_at + timedelta(
                 seconds=effective_photo_review_sec(game)
             )
-            emit_gameplay(
+            emit_gameplay_now(
                 PhotoSubmittedEvent.from_question(question, review_deadline=review_deadline)
             )
             send_push.delay(  # type: ignore[attr-defined]
@@ -278,7 +278,7 @@ def auto_resolve_photo_submit(question_id: str) -> None:
             )
         else:
             abandon_question(question)
-            emit_gameplay(QuestionAbandonedEvent.from_question(question))
+            emit_gameplay_now(QuestionAbandonedEvent.from_question(question))
             send_push.delay(  # type: ignore[attr-defined]
                 game_id,
                 PushEventType.question_abandoned,
@@ -315,8 +315,8 @@ def auto_accept_photo(question_id: str) -> None:
         game_id = str(question.game_id)
         logger.info('photo_auto_accepted', question_id=question_id, game_id=game_id)
 
-        emit_gameplay(HiderQuestionAnsweredEvent.from_question(question))
-        emit_gameplay(SeekerQuestionAnsweredEvent.from_question(question))
+        emit_gameplay_now(HiderQuestionAnsweredEvent.from_question(question))
+        emit_gameplay_now(SeekerQuestionAnsweredEvent.from_question(question))
         send_push.delay(  # type: ignore[attr-defined]
             game_id,
             PushEventType.question_answered,
@@ -344,7 +344,7 @@ def auto_dismiss_found_claim(game_id: str) -> None:
             return
 
         logger.info('found_claim_expired', game_id=game_id)
-        emit_gameplay(FoundClaimExpiredEvent(game_id=game.id))
+        emit_gameplay_now(FoundClaimExpiredEvent(game_id=game.id))
         send_push.delay(  # type: ignore[attr-defined]
             game_id,
             PushEventType.found_claim_expired,

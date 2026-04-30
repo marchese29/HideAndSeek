@@ -105,9 +105,18 @@ def _pg_engine() -> Generator[sa.Engine, None, None]:
 
 @pytest.fixture
 def session(_pg_engine: sa.Engine) -> Generator[Session, None, None]:
+    """Per-test Session bound to a connection-level transaction.
+
+    `join_transaction_mode='create_savepoint'` makes `session.commit()` release
+    a SAVEPOINT instead of committing the outer transaction — and crucially,
+    fires the `after_commit` listener that flushes pending event emits in
+    `core/broadcast/emit.py` and `server/broadcast/emit.py`. The outer
+    `transaction.rollback()` at teardown still rolls back everything the test
+    wrote.
+    """
     connection = _pg_engine.connect()
     transaction = connection.begin()
-    sess = Session(bind=connection)
+    sess = Session(bind=connection, join_transaction_mode='create_savepoint')
     token = _session_var.set(sess)
     try:
         yield sess
@@ -121,10 +130,14 @@ def session(_pg_engine: sa.Engine) -> Generator[Session, None, None]:
 @pytest.fixture
 def client(session: Session) -> Generator[TestClient, None, None]:
     async def _override_get_session() -> AsyncGenerator[Session, None]:
+        # Mirrors `session_dependency` in production: commit on success so the
+        # `after_commit` listener publishes any buffered SSE events. Failures
+        # propagate and `Session.__exit__` semantics are inherited from the
+        # outer fixture's connection-level rollback.
         token = _session_var.set(session)
         try:
             yield session
-            session.flush()
+            session.commit()
         finally:
             _session_var.reset(token)
 

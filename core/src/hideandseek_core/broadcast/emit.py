@@ -1,4 +1,17 @@
-"""Publish gameplay events to Redis SSE channels."""
+"""Publish gameplay events to Redis SSE channels.
+
+Two public entry points share one routing implementation:
+
+- `emit_gameplay(event)` — buffers the event on the active session and publishes
+  after `Session.commit()` lands. This is the safe default for any code path
+  running inside `session_dependency` (router) or `session_scope` (worker /
+  script). If the transaction rolls back, buffered events are dropped silently.
+- `emit_gameplay_now(event)` — publishes immediately, no transactional gating.
+  Reserved for worker timer task bodies where the reconciler's retry loop makes
+  leaked events self-healing. Don't use in routers.
+
+The corresponding pair for lobby events lives in `server/broadcast/emit.py`.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +21,10 @@ import uuid
 from typing import NamedTuple
 
 import structlog
+from sqlalchemy import event as sa_event
+from sqlalchemy.orm import Session
 
+from hideandseek_core import db
 from hideandseek_core.broadcast.events import (
     FoundClaimEvent,
     FoundClaimExpiredEvent,
@@ -41,6 +57,8 @@ from hideandseek_core.redis_client import get_sync_redis
 from hideandseek_models.types import GameplayEventType, PlayerRole
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_PENDING_KEY = 'pending_gameplay_emits'
 
 
 class SseChannel(NamedTuple):
@@ -130,8 +148,12 @@ def _both_channels(game_id: uuid.UUID, event_type: str, data: dict) -> None:
     publish_sse(seeker_channel(game_id), event_type, data, required=True)
 
 
-def emit_gameplay(event: GameplayEvent) -> None:
-    """Route a gameplay event to the appropriate SSE channels."""
+def _publish_gameplay(event: GameplayEvent) -> None:
+    """Route a gameplay event to the appropriate SSE channels and publish.
+
+    Internal helper shared by both `emit_gameplay` (after-commit) and
+    `emit_gameplay_now` (immediate). Contains the per-event-type routing logic.
+    """
     match event:
         case PlayerLocationEvent():
             data = event.model_dump(mode='json')
@@ -284,3 +306,43 @@ def emit_gameplay(event: GameplayEvent) -> None:
         case GameTimerResumedEvent():
             data = event.model_dump(mode='json')
             _both_channels(event.game_id, GameplayEventType.game_timer_resumed, data)
+
+
+def emit_gameplay(event: GameplayEvent) -> None:
+    """Buffer a gameplay event for after-commit publish.
+
+    The event is appended to a list on `Session.info`; a SQLAlchemy
+    `after_commit` listener flushes the buffer to Redis once the active
+    transaction lands. If the transaction rolls back, the buffered events are
+    dropped silently — no SSE leak from work that didn't happen.
+
+    Use this from any code path running inside `session_dependency` (router) or
+    `session_scope` (background task / script). It is the safe default.
+    """
+    session = db.get_session()
+    pending = session.info.setdefault(_PENDING_KEY, [])
+    pending.append(event)
+
+
+def emit_gameplay_now(event: GameplayEvent) -> None:
+    """Publish a gameplay event immediately, ignoring transactional state.
+
+    Reserved for worker timer task bodies where the reconciler's retry loop
+    makes leaked events self-healing. Don't use in routers — request handlers
+    should always go through the after-commit `emit_gameplay`.
+    """
+    _publish_gameplay(event)
+
+
+@sa_event.listens_for(Session, 'after_commit')
+def _flush_pending_gameplay_emits(session: Session) -> None:
+    pending = session.info.pop(_PENDING_KEY, None)
+    if not pending:
+        return
+    for evt in pending:
+        _publish_gameplay(evt)
+
+
+@sa_event.listens_for(Session, 'after_rollback')
+def _drop_pending_gameplay_emits(session: Session) -> None:
+    session.info.pop(_PENDING_KEY, None)

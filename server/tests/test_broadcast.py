@@ -14,7 +14,8 @@ import pytest
 from geojson_pydantic import Point as GeoJSONPoint
 from sqlalchemy.orm import Session
 
-from hideandseek.broadcast.emit import emit
+from hideandseek.broadcast.emit import emit as emit_after_commit
+from hideandseek.broadcast.emit import emit_now as emit
 from hideandseek.broadcast.events import (
     GameStartedEvent,
     HostChangedEvent,
@@ -22,8 +23,11 @@ from hideandseek.broadcast.events import (
     PlayerLeftEvent,
     PlayerUpdatedEvent,
 )
+from hideandseek_core.broadcast.emit import emit_gameplay as emit_gameplay_after_commit
 from hideandseek_core.broadcast.emit import (
-    emit_gameplay,
+    emit_gameplay_now as emit_gameplay,
+)
+from hideandseek_core.broadcast.emit import (
     hider_channel,
     lobby_channel,
     publish_sse,
@@ -465,3 +469,117 @@ async def test_forward_messages_filters_pre_snapshot_and_sets_id() -> None:
 
     await pubsub.aclose()
     await redis.aclose()
+
+
+# ── After-commit / rollback semantics ───────────────────────────────────────
+
+
+class TestAfterCommitGameplayEmit:
+    """`emit_gameplay()` buffers on Session.info; commit publishes, rollback drops.
+
+    This is the affordance that prevents "stuck spinner on failed start" — a
+    request that fails post-emit (e.g. broken push, bad post-emit code path)
+    rolls back before any SSE frame leaves the process.
+    """
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_buffered_until_commit(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        game = create_game(session)
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(hider_channel(game.id).pubsub)
+
+        emit_gameplay_after_commit(_location_event(game.id, role=PlayerRole.hider))
+
+        # Pre-commit: buffered, nothing on the wire.
+        assert session.info.get('pending_gameplay_emits')
+        assert (
+            _drain_channel_messages(pubsub, [hider_channel(game.id).pubsub])[
+                hider_channel(game.id).pubsub
+            ]
+            == []
+        )
+
+        session.commit()
+
+        # Post-commit: buffer drained, message published.
+        assert 'pending_gameplay_emits' not in session.info
+        msgs = _drain_channel_messages(pubsub, [hider_channel(game.id).pubsub])
+        assert len(msgs[hider_channel(game.id).pubsub]) == 1
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_rollback_drops_buffered_event(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        """The fix for HideAndSeek-68z: a rolled-back transaction publishes nothing."""
+        game = create_game(session)
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(hider_channel(game.id).pubsub)
+
+        emit_gameplay_after_commit(_location_event(game.id, role=PlayerRole.hider))
+        session.rollback()
+
+        assert 'pending_gameplay_emits' not in session.info
+        msgs = _drain_channel_messages(pubsub, [hider_channel(game.id).pubsub])
+        assert msgs[hider_channel(game.id).pubsub] == []
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_emit_now_publishes_immediately(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        """`emit_gameplay_now` is the worker escape hatch — no buffer, no commit."""
+        game = create_game(session)
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(hider_channel(game.id).pubsub)
+
+        emit_gameplay(_location_event(game.id, role=PlayerRole.hider))
+
+        msgs = _drain_channel_messages(pubsub, [hider_channel(game.id).pubsub])
+        assert len(msgs[hider_channel(game.id).pubsub]) == 1
+        assert 'pending_gameplay_emits' not in session.info
+
+
+class TestAfterCommitLobbyEmit:
+    """Same semantics for the lobby `emit()` / `emit_now()` pair."""
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_buffered_until_commit(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        game = create_game(session)
+        player = create_player(session, game.id, name='Alice')
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
+
+        emit_after_commit(PlayerJoinedEvent(game=game, player=player))
+
+        assert session.info.get('pending_lobby_emits')
+        assert (
+            _drain_channel_messages(pubsub, [lobby_channel(game.id).pubsub])[
+                lobby_channel(game.id).pubsub
+            ]
+            == []
+        )
+
+        session.commit()
+
+        assert 'pending_lobby_emits' not in session.info
+        msgs = _drain_channel_messages(pubsub, [lobby_channel(game.id).pubsub])
+        assert len(msgs[lobby_channel(game.id).pubsub]) == 1
+
+    @pytest.mark.usefixtures('_patch_sync_redis')
+    def test_rollback_drops_buffered_event(
+        self, session: Session, fake_sync_redis: fakeredis.FakeRedis
+    ) -> None:
+        """Failed `start_game` (the original bug): no `game_started` SSE leak."""
+        game = create_game(session)
+        pubsub = fake_sync_redis.pubsub()
+        pubsub.subscribe(lobby_channel(game.id).pubsub)
+
+        emit_after_commit(GameStartedEvent(game=game))
+        session.rollback()
+
+        assert 'pending_lobby_emits' not in session.info
+        msgs = _drain_channel_messages(pubsub, [lobby_channel(game.id).pubsub])
+        assert msgs[lobby_channel(game.id).pubsub] == []
