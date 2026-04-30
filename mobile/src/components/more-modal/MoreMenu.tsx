@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
-export type MenuOption = 'stats' | 'preferences' | 'leave' | 'end-game' | 'kick';
+export type MenuOption = 'stats' | 'preferences' | 'leave' | 'pause-game' | 'end-game' | 'kick';
 
 interface MoreMenuProps {
   isHost: boolean;
   gameIsActive: boolean;
+  isHostPaused: boolean;
   hasOtherPlayers: boolean;
   onSelect: (option: MenuOption) => void;
 }
@@ -17,13 +18,26 @@ interface MenuItem {
   destructive?: boolean;
 }
 
-export function MoreMenu({ isHost, gameIsActive, hasOtherPlayers, onSelect }: MoreMenuProps) {
+export function MoreMenu({
+  isHost,
+  gameIsActive,
+  isHostPaused,
+  hasOtherPlayers,
+  onSelect,
+}: MoreMenuProps) {
   const items: MenuItem[] = [
     { key: 'stats', label: 'Stats', icon: 'chart-bar' },
     { key: 'preferences', label: 'Preferences', icon: 'cog-outline' },
     { key: 'leave', label: 'Leave Game', icon: 'exit-run', destructive: true },
   ];
 
+  if (isHost && gameIsActive && !isHostPaused) {
+    items.push({
+      key: 'pause-game',
+      label: 'Pause Game',
+      icon: 'pause-circle-outline',
+    });
+  }
   if (isHost && gameIsActive) {
     items.push({
       key: 'end-game',

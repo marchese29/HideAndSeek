@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Modal,
   Pressable,
@@ -10,16 +11,18 @@ import {
   View,
 } from 'react-native';
 
+import { usePaused } from '@/hooks/usePaused';
 import { useAppStore } from '@/store';
 import { useGameplayStore } from '@/stores/gameplayStore';
 
 import { EndGameScreen } from './EndGameScreen';
+import { doPause } from './gameActions';
 import { KickPlayerScreen } from './KickPlayerScreen';
 import { LeaveGameScreen } from './LeaveGameScreen';
 import { type MenuOption, MoreMenu } from './MoreMenu';
 import { PlaceholderScreen } from './PlaceholderScreen';
 
-type Screen = 'menu' | MenuOption;
+type Screen = 'menu' | 'stats' | 'preferences' | 'leave' | 'end-game' | 'kick';
 
 const SCREEN_TITLES: Record<Screen, string> = {
   menu: 'More',
@@ -44,7 +47,10 @@ export function MoreModal({ visible, onClose }: MoreModalProps) {
   const directionRef = useRef<'forward' | 'back'>('forward');
 
   const playerId = useAppStore((s) => s.playerId);
+  const gameId = useAppStore((s) => s.gameId);
   const state = useGameplayStore((s) => s.state);
+  const { pauseReasons } = usePaused();
+  const isHostPaused = pauseReasons.includes('host');
 
   // Reset to menu whenever the modal opens
   const prevVisible = useRef(visible);
@@ -75,6 +81,34 @@ export function MoreModal({ visible, onClose }: MoreModalProps) {
   );
 
   const goToMenu = useCallback(() => navigate('menu'), [navigate]);
+
+  const handleSelect = useCallback(
+    (option: MenuOption) => {
+      if (option === 'pause-game') {
+        if (!gameId) return;
+        Alert.alert(
+          'Pause Game?',
+          'This will pause the game clock for everyone. You can resume from the pause screen.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Pause',
+              onPress: () => {
+                onClose();
+                void (async () => {
+                  const ok = await doPause(gameId);
+                  if (!ok) Alert.alert('Error', 'Failed to pause game.');
+                })();
+              },
+            },
+          ],
+        );
+        return;
+      }
+      navigate(option);
+    },
+    [gameId, navigate, onClose],
+  );
 
   const isHost = !!(state && playerId && state.host_player_id === playerId);
   const gameIsActive = !!(state && (state.phase === 'hiding' || state.phase === 'seeking'));
@@ -133,8 +167,9 @@ export function MoreModal({ visible, onClose }: MoreModalProps) {
                 screen={departingScreen}
                 isHost={isHost}
                 gameIsActive={gameIsActive}
+                isHostPaused={isHostPaused}
                 hasOtherPlayers={hasOtherPlayers}
-                onSelect={navigate}
+                onSelect={handleSelect}
                 onClose={onClose}
               />
             </Animated.View>
@@ -151,8 +186,9 @@ export function MoreModal({ visible, onClose }: MoreModalProps) {
               screen={activeScreen}
               isHost={isHost}
               gameIsActive={gameIsActive}
+              isHostPaused={isHostPaused}
               hasOtherPlayers={hasOtherPlayers}
-              onSelect={navigate}
+              onSelect={handleSelect}
               onClose={onClose}
             />
           </Animated.View>
@@ -168,6 +204,7 @@ interface ScreenContentProps {
   screen: Screen;
   isHost: boolean;
   gameIsActive: boolean;
+  isHostPaused: boolean;
   hasOtherPlayers: boolean;
   onSelect: (option: MenuOption) => void;
   onClose: () => void;
@@ -177,6 +214,7 @@ function ScreenContent({
   screen,
   isHost,
   gameIsActive,
+  isHostPaused,
   hasOtherPlayers,
   onSelect,
   onClose,
@@ -187,6 +225,7 @@ function ScreenContent({
         <MoreMenu
           isHost={isHost}
           gameIsActive={gameIsActive}
+          isHostPaused={isHostPaused}
           hasOtherPlayers={hasOtherPlayers}
           onSelect={onSelect}
         />

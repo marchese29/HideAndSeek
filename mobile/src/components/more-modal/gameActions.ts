@@ -37,6 +37,36 @@ export async function doEndGame(gameId: string): Promise<boolean> {
   }
 }
 
+/** Host-pause the game. Returns true on success. */
+export async function doPause(gameId: string): Promise<boolean> {
+  try {
+    await api.POST('/games/{game_id}/pause', {
+      params: {
+        path: { game_id: gameId },
+        header: authHeader(),
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Release the host pause. Returns true on success. */
+export async function doResume(gameId: string): Promise<boolean> {
+  try {
+    await api.POST('/games/{game_id}/resume', {
+      params: {
+        path: { game_id: gameId },
+        header: authHeader(),
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Kick a player from the game. Returns true on success. */
 export async function doKick(gameId: string, targetPlayerId: string): Promise<boolean> {
   try {
