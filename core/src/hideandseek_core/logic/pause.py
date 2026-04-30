@@ -114,7 +114,14 @@ def resume_game(game: Game, reason: PauseReason) -> None:
     # m8r.nah will extend this to also shift PhotoQuestionParams.submit_deadline_at
     # and review_deadline_at once those columns exist.
 
-    game.seeking_pause_accumulated_sec += int(delta.total_seconds())
+    # The seeking accumulator is a UI carve-out for the count-up belt timer
+    # (`elapsed = now - seeking_started_at - seeking_pause_accumulated_sec - …`).
+    # Pre-seeking pauses already shift hiding_ends_at; double-counting them here
+    # would make the seeking timer start negative and clamp at 00:00:00 forever.
+    # The reconciler can't transition phase mid-pause (it filters paused_at IS NULL),
+    # so the entire pause is always in one phase — the simple None check suffices.
+    if game.seeking_started_at is not None:
+        game.seeking_pause_accumulated_sec += int(delta.total_seconds())
     game.paused_at = None  # MUST be last — reconciler's atomicity hinges on this.
 
     logger.info(

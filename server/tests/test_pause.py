@@ -316,6 +316,36 @@ def test_resume_increments_seeking_pause_accumulated_sec(session: Session, captu
     assert game.seeking_pause_accumulated_sec <= first_total + 65
 
 
+def test_resume_during_hiding_does_not_increment_seeking_accumulator(
+    session: Session, captured_events: list
+):
+    """Pre-seeking pauses shift hiding_ends_at but must NOT inflate the seeking
+    accumulator — otherwise the count-up timer starts deeply negative and clamps
+    at 00:00:00 indefinitely once the phase transitions."""
+    game = create_game(
+        session,
+        status=GameStatus.hiding,
+        hiding_time_min=60,
+        hiding_started_at=datetime.now(UTC) - timedelta(minutes=5),
+        hiding_ends_at=datetime.now(UTC) + timedelta(minutes=55),
+        seeking_started_at=None,
+    )
+    session.flush()
+    assert game.seeking_pause_accumulated_sec == 0
+
+    pause_at = datetime.now(UTC) - timedelta(seconds=120)
+    game.paused_at = pause_at
+    game.active_pause_reasons = [PauseReason.host]
+    session.flush()
+
+    resume_game(game, PauseReason.host)
+
+    assert game.seeking_pause_accumulated_sec == 0
+    # hiding_ends_at still shifts forward — that's the hider clock's mechanism.
+    assert game.hiding_ends_at is not None
+    assert game.hiding_ends_at > datetime.now(UTC) + timedelta(minutes=56)
+
+
 # ── Multi-reason ref-count accounting ────────────────────────────────────────
 
 

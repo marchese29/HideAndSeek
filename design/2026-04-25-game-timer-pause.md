@@ -123,7 +123,12 @@ resume_game(game, reason):
                   *photo_review_deadline_at]:
             if d is not None:
                 d += delta
-        game.seeking_pause_accumulated_sec += delta
+        if game.seeking_started_at is not None:
+            # Carve-out semantics: the accumulator is consumed only by the
+            # count-up seeking timer. Pre-seeking pauses already shift
+            # hiding_ends_at; double-counting them here would make the
+            # seeking timer start negative and clamp at 00:00:00 forever.
+            game.seeking_pause_accumulated_sec += delta
         game.paused_at = None
         emit GameTimerResumedEvent(...)
 ```
@@ -136,7 +141,7 @@ The resume path mutates several columns; the reconciler reads them in a separate
 
 1. Compute `delta`.
 2. Shift every applicable deadline column in `game` and joined open-question rows.
-3. Update `seeking_pause_accumulated_sec`.
+3. Update `seeking_pause_accumulated_sec` — only when `seeking_started_at` is non-null (pre-seeking pauses contribute 0; the reconciler can't transition mid-pause, so the entire pause is always in one phase).
 4. **Last:** clear `paused_at`.
 5. Commit.
 
