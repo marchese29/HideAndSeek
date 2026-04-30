@@ -5,14 +5,16 @@ import { useGameTimer } from '@/hooks/useGameTimer';
 
 interface GameTimerProps {
   phase: string;
-  hidingStartedAt: string | null;
-  hidingTimeMin: number;
+  hidingEndsAt: string | null;
   seekingStartedAt: string | null;
+  seekingPauseAccumulatedSec: number;
+  paused: boolean;
+  pausedAt: string | null;
   connected: boolean;
 }
 
-function timerBackground(connected: boolean, phase: string): string {
-  if (!connected) return '#7F8C8D';
+function timerBackground(connected: boolean, phase: string, paused: boolean): string {
+  if (!connected || paused) return '#7F8C8D';
   if (phase === 'hiding') return '#F39C12';
   if (phase === 'seeking') return '#2ECC71';
   return '#7F8C8D';
@@ -20,13 +22,22 @@ function timerBackground(connected: boolean, phase: string): string {
 
 export const GameTimer = memo(function GameTimer({
   phase,
-  hidingStartedAt,
-  hidingTimeMin,
+  hidingEndsAt,
   seekingStartedAt,
+  seekingPauseAccumulatedSec,
+  paused,
+  pausedAt,
   connected,
 }: GameTimerProps) {
-  const timeDisplay = useGameTimer(phase, hidingStartedAt, hidingTimeMin, seekingStartedAt);
-  const backgroundColor = timerBackground(connected, phase);
+  const timeDisplay = useGameTimer(
+    phase,
+    hidingEndsAt,
+    seekingStartedAt,
+    seekingPauseAccumulatedSec,
+    paused,
+    pausedAt,
+  );
+  const backgroundColor = timerBackground(connected, phase, paused);
 
   return (
     <View style={[styles.container, { backgroundColor }]}>

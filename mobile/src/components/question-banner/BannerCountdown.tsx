@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { StyleSheet, Text } from 'react-native';
 
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { usePaused } from '@/hooks/usePaused';
 
 interface BannerCountdownProps {
   deadlineIso: string | null;
@@ -18,7 +19,8 @@ export const BannerCountdown = memo(function BannerCountdown({
   deadlineIso,
   color,
 }: BannerCountdownProps) {
-  const remaining = useCountdownTimer(deadlineIso);
+  const { paused, pausedAt } = usePaused();
+  const remaining = useCountdownTimer(deadlineIso, { paused, pausedAt });
   if (remaining === null) return null;
 
   return (

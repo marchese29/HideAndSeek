@@ -59,6 +59,9 @@ export type PhotoRejectedDelta = S['PhotoRejectedEvent'];
 export type PhotoQueuedDelta = S['PhotoQueuedEvent'];
 export type PhotoUnqueuedDelta = S['PhotoUnqueuedEvent'];
 export type PhotoEventParams = S['PhotoEventParams'];
+export type GameTimerPausedDelta = S['GameTimerPausedEvent'];
+export type GameTimerResumedDelta = S['GameTimerResumedEvent'];
+export type PauseReason = S['PauseReason'];
 
 // ── Question Event Parameters ───────────────────────────────────────────────
 

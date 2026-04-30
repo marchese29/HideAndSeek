@@ -2,6 +2,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { usePaused } from '@/hooks/usePaused';
+
 interface EndgameBeltCenterProps {
   disabled?: boolean;
   onLongGame: () => void;
@@ -13,19 +15,23 @@ export const EndgameBeltCenter = memo(function EndgameBeltCenter({
   onLongGame,
   onFoundThem,
 }: EndgameBeltCenterProps) {
+  const { paused } = usePaused();
+  // "Found Them" starts a new clock (the found-claim window), so it disables
+  // on pause; "Long Game" is a phone-local view exit and stays live.
+  const foundDisabled = disabled || paused;
   return (
     <View style={styles.row}>
       <Pressable style={[styles.cell, styles.cellBorder]} onPress={onLongGame} disabled={disabled}>
         <MaterialCommunityIcons name="binoculars" size={28} color={disabled ? '#999' : '#000'} />
         <Text style={[styles.label, disabled && styles.labelDisabled]}>Long Game</Text>
       </Pressable>
-      <Pressable style={styles.cell} onPress={onFoundThem} disabled={disabled}>
+      <Pressable style={styles.cell} onPress={onFoundThem} disabled={foundDisabled}>
         <MaterialCommunityIcons
           name="map-marker-account"
           size={28}
-          color={disabled ? '#999' : '#000'}
+          color={foundDisabled ? '#999' : '#000'}
         />
-        <Text style={[styles.label, disabled && styles.labelDisabled]}>Found Them</Text>
+        <Text style={[styles.label, foundDisabled && styles.labelDisabled]}>Found Them</Text>
       </Pressable>
     </View>
   );

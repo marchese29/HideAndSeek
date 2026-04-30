@@ -22,31 +22,43 @@ function formatTime(ms: number): string {
 /**
  * Ticks every second and returns a formatted timer string.
  *
- * - Hiding phase: countdown from (hidingStartedAt + hidingTimeMin) to now, clamped to 00:00.
- * - Seeking phase: elapsed time since seekingStartedAt.
- * - Other phases: returns "--:--".
+ * - Hiding phase: countdown to `hidingEndsAt` (server-authoritative future deadline,
+ *   pause-shifted on resume), clamped to 00:00:00.
+ * - Seeking phase: elapsed since `seekingStartedAt`, minus accumulated pause seconds,
+ *   minus the in-flight pause window when currently paused.
+ * - Other phases: returns "--:--:--".
+ *
+ * While paused, the tick is skipped — the displayed value is stable so re-renders
+ * are unnecessary.
  */
 export function useGameTimer(
   phase: string,
-  hidingStartedAt: string | null,
-  hidingTimeMin: number,
+  hidingEndsAt: string | null,
   seekingStartedAt: string | null,
+  seekingPauseAccumulatedSec: number,
+  paused: boolean,
+  pausedAt: string | null,
 ): string {
   const [, setTick] = useState(0);
 
   useEffect(() => {
+    if (paused) return;
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [paused]);
 
-  if (phase === 'hiding' && hidingStartedAt) {
-    const endMs = parseUtc(hidingStartedAt) + hidingTimeMin * 60_000;
-    const remaining = Math.max(0, endMs - Date.now());
+  const referenceMs = paused && pausedAt ? parseUtc(pausedAt) : Date.now();
+
+  if (phase === 'hiding' && hidingEndsAt) {
+    const remaining = Math.max(0, parseUtc(hidingEndsAt) - referenceMs);
     return formatTime(remaining);
   }
 
   if (phase === 'seeking' && seekingStartedAt) {
-    const elapsed = Math.max(0, Date.now() - parseUtc(seekingStartedAt));
+    const elapsed = Math.max(
+      0,
+      referenceMs - parseUtc(seekingStartedAt) - seekingPauseAccumulatedSec * 1000,
+    );
     return formatTime(elapsed);
   }
 

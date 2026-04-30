@@ -13,6 +13,8 @@ import type {
   GameDissolvedDelta,
   GameEndedDelta,
   GameInfo,
+  GameTimerPausedDelta,
+  GameTimerResumedDelta,
   HiderGameState,
   HiderQuestionAnsweredDelta,
   HidingZoneExpandedDelta,
@@ -73,7 +75,9 @@ type GameplayEventType =
   | 'photo_submitted'
   | 'photo_rejected'
   | 'photo_queued'
-  | 'photo_unqueued';
+  | 'photo_unqueued'
+  | 'game_timer_paused'
+  | 'game_timer_resumed';
 
 type SSEEvent = EventSourceEvent<GameplayEventType, GameplayEventType>;
 
@@ -485,6 +489,22 @@ export function useGameplayEvents(gameId: string): { connected: boolean } {
             message: 'The found claim timed out',
             severity: 'warning',
           });
+        }),
+      );
+
+      es.addEventListener(
+        'game_timer_paused',
+        seq.wrap((event) => {
+          const data = parseData<GameTimerPausedDelta>(event);
+          if (data) useGameplayStore.getState().applyGameTimerPaused(data);
+        }),
+      );
+
+      es.addEventListener(
+        'game_timer_resumed',
+        seq.wrap((event) => {
+          const data = parseData<GameTimerResumedDelta>(event);
+          if (data) useGameplayStore.getState().applyGameTimerResumed(data);
         }),
       );
     }

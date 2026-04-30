@@ -4,6 +4,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import { expandHidingZone } from '@/api/powers';
+import { usePaused } from '@/hooks/usePaused';
 import { useQuestionSelection } from '@/hooks/useQuestionSelection';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type {
@@ -64,7 +65,11 @@ export const UtilityBelt = memo(function UtilityBelt({
   const stationElectionStatus =
     role === 'hider' ? (state as HiderGameState).station_election_status : undefined;
   const candidateStations = role === 'hider' ? (state as HiderGameState).candidate_stations : null;
+  const { paused, pausedAt } = usePaused();
   const disabled = !connected;
+  // Disabling start-a-new-clock actions on pause; resolution actions (handled
+  // inside their own components) stay live regardless.
+  const disabledOrPaused = disabled || paused;
 
   const [historyVisible, setHistoryVisible] = useState(false);
   const [seekerHistoryVisible, setSeekerHistoryVisible] = useState(false);
@@ -300,7 +305,7 @@ export const UtilityBelt = memo(function UtilityBelt({
             phase={state.phase}
             stationElectionStatus={stationElectionStatus}
             hasActiveQuestion={isSeekerSeeking && hasActiveQuestion}
-            disabled={disabled || (isStopSelectionActive && !canSetStop)}
+            disabled={disabledOrPaused || (isStopSelectionActive && !canSetStop)}
             onPress={
               isSeekerSeeking
                 ? selection.toggle
@@ -315,9 +320,11 @@ export const UtilityBelt = memo(function UtilityBelt({
         </View>
         <GameTimer
           phase={state.phase}
-          hidingStartedAt={state.hiding_started_at}
-          hidingTimeMin={gameInfo.hiding_time_min}
+          hidingEndsAt={state.hiding_ends_at}
           seekingStartedAt={state.seeking_started_at}
+          seekingPauseAccumulatedSec={state.seeking_pause_accumulated_sec}
+          paused={paused}
+          pausedAt={pausedAt}
           connected={connected}
         />
       </View>

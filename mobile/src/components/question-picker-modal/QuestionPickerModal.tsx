@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authHeader } from '@/api/auth';
 import { api } from '@/api/client';
 import { getTypeColors } from '@/constants/questionColors';
+import { usePaused } from '@/hooks/usePaused';
 import { useGameplayStore } from '@/stores/gameplayStore';
 import type { InventorySlotResponse } from '@/types/gameplay';
 import { type PhotoSubject, photoSubjectLabel } from '@/utils/photoSubjects';
@@ -67,6 +68,7 @@ export function QuestionPickerModal({
       s.state.active_question != null,
   );
   const connectionStatus = useGameplayStore((s) => s.status);
+  const { paused } = usePaused();
 
   const [submitting, setSubmitting] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -81,7 +83,11 @@ export function QuestionPickerModal({
     selection.kind === 'photo' ? selection.subject != null : selection.slot != null;
 
   const submitEnabled =
-    !submitting && selectionReady && !hasActiveQuestion && connectionStatus === 'connected';
+    !submitting &&
+    selectionReady &&
+    !hasActiveQuestion &&
+    !paused &&
+    connectionStatus === 'connected';
 
   const performSubmit = () => {
     const location = useGameplayStore.getState().selfLocation?.coordinates;
@@ -200,9 +206,11 @@ export function QuestionPickerModal({
         </View>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
-          {hasActiveQuestion && (
+          {paused ? (
+            <Text style={styles.waitingHint}>Game Paused</Text>
+          ) : hasActiveQuestion ? (
             <Text style={styles.waitingHint}>Waiting on an Active Question</Text>
-          )}
+          ) : null}
           <Pressable
             style={[
               styles.submitButton,

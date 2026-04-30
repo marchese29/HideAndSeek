@@ -2,6 +2,8 @@ import { create } from 'zustand';
 
 import type {
   GamePlayer,
+  GameTimerPausedDelta,
+  GameTimerResumedDelta,
   GeoJSONGeometry,
   GeoJSONPoint,
   HiderActiveQuestion,
@@ -82,6 +84,8 @@ interface GameplayActions {
   applyPhotoRejected: (delta: PhotoRejectedDelta) => void;
   applyPhotoQueued: (delta: PhotoQueuedDelta) => void;
   applyPhotoUnqueued: (delta: PhotoUnqueuedDelta) => void;
+  applyGameTimerPaused: (delta: GameTimerPausedDelta) => void;
+  applyGameTimerResumed: (delta: GameTimerResumedDelta) => void;
   openPhotoViewer: (viewer: PhotoViewerState) => void;
   closePhotoViewer: () => void;
 }
@@ -645,6 +649,85 @@ export const useGameplayStore = create<GameplayStore>()((set) => ({
         photo_uploaded_at: null,
       };
       return { ...prev, state: { ...prev.state, active_question: activeQuestion } };
+    });
+  },
+
+  applyGameTimerPaused: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+      if (prev.role === 'hider') {
+        return {
+          ...prev,
+          state: {
+            ...prev.state,
+            paused: true,
+            paused_at: delta.paused_at,
+            active_pause_reasons: delta.active_pause_reasons,
+          },
+        };
+      }
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          paused: true,
+          paused_at: delta.paused_at,
+          active_pause_reasons: delta.active_pause_reasons,
+        },
+      };
+    });
+  },
+
+  applyGameTimerResumed: (delta) => {
+    set((prev) => {
+      if (prev.status !== 'connected') return prev;
+
+      // Patch active question's deadline if it appears in the delta map.
+      const activeQuestion = prev.state.active_question;
+      let nextActiveQuestion = activeQuestion;
+      if (activeQuestion) {
+        const shifted = delta.question_deadlines[activeQuestion.question_id];
+        if (shifted !== undefined) {
+          nextActiveQuestion = { ...activeQuestion, question_deadline: shifted };
+        }
+      }
+
+      // Keep the seeker waiting modal's countdown coherent post-resume.
+      let nextFoundClaim = prev.foundClaimPending;
+      if (nextFoundClaim && delta.found_claim_expires_at) {
+        nextFoundClaim = { ...nextFoundClaim, deadlineUtc: delta.found_claim_expires_at };
+      }
+
+      if (prev.role === 'hider') {
+        return {
+          ...prev,
+          state: {
+            ...prev.state,
+            paused: false,
+            paused_at: null,
+            active_pause_reasons: [],
+            seeking_pause_accumulated_sec: delta.seeking_pause_accumulated_sec,
+            hiding_ends_at: delta.hiding_ends_at,
+            found_claim_expires_at: delta.found_claim_expires_at,
+            active_question: nextActiveQuestion as typeof prev.state.active_question,
+          },
+          foundClaimPending: nextFoundClaim,
+        };
+      }
+      return {
+        ...prev,
+        state: {
+          ...prev.state,
+          paused: false,
+          paused_at: null,
+          active_pause_reasons: [],
+          seeking_pause_accumulated_sec: delta.seeking_pause_accumulated_sec,
+          hiding_ends_at: delta.hiding_ends_at,
+          found_claim_expires_at: delta.found_claim_expires_at,
+          active_question: nextActiveQuestion as typeof prev.state.active_question,
+        },
+        foundClaimPending: nextFoundClaim,
+      };
     });
   },
 

@@ -85,10 +85,11 @@ src/
     colors.ts                  # PlayerColor → hex mapping
     questionColors.ts          # Per-question-type color constants (active/inactive/onActive/rgb) — shared by banner, belt, and map overlays
   hooks/
-    useCountdownTimer.ts       # Countdown timer to an ISO deadline (question deadline display)
+    useCountdownTimer.ts       # Countdown timer to an ISO deadline; freezes against pausedAt when paused
     useGameInfo.ts             # Static game info (TanStack Query, fetched once, staleTime=Infinity)
     useGameplayEvents.ts       # Gameplay SSE (role-aware endpoint, hydrates GameplayStore)
-    useGameTimer.ts            # 1s-tick timer: countdown (hiding) / elapsed (seeking)
+    useGameTimer.ts            # 1s-tick timer: countdown to hiding_ends_at / pause-aware seeking elapsed
+    usePaused.ts               # Selector hook → { paused, pausedAt, pauseReasons } from snapshot
     useLocationTracking.ts     # Foreground GPS tracking + POST /location + optimistic self update
     useLobbyEvents.ts          # Lobby SSE subscription with auto-reconnect + connection status
     useActiveQuestionBoundary.ts # Fetches + caches exclusion boundary for the active question — seeker only (TanStack Query, ask-time location)
@@ -103,6 +104,7 @@ src/
     distance.ts                # validateCustomDistance() — shared between belt CustomDistanceInput and modal CustomChip
     geo.ts                     # GeoJSON ↔ react-native-maps LatLng conversion + regionFromBoundary + haversine distance + convention conversion
     locationPermission.ts      # requestLocationPermission() — foreground permission helper
+    pauseCategory.ts           # isUniversalCategory(reasons) — host/rest_period → universal modal vs banner
     time.ts                    # parseUtc() — server timestamp parsing (shared by timer hooks)
   components/                  # Reusable UI components
     GameMap.tsx                # Gameplay map orchestrator (boundary, stops, player pins, preview overlay, candidate stops, endgame overlays)
@@ -122,6 +124,8 @@ src/
     DepartureWarningBanner.tsx # Red warning banner when hiders leave the hiding zone (driven by not_in_zone field)
     FreezeWarningBanner.tsx # Red warning banner when hiders move during freeze (driven by freeze_departed field)
     LocationDeniedBanner.tsx   # Warning banner when location permission denied
+    PauseBanner.tsx            # Top-of-screen pause banner — role-targeted reason copy (Category 1, e.g. photo_question_open)
+    PauseModal.tsx             # Non-dismissable pageSheet modal — host/rest_period universal pause categories
     ToastHost.tsx              # Top-of-screen toast banner for informational SSE events (slide-down + swipe-to-dismiss)
     ConnectionDot.tsx          # SSE connection status dot (green/red) — used in lobby
     question-banner/           # Question Banner (active question state for both roles)
@@ -299,6 +303,8 @@ Both hooks:
 - **`found_claim`**: A seeker claimed found — `setFoundClaimPending(seekerPlayerId, deadlineUtc)` opens `FoundClaimModal` for hiders and `SeekerFoundClaimWaitingModal` for the claiming seeker. Both channels carry the event with the same server-computed `deadline_utc`.
 - **`found_claim_rejected`**: Hiders rejected a claim — seekers see a rejection toast **and** `clearFoundClaim()` closes the seeker waiting modal. Seeker channel only.
 - **`found_claim_expired`**: Auto-dismiss fired — `clearFoundClaim()` closes the active modal for whichever role has one, both roles see an expiration toast.
+- **`game_timer_paused`**: Pause acquired or pause-reason set changed (still non-empty) — both channels. `applyGameTimerPaused()` overwrites `paused`, `paused_at`, and `active_pause_reasons` on state. Idempotent (server emits for empty→non-empty _and_ for partial release that leaves reasons active).
+- **`game_timer_resumed`**: Pause-reason set fully drained — both channels. `applyGameTimerResumed()` clears `paused`/`paused_at`/`active_pause_reasons`, copies `seeking_pause_accumulated_sec`, `hiding_ends_at`, `found_claim_expires_at` from the delta, walks `delta.question_deadlines` to patch the active question's `question_deadline` if its id is in the dict, and patches `foundClaimPending.deadlineUtc` from `delta.found_claim_expires_at` so the seeker waiting modal's countdown stays coherent post-resume.
 - Delta handlers preserve array reference stability: if no player matched, the original array is returned (no unnecessary re-renders).
 
 ## In-App Toasts
@@ -398,6 +404,22 @@ Scrubber modal accessed from the seeker utility belt during the seeking phase. R
 - **Hider modal**: `FoundClaimModal` (`src/components/FoundClaimModal.tsx`) — auto-presented at gameplay screen root when `foundClaimPending !== null` and `role === 'hider'`. `presentationStyle="pageSheet"`, `onRequestClose` is a no-op (Android back button cannot dismiss), no swipe-to-dismiss. Two buttons: **Confirm** → `POST /games/{id}/found/confirm` (game ends via subsequent `game_ended` SSE), **Reject** → `POST /games/{id}/found/reject` (clears claim locally and via the server). Either button on 409 clears local state with "Already Resolved" alert (covers the race where a second hider or the auto-dismiss timer beat this one).
 - **Seeker modal**: `SeekerFoundClaimWaitingModal` (`src/components/SeekerFoundClaimWaitingModal.tsx`) — auto-presented when `foundClaimPending !== null` and `role === 'seeker'`. Same non-dismissable `pageSheet` styling as the hider modal; no action buttons (intentionally blocking). Shows the title "Awaiting Confirmation..." and a large M:SS countdown driven by `useCountdownTimer(pending.deadlineUtc)`; the countdown hides at 0 so the UI doesn't lie if SSE resolution lags the deadline by a second or two. Dismissal is SSE-driven: `game_ended` (reason=found) navigates to recap, `found_claim_rejected` calls `clearFoundClaim()` plus the existing rejection toast, `found_claim_expired` already calls `clearFoundClaim()` plus an expiration toast.
 - **Backstop**: No SSE replay for missed `found_claim` events. The 2-minute server-side auto-dismiss is the backstop for both roles — if a device was offline when the claim arrived, the event expires silently and the modal never presents. The `found_claim_at` field is not exposed on game state snapshots (intentional, keeps scope tight).
+
+## Game Timer Pause
+
+Mobile counterpart to the server-side game-timer pause primitive (`core/logic/pause.py`, `GameTimerPausedEvent` / `GameTimerResumedEvent`). Pause state of truth lives on the snapshot — `state.paused`, `state.paused_at`, `state.active_pause_reasons`, `state.seeking_pause_accumulated_sec`. No parallel store slice; the two SSE handlers mutate `state.*` directly, mirroring `applyHidingZoneExpanded` / `applyPhaseChanged`.
+
+- **Selector hook**: `usePaused()` (`src/hooks/usePaused.ts`) returns `{ paused, pausedAt, pauseReasons }` from individual primitive selectors. Consumers OR `paused` into their existing `disabled` expression.
+- **Category dispatch**: `isUniversalCategory(reasons)` in `src/utils/pauseCategory.ts` returns true when `host` or `rest_period` is present — those drive the universal `<PauseModal />`. Everything else (today: `photo_question_open`) drives the role-targeted `<PauseBanner />`. Stacked pauses: the modal supersedes the banner ("strictest category present wins").
+- **PauseBanner** (`src/components/PauseBanner.tsx`): static top-of-screen banner mounted at the gameplay screen root above `<ToastHost />` so it z-orders over any toast that fires during pause. Persistent (no auto-dismiss, no swipe). Copy is reason-driven and per-role — for `photo_question_open`: `"Paused — waiting on <hider name>'s photo."` (seeker) / `"Paused — your photo is under review."` (hider). The hider name comes from the active question's `photo_queued_by` resolved via the hiders roster.
+- **PauseModal** (`src/components/PauseModal.tsx`): non-dismissable `pageSheet` Modal (`onRequestClose` no-op, mirrors `FoundClaimModal`). No action buttons — Resume / End Game host buttons land in `m8r.9` (mobile host controls); the rest-period countdown lands with a future epic.
+- **Pause-aware timer hooks**: `useCountdownTimer(deadline, { paused, pausedAt })` freezes its remaining value at `deadline - pausedAt` and skips the 1s tick while paused. Continuity at resume is automatic — the server shifts the deadline forward by exactly `now - paused_at`. `useGameTimer(phase, hidingEndsAt, seekingStartedAt, seekingPauseAccumulatedSec, paused, pausedAt)` drives the belt timer: hiding branch counts down to the future-deadline `hiding_ends_at`; seeking branch is `now - seekingStartedAt - seekingPauseAccumulatedSec * 1000 - (paused ? now - pausedAt : 0)`. While paused, both hooks short-circuit `setInterval`.
+- **Belt timer color**: `GameTimer` accepts `paused`; gray (`#7F8C8D`) when `!connected || paused` — pause overrides the green/orange phase color.
+- **Banner countdown**: `BannerCountdown` reads `paused`/`pausedAt` via `usePaused()` and threads them into `useCountdownTimer`. Question deadline freezes during pause and resumes from the shifted future deadline.
+- **Resolution-action principle**: actions that resolve a clock stay live; actions that start a new clock disable. Disabled on pause: seeker StateAction "Questions" (opens picker), seeker `QuestionPickerModal` Submit, hider StateAction "Powers", seeker "Found Them" in `EndgameBeltCenter`. **Not** disabled on pause: hider `FoundClaimModal` Confirm/Reject, hider photo Submit/Null/Queue/Replace, hider non-photo answer/veto/randomize, seeker abandon/lock-in, map/location/history/endgame-scrubber surfaces.
+- **Snapshot rehydration**: `hydrate()` already replaces `state` wholesale, so all pause fields restore on reconnect for free — no special-case in the hydrate path.
+- **Toast behavior during pause** (deferred per design § 9 #3): toasts are not queued or suppressed. `<PauseBanner />` z-orders above `<ToastHost />` so a toast that fires during pause renders underneath. Whether some toast classes should display _through_ a pause is left for a follow-up bead.
+- **No production trigger yet**: HideAndSeek-nah will wire `pause_game(reason=photo_question_open)` from the photo lifecycle; m8r.8 will ship the host pause endpoints. Until then, exercise the mobile flow by invoking `pause_game` / `resume_game` directly via `docker compose exec api uv run python -c "..."`.
 
 - TypeScript strict mode enabled
 - `@/` path alias maps to `src/`

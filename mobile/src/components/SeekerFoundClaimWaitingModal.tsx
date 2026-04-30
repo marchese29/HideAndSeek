@@ -1,6 +1,7 @@
 import { Modal, StyleSheet, Text, View } from 'react-native';
 
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { usePaused } from '@/hooks/usePaused';
 import { useGameplayStore } from '@/stores/gameplayStore';
 
 function formatRemaining(seconds: number): string {
@@ -16,7 +17,8 @@ function formatRemaining(seconds: number): string {
 export function SeekerFoundClaimWaitingModal() {
   const pending = useGameplayStore((s) => s.foundClaimPending);
   const role = useGameplayStore((s) => s.role);
-  const remaining = useCountdownTimer(pending?.deadlineUtc ?? null);
+  const { paused, pausedAt } = usePaused();
+  const remaining = useCountdownTimer(pending?.deadlineUtc ?? null, { paused, pausedAt });
 
   const visible = pending !== null && role === 'seeker';
 
