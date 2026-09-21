@@ -22,7 +22,7 @@ docker compose down        # Stop services (data preserved in pgdata volume)
 docker compose down -v     # Stop services and wipe database
 
 # Local dev (requires: docker compose up -d postgres redis)
-scripts/dev.sh             # Launches uvicorn + Celery worker together
+scripts/dev.sh             # Launches uvicorn + Celery worker together (run from the main checkout — it refuses in a worktree)
 ```
 
 ## Running the Server
@@ -31,7 +31,7 @@ Two modes — both serve on `localhost:8000`, both use PostgreSQL:
 
 | | **Docker (preferred)** | **Local + worker** |
 |---|---|---|
-| Start | `docker compose up --build` | `docker compose up -d postgres redis` then `scripts/dev.sh` |
+| Start | `docker compose up --build` | `docker compose up -d postgres redis` then `scripts/dev.sh` (main checkout only) |
 | Database | PostGIS (PostgreSQL 16) | PostGIS via docker-compose |
 | Celery | Redis + worker container | Redis via docker-compose + worker process |
 | Timers | Real (reconciler polls every 1s) | Real (reconciler polls every 1s) |
@@ -40,7 +40,7 @@ Two modes — both serve on `localhost:8000`, both use PostgreSQL:
 
 In production (`ENV=production`): INFO level, JSON renderer, stderr only.
 
-**Schema is owned by Alembic, not the server.** The lifespan only configures logging. In docker-compose a one-shot `migrate` service runs `alembic upgrade head` before the API starts (`depends_on: service_completed_successfully`). In prod, the DataStack's CDK custom resource runs the same command in a Fargate task during `cdk deploy`. Local dev (`scripts/dev.sh`) assumes you've already brought compose up at least once so the migrate service has populated the volume — or run `uv run alembic upgrade head` yourself from the repo root.
+**Schema is owned by Alembic, not the server.** The lifespan only configures logging. In docker-compose a one-shot `migrate` service runs `alembic upgrade head` before the API starts (`depends_on: service_completed_successfully`). In prod, the DataStack's CDK custom resource runs the same command in a Fargate task during `cdk deploy`. Local dev (`scripts/dev.sh`) assumes you've already brought compose up at least once so the migrate service has populated the volume — never run `alembic upgrade` by hand.
 
 ## Logging
 
