@@ -30,9 +30,8 @@ This app requires **development builds** (not Expo Go) because `react-native-map
 
 A fresh worktree under `.claude/worktrees/<branch>/` does not inherit untracked / gitignored files from the main checkout. To get `npx expo run:ios` working:
 
-1. **Copy `mobile/.env` from the main checkout.** It's gitignored (holds `EAS_PROJECT_*`, etc.). Without it `app.config.ts` resolves to a different app identity.
-2. **Copy `mobile/google-services.json` from the main checkout** if you'll build for Android. It's gitignored (every contributor downloads their own copy from Firebase Console — see "Push Notifications" below). iOS builds don't need it.
-3. **`.watchmanconfig`** at the worktree root marks it as a Watchman project boundary so the daemon doesn't walk up past the worktree's `.git` file into the main checkout. Already committed at the repo root — no per-worktree action needed.
+1. **Run `scripts/bootstrap-worktree.sh` from inside the worktree.** It copies `mobile/.env` (holds `EAS_PROJECT_*`, etc. — without it `app.config.ts` resolves to a different app identity) and `mobile/google-services.json` (only needed for Android; every contributor downloads their own from Firebase Console — see "Push Notifications" below) from the main checkout when present, without overwriting existing files.
+2. **`.watchmanconfig`** at the worktree root marks it as a Watchman project boundary so the daemon doesn't walk up past the worktree's `.git` file into the main checkout. Already committed at the repo root — no per-worktree action needed.
 
 If Metro complains about a missing transitive module (e.g. `@babel/runtime/helpers/wrapRegExp`), the install is partial — `rm -rf node_modules && npm install` (no flags) fixes it. Cause is unclear; reproduce-and-file if it happens cleanly.
 

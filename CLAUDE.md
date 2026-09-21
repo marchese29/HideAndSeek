@@ -18,10 +18,9 @@ UV workspace with a root `pyproject.toml` and five Python packages (`models/`, `
 - `infra/cdk/` — AWS CDK app (TypeScript) for deploying the backend. Sibling of the uv workspace, **not** a uv member. No personal info (account IDs, domain names, hosted zone IDs) is committed — everything personal flows in via env vars or CDK context. See `infra/cdk/CLAUDE.md`.
 - `infra/localstack/init-aws.sh` — LocalStack ready.d hook; bootstraps the APNs/FCM SNS platform applications and the `hideandseek-photos-local` S3 bucket so local dev matches prod.
 - `docker-compose.yml` — Docker Compose (PostGIS + Redis + LocalStack + one-shot `migrate` + API server + Celery worker + reconciler). LocalStack emulates AWS SNS + S3 for local push delivery and photo-question storage. The `migrate` service runs `alembic upgrade head` once against the postgres volume; `api`/`worker`/`reconciler` only start after it exits 0 (`depends_on: service_completed_successfully`). Schema changes ship as new Alembic revisions — no more wiping the dev DB on every model edit.
-- `alembic.ini`, `alembic/` — Alembic migration framework. `env.py` reads `DATABASE_URL`, wires `geoalchemy2.alembic_helpers` + custom `_render_item`/`_compare_type` hooks for our `ShapelyGeography`/`ShapelyGeometry` column subclasses. New revisions: `uv run alembic revision --autogenerate -m "..."` from the repo root.
-- `scripts/dev.sh` — Local dev launcher (uvicorn + Celery worker with Redis).
-- `scripts/manual-test.sh` — End-to-end metric game flow against a running Docker server (seeds data, exercises all endpoints).
-- `scripts/manual-test-imperial.sh` — End-to-end imperial convention game flow with assertions (run after `manual-test.sh`).
+- `alembic.ini`, `alembic/` — Alembic migration framework. `env.py` reads `DATABASE_URL`, falling back (with a warning) to the localhost dev URL, and wires `geoalchemy2.alembic_helpers` + custom `_render_item`/`_compare_type` hooks for our `ShapelyGeography`/`ShapelyGeometry` column subclasses. New revisions: `uv run alembic revision --autogenerate -m "..."` from the repo root.
+- `scripts/dev.sh` — Local dev launcher (uvicorn + Celery worker with Redis); refuses to run from a git worktree (see Worktrees below).
+- `scripts/bootstrap-worktree.sh` — run from inside a fresh worktree to copy gitignored files (`mobile/.env`, `mobile/google-services.json`) from the main checkout.
 - `.beads/` — Beads issue tracker.
 
 ## CLAUDE.md Is the Source of Truth
@@ -126,7 +125,7 @@ Note that `--priority` passed through to `bd ready` uses beads' P0–P4 numberin
 
 When server code changes, verify with **both** automated and manual checks before committing:
 
-1. **Automated**: `uv run pytest`, `uv run ruff check .`, `uv run pyright`
+1. **Automated**: `uv run pytest`, `uv run ruff check .`, `uv run pyright`. `make check` runs the equivalent full cascade in one shot from the repo root; `make check-python` / `make test` / `make check-mobile` / `make regen` run the individual pieces.
 2. **Manual**: Prefer Docker (`docker compose up --build`) for manual testing — it runs PostgreSQL, Redis, and the Celery worker, matching production. Seed test data if needed, and exercise new/changed endpoints with `curl`. Verify request/response shapes, error cases, and side effects.
 
 Manual testing catches issues that unit tests miss: serialization quirks, middleware interactions, dependency wiring, and real request flow.
@@ -154,6 +153,10 @@ When ending a work session, complete ALL steps below. Work is NOT complete until
 bd hooks install
 ln -sf ../../hooks/pre-commit .git/hooks/pre-commit  # target is relative to symlink location
 ```
+
+### Worktrees
+
+Branch from `dev` (see Conventions above). From inside the new worktree, run `scripts/bootstrap-worktree.sh` to copy the gitignored files it needs from the main checkout. There is **one Docker stack, owned by the main checkout** — `docker-compose.yml` pins a fixed project name, a shared `pgdata` volume, and fixed ports, so running compose (or `scripts/dev.sh`) from a worktree would silently hijack the main checkout's containers; `scripts/dev.sh` refuses to run from a worktree (override: `HIDEANDSEEK_ALLOW_WORKTREE_STACK=1`). Worktrees are for editing and running checks. The pre-commit hooks cache (`.git/hooks-cache/`) is per-worktree, so the first commit in a new worktree cold-runs every check.
 
 ## Quick Start
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from logging.config import fileConfig
 
 from alembic import context
@@ -42,15 +43,25 @@ def _compare_type(context, inspected_column, metadata_column, inspected_type, me
     return None
 
 
+# Mirrors scripts/dev.sh's default. docker-compose sets DATABASE_URL
+# explicitly for the `migrate` one-shot service, so this default never
+# applies there — it only fires for a human running alembic by hand.
+_DEFAULT_DATABASE_URL = 'postgresql+psycopg://hideandseek:hideandseek@localhost:5432/hideandseek'
+
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = os.environ.get('DATABASE_URL')
-if not database_url:
-    msg = 'DATABASE_URL environment variable is required for alembic migrations'
-    raise RuntimeError(msg)
+database_url = os.environ.get('DATABASE_URL') or _DEFAULT_DATABASE_URL
+if not os.environ.get('DATABASE_URL'):
+    print(
+        f'warning: DATABASE_URL not set — defaulting to {_DEFAULT_DATABASE_URL} '
+        "(localhost:5432 — the main checkout's compose stack). Schema apply "
+        "stays owned by the compose `migrate` one-shot service — don't run "
+        '`alembic upgrade` by hand.',
+        file=sys.stderr,
+    )
 config.set_main_option('sqlalchemy.url', database_url)
 
 target_metadata = Base.metadata

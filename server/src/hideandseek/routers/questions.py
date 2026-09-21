@@ -631,7 +631,7 @@ def _validate_image(upload: UploadFile) -> tuple[str, str]:
 
 
 def _photo_key(game_id: uuid.UUID, ext: str) -> str:
-    env = os.environ.get('HIDEANDSEEK_ENV', 'local')
+    env = os.environ.get('ENV', 'local')
     return f'{env}/{game_id}/{uuid.uuid4()}.{ext}'
 
 

@@ -1,7 +1,6 @@
 # Design
 
-Index of design artifacts for the HideAndSeek game.
+Design artifacts for the HideAndSeek game — dated markdown documents (`YYYY-MM-DD-<name>.md`).
 
-## Documents
-
-(No design documents yet — add them here as the project evolves.)
+See [CLAUDE.md](CLAUDE.md) for the annotated index of every document and the
+conventions for adding new ones.

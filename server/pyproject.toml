@@ -41,25 +41,16 @@ dev = [
     "fakeredis[lua]>=2.34.1",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.ruff]
-target-version = "py312"
-line-length = 100
-
-[tool.ruff.format]
-quote-style = "single"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "FA", "ANN", "DTZ", "PLC0415"]
-ignore = ["ANN204", "ANN401"]
+extend = "../ruff-shared.toml"
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Header", "fastapi.Path", "fastapi.Query", "fastapi.Body", "Depends", "Header", "Path", "Query", "Body"]
 
-[tool.ruff.lint.flake8-annotations]
-suppress-none-returning = true
-
 [tool.ruff.lint.isort]
-force-single-line = false
 known-first-party = ["hideandseek", "hideandseek_models", "hideandseek_core", "hideandseek_worker"]
 
 [tool.pyright]

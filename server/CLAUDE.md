@@ -7,6 +7,8 @@ Python FastAPI backend for the HideAndSeek game.
 ```bash
 uv sync                    # Install/update dependencies
 uv run pytest              # Run tests (requires Docker — testcontainers spins up PostGIS)
+                            # The Docker daemon (colima or Docker Desktop) must already be
+                            # running, or testcontainers fails at collection.
 uv run ruff check .        # Lint
 uv run ruff format .       # Format
 uv run pyright             # Type check
@@ -20,7 +22,7 @@ docker compose down        # Stop services (data preserved in pgdata volume)
 docker compose down -v     # Stop services and wipe database
 
 # Local dev (requires: docker compose up -d postgres redis)
-scripts/dev.sh             # Launches uvicorn + Celery worker together
+scripts/dev.sh             # Launches uvicorn + Celery worker together (run from the main checkout — it refuses in a worktree)
 ```
 
 ## Running the Server
@@ -29,7 +31,7 @@ Two modes — both serve on `localhost:8000`, both use PostgreSQL:
 
 | | **Docker (preferred)** | **Local + worker** |
 |---|---|---|
-| Start | `docker compose up --build` | `docker compose up -d postgres redis` then `scripts/dev.sh` |
+| Start | `docker compose up --build` | `docker compose up -d postgres redis` then `scripts/dev.sh` (main checkout only) |
 | Database | PostGIS (PostgreSQL 16) | PostGIS via docker-compose |
 | Celery | Redis + worker container | Redis via docker-compose + worker process |
 | Timers | Real (reconciler polls every 1s) | Real (reconciler polls every 1s) |
@@ -38,7 +40,7 @@ Two modes — both serve on `localhost:8000`, both use PostgreSQL:
 
 In production (`ENV=production`): INFO level, JSON renderer, stderr only.
 
-**Schema is owned by Alembic, not the server.** The lifespan only configures logging. In docker-compose a one-shot `migrate` service runs `alembic upgrade head` before the API starts (`depends_on: service_completed_successfully`). In prod, the DataStack's CDK custom resource runs the same command in a Fargate task during `cdk deploy`. Local dev (`scripts/dev.sh`) assumes you've already brought compose up at least once so the migrate service has populated the volume — or run `uv run alembic upgrade head` yourself from the repo root.
+**Schema is owned by Alembic, not the server.** The lifespan only configures logging. In docker-compose a one-shot `migrate` service runs `alembic upgrade head` before the API starts (`depends_on: service_completed_successfully`). In prod, the DataStack's CDK custom resource runs the same command in a Fargate task during `cdk deploy`. Local dev (`scripts/dev.sh`) assumes you've already brought compose up at least once so the migrate service has populated the volume — never run `alembic upgrade` by hand.
 
 ## Logging
 
@@ -47,7 +49,7 @@ The generic structlog config (root level, renderer, `sqlalchemy.engine` routing,
 `AccessLogMiddleware` (`middleware.py`) captures per-request state on a `_RequestCapture` object (no closure/`nonlocal` tricks) and emits one structured log line per request with `status`, `duration_ms`, `headers`, `query`, `request_body`, `response_body`, and `response_size`. Body capture is capped at 1KB (request) / 5KB (response); responses larger than 5KB get a `... (<N> bytes total)` suffix so you can spot oversized payloads. SSE responses (`content-type: text/event-stream`) skip response-body capture entirely — the line still fires with `response_size` but no `response_body` field, since the stream can be arbitrarily large and the application logger already narrates lobby/gameplay events. Sensitive headers (`authorization`, `cookie`, `x-player-secret`) are redacted in the `headers` field, and any JSON body value whose key contains `secret` or `token` (case-insensitive) is replaced with `"[REDACTED]"` — so `player_secret`, `device_token`, etc. stay out of the logs by default, no per-endpoint allowlist needed.
 
 Env vars (shared across all three services):
-- `ENV=local|development|production` — `local`/`development` get DEBUG + console renderer, `production` gets INFO + JSON renderer.
+- `ENV=local|development|production` — `local`/`development` get DEBUG + console renderer, `production` gets INFO + JSON renderer; also prefixes photo S3 keys (`{ENV}/{game_id}/{uuid}.{ext}`).
 - `LOG_FORMAT=json` — force JSON regardless of `ENV`.
 - `SQL_ECHO=1|true|yes` — force `sqlalchemy.engine` to INFO (SQL visible). On by default in `local`.
 
@@ -56,7 +58,7 @@ Env vars (shared across all three services):
 Always verify server changes with **both** automated checks and manual API calls before committing.
 
 1. **Automated**: `uv run pytest && uv run ruff check . && uv run pyright`
-2. **Manual**: Prefer Docker (`docker compose up --build`) — it runs PostGIS, Redis, and the Celery worker, matching production. Run `scripts/manual-test.sh` for a full end-to-end game flow (seeds data, exercises all endpoints). For ad-hoc testing, seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created, timer tasks in worker logs). To reset: `docker compose down -v`.
+2. **Manual**: Prefer Docker (`docker compose up --build`) — it runs PostGIS, Redis, and the Celery worker, matching production. Seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created, timer tasks in worker logs). To reset: `docker compose down -v`.
 
 Manual testing catches wiring and serialization issues that unit tests miss.
 
