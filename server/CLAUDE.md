@@ -47,7 +47,7 @@ The generic structlog config (root level, renderer, `sqlalchemy.engine` routing,
 `AccessLogMiddleware` (`middleware.py`) captures per-request state on a `_RequestCapture` object (no closure/`nonlocal` tricks) and emits one structured log line per request with `status`, `duration_ms`, `headers`, `query`, `request_body`, `response_body`, and `response_size`. Body capture is capped at 1KB (request) / 5KB (response); responses larger than 5KB get a `... (<N> bytes total)` suffix so you can spot oversized payloads. SSE responses (`content-type: text/event-stream`) skip response-body capture entirely — the line still fires with `response_size` but no `response_body` field, since the stream can be arbitrarily large and the application logger already narrates lobby/gameplay events. Sensitive headers (`authorization`, `cookie`, `x-player-secret`) are redacted in the `headers` field, and any JSON body value whose key contains `secret` or `token` (case-insensitive) is replaced with `"[REDACTED]"` — so `player_secret`, `device_token`, etc. stay out of the logs by default, no per-endpoint allowlist needed.
 
 Env vars (shared across all three services):
-- `ENV=local|development|production` — `local`/`development` get DEBUG + console renderer, `production` gets INFO + JSON renderer.
+- `ENV=local|development|production` — `local`/`development` get DEBUG + console renderer, `production` gets INFO + JSON renderer; also prefixes photo S3 keys (`{ENV}/{game_id}/{uuid}.{ext}`).
 - `LOG_FORMAT=json` — force JSON regardless of `ENV`.
 - `SQL_ECHO=1|true|yes` — force `sqlalchemy.engine` to INFO (SQL visible). On by default in `local`.
 
@@ -56,7 +56,7 @@ Env vars (shared across all three services):
 Always verify server changes with **both** automated checks and manual API calls before committing.
 
 1. **Automated**: `uv run pytest && uv run ruff check . && uv run pyright`
-2. **Manual**: Prefer Docker (`docker compose up --build`) — it runs PostGIS, Redis, and the Celery worker, matching production. Run `scripts/manual-test.sh` for a full end-to-end game flow (seeds data, exercises all endpoints). For ad-hoc testing, seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created, timer tasks in worker logs). To reset: `docker compose down -v`.
+2. **Manual**: Prefer Docker (`docker compose up --build`) — it runs PostGIS, Redis, and the Celery worker, matching production. Seed test data if the DB is empty, and `curl` new/changed endpoints. Verify happy paths, error responses, and side effects (e.g., push no-op logs, DB records created, timer tasks in worker logs). To reset: `docker compose down -v`.
 
 Manual testing catches wiring and serialization issues that unit tests miss.
 

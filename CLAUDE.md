@@ -20,8 +20,6 @@ UV workspace with a root `pyproject.toml` and five Python packages (`models/`, `
 - `docker-compose.yml` — Docker Compose (PostGIS + Redis + LocalStack + one-shot `migrate` + API server + Celery worker + reconciler). LocalStack emulates AWS SNS + S3 for local push delivery and photo-question storage. The `migrate` service runs `alembic upgrade head` once against the postgres volume; `api`/`worker`/`reconciler` only start after it exits 0 (`depends_on: service_completed_successfully`). Schema changes ship as new Alembic revisions — no more wiping the dev DB on every model edit.
 - `alembic.ini`, `alembic/` — Alembic migration framework. `env.py` reads `DATABASE_URL`, wires `geoalchemy2.alembic_helpers` + custom `_render_item`/`_compare_type` hooks for our `ShapelyGeography`/`ShapelyGeometry` column subclasses. New revisions: `uv run alembic revision --autogenerate -m "..."` from the repo root.
 - `scripts/dev.sh` — Local dev launcher (uvicorn + Celery worker with Redis).
-- `scripts/manual-test.sh` — End-to-end metric game flow against a running Docker server (seeds data, exercises all endpoints).
-- `scripts/manual-test-imperial.sh` — End-to-end imperial convention game flow with assertions (run after `manual-test.sh`).
 - `.beads/` — Beads issue tracker.
 
 ## CLAUDE.md Is the Source of Truth
