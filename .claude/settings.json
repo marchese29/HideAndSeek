@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv --version)",
+      "Bash(make:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx expo:*)",
+      "Bash(npx prettier:*)",
+      "Bash(node:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git grep:*)",
+      "Bash(bd:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(docker compose config:*)",
+      "Bash(docker info)",
+      "Bash(docker version)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "mcp__claude_ai_Context7__resolve-library-id",
+      "mcp__claude_ai_Context7__query-docs",
+      "WebSearch",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebFetch(domain:github.com)"
+    ]
+  }
+}

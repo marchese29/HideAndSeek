@@ -124,7 +124,7 @@ Note that `--priority` passed through to `bd ready` uses beads' P0–P4 numberin
 
 When server code changes, verify with **both** automated and manual checks before committing:
 
-1. **Automated**: `uv run pytest`, `uv run ruff check .`, `uv run pyright`
+1. **Automated**: `uv run pytest`, `uv run ruff check .`, `uv run pyright`. `make check` runs the equivalent full cascade in one shot from the repo root; `make check-python` / `make test` / `make check-mobile` / `make regen` run the individual pieces.
 2. **Manual**: Prefer Docker (`docker compose up --build`) for manual testing — it runs PostgreSQL, Redis, and the Celery worker, matching production. Seed test data if needed, and exercise new/changed endpoints with `curl`. Verify request/response shapes, error cases, and side effects.
 
 Manual testing catches issues that unit tests miss: serialization quirks, middleware interactions, dependency wiring, and real request flow.

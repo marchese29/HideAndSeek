@@ -7,6 +7,8 @@ Python FastAPI backend for the HideAndSeek game.
 ```bash
 uv sync                    # Install/update dependencies
 uv run pytest              # Run tests (requires Docker — testcontainers spins up PostGIS)
+                            # The Docker daemon (colima or Docker Desktop) must already be
+                            # running, or testcontainers fails at collection.
 uv run ruff check .        # Lint
 uv run ruff format .       # Format
 uv run pyright             # Type check

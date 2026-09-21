@@ -21,7 +21,8 @@ __pycache__/
 *-service-account*.json
 
 # Claude Things
-.claude/
+.claude/settings.local.json
+.claude/worktrees/
 
 # Beads
 .beads/*.log*
